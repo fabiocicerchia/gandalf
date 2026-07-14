@@ -1,0 +1,20 @@
+version: 2
+updates:
+  # Keep GitHub Actions pinned versions fresh.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    # Wait 7 days before proposing newly published versions — a freshly
+    # released (or repointed) package can be malicious/unstable.
+    cooldown:
+      default-days: 7
+
+  # gandalf is stdlib-only; this covers dev/docs tooling (docs/requirements.txt)
+  # and any pyproject deps if they appear.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7

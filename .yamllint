@@ -1,0 +1,8 @@
+# Extends yamllint's relaxed preset. SHA-pinned GitHub Actions refs (with their
+# `# vX` version comments) legitimately exceed 80 cols and can't be wrapped, so
+# line-length is advisory with a higher cap rather than an 80-col warning.
+extends: relaxed
+rules:
+  line-length:
+    max: 140
+    level: warning
