@@ -1,0 +1,4 @@
+# Tooling config only — gandalf is stdlib-only, there is nothing to build/install.
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

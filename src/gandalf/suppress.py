@@ -1,0 +1,180 @@
+"""Finding suppression + baseline.
+
+Two ways to stop a KNOWN finding from failing the gate — without disabling the
+whole gate (that's `skip` in config):
+
+* **rules** — `[gandalf.suppress] rules = ["gate:rule:pathglob", ...]`. Any field
+  may be empty to wildcard: `"ruff:E501"` mutes that code everywhere;
+  `"gitleaks::tests/*"` mutes gitleaks under `tests/`; `"vulture"` mutes the gate
+  entirely (but keeps it running, unlike `skip`).
+* **baseline** — a generated `.gandalf-baseline.json` snapshot of the findings
+  present today. On later runs those exact findings are muted, so only *new*
+  findings can fail. Regenerate with `--write-baseline`.
+
+Suppression removes findings from a gate and re-scores it: if every finding was
+muted the gate passes; a partial mute keeps the gate's outcome but raises its
+score toward green and hides the muted findings. Suppression can only make a
+gate better, never worse.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from fnmatch import fnmatch
+from pathlib import Path
+
+from .base import GateOutcome, GateResult
+
+DEFAULT_BASELINE = ".gandalf-baseline.json"
+
+
+def finding_path(f: dict) -> str:
+    if not isinstance(f, dict):
+        return ""
+    return (
+        f.get("path") or f.get("filename") or f.get("file") or f.get("file_path") or ""
+    )
+
+
+def finding_rule(f: dict) -> str:
+    """The rule / check / code id, however the tool spells it."""
+    if not isinstance(f, dict):
+        return ""
+    return str(
+        f.get("rule_id")
+        or f.get("check_id")
+        or f.get("RuleID")
+        or f.get("code")
+        or f.get("check_name")
+        or f.get("QueryName")
+        or f.get("VulnerabilityID")
+        or f.get("id")
+        or f.get("rule")
+        or ""
+    )
+
+
+def _message(f: dict) -> str:
+    if not isinstance(f, dict):
+        return str(f)
+    return str(
+        f.get("message")
+        or f.get("issue_text")
+        or f.get("description")
+        or f.get("Description")
+        or f.get("finding")
+        or f.get("typo")
+        or f.get("missing")
+        or ""
+    )
+
+
+def fingerprint(gate: str, f: dict) -> str:
+    """Stable id for a finding, line-insensitive so it survives edits above it.
+    gate + path + rule + a short message hash."""
+    msg = _message(f)[:200]
+    key = f"{gate}|{finding_path(f)}|{finding_rule(f)}|{msg}"
+    # nosemgrep: insecure-hash-algorithm-sha1 — content-dedup key, not security
+    return hashlib.sha1(
+        key.encode("utf-8", "replace"), usedforsecurity=False
+    ).hexdigest()
+
+
+class _Rule:
+    """A parsed 'gate:rule:pathglob' suppression rule ('' = wildcard)."""
+
+    def __init__(self, spec: str):
+        parts = (spec.split(":", 2) + ["", "", ""])[:3]
+        self.gate, self.rule, self.path = (p.strip() for p in parts)
+
+    def matches(self, gate: str, f: dict) -> bool:
+        if self.gate and self.gate != gate:
+            return False
+        if self.rule and self.rule != finding_rule(f):
+            return False
+        if self.path and not fnmatch(finding_path(f), self.path):
+            return False
+        return True
+
+
+class Suppressor:
+    def __init__(
+        self, rules: list[str] | None = None, baseline: set[str] | None = None
+    ):
+        self.rules = [_Rule(r) for r in (rules or []) if r.strip()]
+        self.baseline = baseline or set()
+
+    @property
+    def active(self) -> bool:
+        return bool(self.rules or self.baseline)
+
+    def _muted(self, gate: str, f: dict) -> bool:
+        if any(r.matches(gate, f) for r in self.rules):
+            return True
+        return fingerprint(gate, f) in self.baseline
+
+    def apply(self, res: GateResult) -> GateResult:
+        """Filter a gate's findings and re-score. Never makes a gate worse."""
+        if not self.active or not res.findings:
+            return res
+        kept, muted = [], 0
+        for f in res.findings:
+            if self._muted(res.name, f):
+                muted += 1
+            else:
+                kept.append(f)
+        if muted == 0:
+            return res
+        total = muted + len(kept)
+        if not kept:
+            return GateResult(
+                res.name,
+                GateOutcome.PASS,
+                1.0,
+                f"{res.summary}  · all {muted} finding(s) suppressed",
+                [],
+            )
+        # Partial: keep outcome, nudge score toward green by the muted fraction.
+        score = res.score + (1.0 - res.score) * (muted / total)
+        res_out = GateResult(
+            res.name,
+            res.outcome,
+            min(1.0, max(res.score, score)),
+            f"{res.summary}  · {muted} suppressed, {len(kept)} remaining",
+            kept,
+        )
+        # Preserve gate flags that live as private attrs (set by the runner).
+        for attr in ("_blocking", "_category"):
+            if hasattr(res, attr):
+                setattr(res_out, attr, getattr(res, attr))
+        return res_out
+
+
+def load_baseline(path: str) -> set[str]:
+    p = Path(path)
+    if not p.is_file():
+        return set()
+    try:
+        data = json.loads(p.read_text())
+    except (OSError, json.JSONDecodeError):
+        return set()
+    return set(data.get("fingerprints", []) or [])
+
+
+def build(cfg_section: dict, baseline_path: str | None) -> Suppressor:
+    """Assemble a Suppressor from the [gandalf.suppress] table + a baseline file."""
+    rules = list(cfg_section.get("rules", []) or [])
+    path = baseline_path or cfg_section.get("baseline") or ""
+    baseline = load_baseline(path) if path else set()
+    return Suppressor(rules, baseline)
+
+
+def write_baseline(path: str, results: list[GateResult], generated_at: str) -> int:
+    """Snapshot every current finding's fingerprint so later runs mute them.
+    Returns the count written."""
+    fps = sorted({fingerprint(r.name, f) for r in results for f in r.findings})
+    Path(path).write_text(
+        json.dumps({"generated_at": generated_at, "fingerprints": fps}, indent=2)
+    )
+    return len(fps)
