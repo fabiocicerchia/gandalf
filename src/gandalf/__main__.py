@@ -235,7 +235,7 @@ def _write_outputs(
     if not args.no_html:
         html_path = out_dir / f"{stem}.html"
         html_path.write_text(
-            report.render_html(sc.label, results, verdict, advice, meta_line)
+            report.render_html(sc.label, results, verdict, advice, meta_line, sc.diff)
         )
         print(f"HTML report: {html_path}")
 

@@ -97,6 +97,49 @@ def test_render_html_shows_delta():
     assert "(+4 vs prev)" in html
 
 
+def test_render_html_has_rag_filter_buttons():
+    v = report.aggregate(_results())
+    out = report.render_html("staged", _results(), v, {"summary": "hi"})
+    assert 'data-filter="fail"' in out
+    assert 'data-filter="pass"' in out
+    assert 'class="filter-btn active" data-filter="all"' in out
+
+
+def test_diff_html_empty_is_blank():
+    assert report._diff_html("") == ""
+    assert report._diff_html("   \n") == ""
+
+
+def test_diff_html_colors_added_and_removed_lines():
+    diff = "@@ -1,2 +1,2 @@\n-old line\n+new line\n context\n"
+    out = report._diff_html(diff)
+    assert '<span class="diff-hunk">@@ -1,2 +1,2 @@</span>' in out
+    assert '<span class="diff-del">-old line</span>' in out
+    assert '<span class="diff-add">+new line</span>' in out
+    assert "<details" in out and "View raw diff" in out
+
+
+def test_diff_html_ignores_file_header_markers():
+    diff = "--- a/x.py\n+++ b/x.py\n@@ -1 +1 @@\n-old\n+new\n"
+    out = report._diff_html(diff)
+    assert '<span class="diff-del">--- a/x.py</span>' not in out
+    assert '<span class="diff-add">+++ b/x.py</span>' not in out
+
+
+def test_render_html_embeds_diff_view():
+    v = report.aggregate(_results())
+    out = report.render_html(
+        "staged", _results(), v, {"summary": "hi"}, diff="+added line\n"
+    )
+    assert '<details class="diff-view">' in out and "added line" in out
+
+
+def test_render_html_without_diff_omits_diff_view():
+    v = report.aggregate(_results())
+    out = report.render_html("staged", _results(), v, {"summary": "hi"})
+    assert '<details class="diff-view">' not in out
+
+
 def test_aggregate_edges():
     assert report.aggregate([]).outcome is W
     assert report.aggregate(_results()).outcome is F  # any fail → red

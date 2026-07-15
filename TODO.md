@@ -89,5 +89,5 @@ current code.
 
 - [ ] **README score badge.** Generate a shields-style badge from the JSON.
 
-- [ ] **HTML report filtering.** Filter/collapse rows by RAG state and a diff
+- [x] **HTML report filtering.** Filter/collapse rows by RAG state and a diff
   view for the changeset, on top of the existing sort/expand.

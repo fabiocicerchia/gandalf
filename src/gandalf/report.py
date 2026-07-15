@@ -368,6 +368,32 @@ def _md_to_html(text: str) -> str:
     return "\n".join(out) or "<p>(no summary)</p>"
 
 
+def _diff_html(diff: str, limit: int = 20000) -> str:
+    """Collapsible, lightly-colored unified diff for the changeset section."""
+    if not diff.strip():
+        return ""
+    text = diff[:limit]
+    lines = []
+    for raw in text.splitlines():
+        esc = html.escape(raw)
+        if raw.startswith("+") and not raw.startswith("+++"):
+            lines.append(f'<span class="diff-add">{esc}</span>')
+        elif raw.startswith("-") and not raw.startswith("---"):
+            lines.append(f'<span class="diff-del">{esc}</span>')
+        elif raw.startswith("@@"):
+            lines.append(f'<span class="diff-hunk">{esc}</span>')
+        else:
+            lines.append(esc)
+    body = "\n".join(lines)
+    if len(diff) > limit:
+        body += "\n… (truncated)"
+    n = len(diff.splitlines())
+    return (
+        f'<details class="diff-view"><summary>View raw diff ({n} line{"s" if n != 1 else ""})'
+        f"</summary><pre class=\"diff-pre\">{body}</pre></details>"
+    )
+
+
 _CSS = """
 :root{ --bg:#fff; --fg:#1b1d22; --muted:#6b7280; --border:#e4e6eb; --card:#f7f8fa;
   --tint:0.15; --pass:#22c55e; --warn:#eab308; --fail:#ef4444; --warn-text:#a16207; }
@@ -454,6 +480,19 @@ ul.findings li{ font-size:.8rem; color:var(--muted); word-break:break-word; marg
   letter-spacing:.04em; padding:.2em .55em; border-radius:6px; color:#fff; }
 .badge.fail{ background:var(--fail); } .badge.pass{ background:var(--pass); }
 .badge.warn{ background:var(--warn); color:#3a2d00; }
+.diff-view{ margin-top:.6rem; }
+.diff-view summary{ cursor:pointer; color:var(--muted); font-size:.82rem; user-select:none; }
+.diff-view summary:hover{ color:var(--fg); }
+.diff-pre{ margin:.5rem 0 0; padding:.9rem 1rem; overflow-x:auto; border-radius:10px;
+  background:var(--card); border:1px solid var(--border); font-size:.78rem; line-height:1.5;
+  font-family:ui-monospace,Menlo,Consolas,monospace; }
+.diff-add{ color:var(--pass); } .diff-del{ color:var(--fail); } .diff-hunk{ color:#3b82f6; }
+.filters{ display:flex; gap:.4rem; margin:1.5rem 0 0; }
+.filter-btn{ cursor:pointer; border:1px solid var(--border); background:var(--card);
+  color:var(--muted); border-radius:999px; padding:.35rem .9rem; font-size:.78rem;
+  font-weight:600; }
+.filter-btn:hover{ color:var(--fg); }
+.filter-btn.active{ background:var(--fg); color:var(--bg); border-color:var(--fg); }
 """
 
 _JS = """
@@ -486,6 +525,18 @@ _JS = """
       th.textContent=th.dataset.label+(d===1?' \\u25B2':' \\u25BC');
     };
   });
+
+  // Filter rows by RAG state (pass/warn/fail/all).
+  document.querySelectorAll('.filter-btn').forEach(function(b){
+    b.onclick=function(){
+      document.querySelectorAll('.filter-btn').forEach(function(x){ x.classList.remove('active'); });
+      b.classList.add('active');
+      var f=b.dataset.filter;
+      tbody.querySelectorAll('tr').forEach(function(r){
+        r.style.display = (f==='all'||r.classList.contains(f)) ? '' : 'none';
+      });
+    };
+  });
 })();
 """
 
@@ -496,6 +547,7 @@ def render_html(
     verdict: Verdict,
     advice: dict,
     meta: dict | None = None,
+    diff: str = "",
 ) -> str:
     vcls = verdict.outcome.name.lower()  # pass | warn | fail
     vword = _RAG[verdict.outcome][3]
@@ -644,8 +696,15 @@ def render_html(
             "Changeset — what this stage / commit changes",
             "accent-changeset",
         )
+        + _diff_html(diff)
         + '<div class="eyebrow">Scores by category</div>'
         + cat_grid
+        + '<div class="filters">'
+        + '<button class="filter-btn active" data-filter="all">All</button>'
+        + '<button class="filter-btn" data-filter="fail">Fail</button>'
+        + '<button class="filter-btn" data-filter="warn">Warn</button>'
+        + '<button class="filter-btn" data-filter="pass">Pass</button>'
+        + "</div>"
         + '<div class="table-scroll"><table><thead>'
         + header_row
         + "</thead>"
