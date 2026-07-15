@@ -25,6 +25,7 @@ from . import cache as gcache
 from . import config as gconfig
 from . import debug
 from . import llm, plugins, pr_comments, report, sarif, scope, severity, suppress
+from . import trend as gtrend
 from .base import GateContext, GateOutcome
 from .plugins import discover_gates
 from .progress import Progress
@@ -518,7 +519,18 @@ def main(argv: list[str] | None = None) -> int:
         prog.stage("Writing reports")
         prog.finish()  # end the single progress line before the scorecard prints
         generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-        meta_line = {"generated_at": generated_at, "commit": sc.commit}
+        trend_path = str(Path(scope.repo_root()) / gtrend.DEFAULT_TREND)
+        commit_short = sc.commit.get("short", "")
+        score_delta = gtrend.previous_score(trend_path, commit_short)
+        if score_delta is not None:
+            score_delta = verdict.score - score_delta
+        if commit_short:
+            gtrend.record(trend_path, commit_short, verdict.score, generated_at)
+        meta_line = {
+            "generated_at": generated_at,
+            "commit": sc.commit,
+            "score_delta": score_delta,
+        }
         _print_summary(
             sc,
             results,

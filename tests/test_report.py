@@ -74,6 +74,29 @@ def test_render_html_smoke():
     assert "abc123" in html  # commit metabar
 
 
+def test_format_delta():
+    assert report._format_delta(None) == ""
+    assert report._format_delta(5) == " (+5 vs prev)"
+    assert report._format_delta(-3) == " (-3 vs prev)"
+    assert report._format_delta(0) == " (+0 vs prev)"
+
+
+def test_render_terminal_shows_delta():
+    v = report.aggregate(_results())
+    out = report.render_terminal(
+        "staged", _results(), v, {"summary": "hi"}, {"score_delta": -7}
+    )
+    assert "(-7 vs prev)" in out
+
+
+def test_render_html_shows_delta():
+    v = report.aggregate(_results())
+    html = report.render_html(
+        "staged", _results(), v, {"summary": "hi"}, {"score_delta": 4}
+    )
+    assert "(+4 vs prev)" in html
+
+
 def test_aggregate_edges():
     assert report.aggregate([]).outcome is W
     assert report.aggregate(_results()).outcome is F  # any fail → red

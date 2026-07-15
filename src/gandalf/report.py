@@ -200,6 +200,14 @@ def decide(verdict: Verdict, policy: Policy) -> tuple[bool, str]:
     return True, "policy satisfied"
 
 
+def _format_delta(delta: int | None) -> str:
+    """' (+5 vs prev)' / ' (-3 vs prev)' / '' when there's no prior commit score."""
+    if delta is None:
+        return ""
+    sign = "+" if delta >= 0 else ""
+    return f" ({sign}{delta} vs prev)"
+
+
 def aggregate(results: list[GateResult]) -> Verdict:
     """Red if any FAIL (blocking or not); amber if any WARN; green if all pass.
     Composite score = mean of gate sub-scores ×100."""
@@ -231,7 +239,8 @@ def render_terminal(
         lines.append(f"{_DIM}generated {meta['generated_at']}{_RESET}")
     word = _RAG[verdict.outcome][3]
     lines.append(
-        f"\n{_BANNER[verdict.outcome]}  {word} · {verdict.score}/100  {_RESET}"
+        f"\n{_BANNER[verdict.outcome]}  {word} · {verdict.score}/100"
+        f"{_format_delta(meta.get('score_delta'))}  {_RESET}"
     )
 
     # Gates grouped by category, each header coloured by its aggregate RAG + score.
@@ -626,7 +635,8 @@ def render_html(
         f"<header><h1>🧙 Gandalf <small>— {esc}</small></h1>"
         '<button id="themeBtn" aria-label="Toggle light/dark theme">🌙</button></header>'
         f"{metabar}"
-        f'<div class="verdict {vcls}">{vword} &nbsp;·&nbsp; {verdict.score}/100</div>'
+        f'<div class="verdict {vcls}">{vword} &nbsp;·&nbsp; {verdict.score}/100'
+        f"{html.escape(_format_delta(meta.get('score_delta')))}</div>"
         '<div class="eyebrow">Summary</div>'
         f'<section class="summary">{_md_to_html(advice.get("summary") or "")}</section>'
         + section(

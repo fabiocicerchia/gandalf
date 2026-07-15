@@ -28,6 +28,7 @@ coverage/
 reports/
 .gandalf-baseline.json
 .gandalf-cache.json
+.gandalf-trend.jsonl
 
 # OS / editor
 .DS_Store

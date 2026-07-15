@@ -76,8 +76,10 @@ current code.
   automatically for `--target`/`--title`/`--body` runs, since those affect
   gates without changing any file.
 
-- [ ] **Trend history.** Persist score-over-time and show the delta vs. the
-  previous commit in the report header.
+- [x] **Trend history.** `gandalf/trend.py` appends `{commit, score,
+  generated_at}` to `.gandalf-trend.jsonl` after every run; the terminal and
+  HTML report headers show `(+N vs prev)` / `(-N vs prev)` against the most
+  recent differing commit.
 
 - [ ] **Pre-commit hook shim.** A ready `.pre-commit-hooks.yaml` entry so
   gandalf runs `--staged` on commit.
