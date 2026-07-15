@@ -120,6 +120,7 @@ Overall verdict: 🔴 if any gate fails · 🟡 if any warns · 🟢 if all pass
 | `--baseline <path>` | Suppress findings listed in a baseline file (default `.gandalf-baseline.json` if present). |
 | `--write-baseline [PATH]` | Snapshot current findings to a baseline file (default `.gandalf-baseline.json`). |
 | `--config <path>` | Path to a `.gandalf.toml` (default: repo root). |
+| `--cache [PATH]` | Reuse a gate's prior result when the scanned files are unchanged (default `.gandalf-cache.json`). Ignored with `--target`/`--title`/`--body`. |
 
 ## Configuration (env vars)
 

@@ -27,6 +27,7 @@ coverage/
 # gandalf generated output
 reports/
 .gandalf-baseline.json
+.gandalf-cache.json
 
 # OS / editor
 .DS_Store

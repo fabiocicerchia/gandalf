@@ -70,8 +70,11 @@ current code.
   Java/Kotlin, Ruby, PHP, C/C++, .NET still open — same pattern, one gate file
   per language, see `rust.py`/`golang.py` as the template.
 
-- [ ] **Result caching between runs.** Key gate results by content hash so an
-  unchanged file set reuses the prior outcome.
+- [x] **Result caching between runs.** `gandalf/cache.py` + `--cache [PATH]`
+  (default `.gandalf-cache.json`) — keys every gate's result by a content hash
+  of the scanned file set; an unchanged set reuses the prior outcome. Skipped
+  automatically for `--target`/`--title`/`--body` runs, since those affect
+  gates without changing any file.
 
 - [ ] **Trend history.** Persist score-over-time and show the delta vs. the
   previous commit in the report header.

@@ -21,6 +21,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from . import cache as gcache
 from . import config as gconfig
 from . import debug
 from . import llm, plugins, pr_comments, report, sarif, scope, severity, suppress
@@ -366,6 +367,15 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="write current findings to a baseline file (default path if none given)",
     )
+    ap.add_argument(
+        "--cache",
+        nargs="?",
+        const=gcache.DEFAULT_CACHE,
+        metavar="PATH",
+        help="reuse a gate's prior result when the scanned files are unchanged "
+        "(default path if none given); ignored with --target/--title/--body, "
+        "since those affect gates without changing any file",
+    )
     return ap
 
 
@@ -424,18 +434,46 @@ def main(argv: list[str] | None = None) -> int:
             prog.stage("Applying fixes")
             fixes = asyncio.run(_run_fixers(active, ctx))
 
+        cache_path = None
+        cache_data: dict = {}
+        file_hash = ""
+        to_run = active
+        if args.cache is not None and not (args.target or args.title or args.body):
+            cache_path = str(Path(scope.repo_root()) / args.cache)
+            cache_data = gcache.load(cache_path)
+            file_hash = gcache.content_hash(
+                sc.workdir, gcache.target_files(sc.workdir, sc.changed_files)
+            )
+            to_run = [
+                g for g in active if gcache.get(cache_data, g.name, file_hash) is None
+            ]
+
         limit = _resolve_concurrency(args.concurrency, cfg)
-        debug.log(f"running {len(active)} gate(s), concurrency={limit or 'unbounded'}")
-        prog.stage(f"Running {len(active)} gates")
-        results = asyncio.run(
+        debug.log(f"running {len(to_run)} gate(s), concurrency={limit or 'unbounded'}")
+        prog.stage(f"Running {len(to_run)} gates")
+        fresh = asyncio.run(
             _run_gates(
-                active,
+                to_run,
                 ctx,
                 on_done=prog.bar,
                 limit=limit,
                 timeouts=cfg.section("timeouts"),
             )
         )
+
+        if cache_path is not None:
+            for r in fresh:
+                gcache.put(cache_data, r.name, file_hash, r)
+            gcache.save(cache_path, cache_data)
+            cached = [
+                gcache.get(cache_data, g.name, file_hash)
+                for g in active
+                if g not in to_run
+            ]
+            by_name = {r.name: r for r in fresh + cached}
+            results = [by_name[g.name] for g in active]
+        else:
+            results = fresh
 
         if debug.enabled():
             slowest = sorted(
