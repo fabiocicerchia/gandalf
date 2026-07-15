@@ -81,7 +81,7 @@ current code.
   HTML report headers show `(+N vs prev)` / `(-N vs prev)` against the most
   recent differing commit.
 
-- [ ] **Pre-commit hook shim.** A ready `.pre-commit-hooks.yaml` entry so
+- [x] **Pre-commit hook shim.** A ready `.pre-commit-hooks.yaml` entry so
   gandalf runs `--staged` on commit.
 
 - [ ] **JUnit XML output.** For CI systems that render test-style reports

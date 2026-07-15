@@ -1,0 +1,15 @@
+# Lets other repos use gandalf as a pre-commit hook. Needs `gandalf` on PATH
+# first (`make install` in a gandalf checkout, or install.sh) — gandalf is
+# stdlib-only and isn't pip-installable, so `language: system` is the only
+# fit; there's no package for pre-commit to build/install itself.
+#   - repo: https://github.com/fabiocicerchia/gandalf
+#     rev: <tag>
+#     hooks:
+#       - id: gandalf
+- id: gandalf
+  name: gandalf
+  description: Run gandalf's quality gates against staged changes before commit.
+  entry: gandalf --staged --no-html
+  language: system
+  pass_filenames: false
+  always_run: true
