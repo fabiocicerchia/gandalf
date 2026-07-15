@@ -30,6 +30,13 @@ make install                       # drops a wrapper in ~/.local/bin (on your PA
 make install BINDIR=/usr/local/bin # …or anywhere else
 ```
 
+Or the one-line installer (clones/updates a checkout under
+`~/.local/share/gandalf` and runs `make install`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/fabiocicerchia/gandalf/main/install.sh | bash
+```
+
 Pure-stdlib, so the "install" is just a one-line wrapper that runs this checkout
 (`python -m gandalf`) against whatever repo you're in. Equivalent one-liner:
 
