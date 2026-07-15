@@ -65,9 +65,10 @@ current code.
 - [x] **Network resilience.** `llm._request_with_retry` — exponential backoff on
   transient LLM failures (429/5xx/network), not 4xx.
 
-- [ ] **More language suites.** Rust (`cargo`/`clippy`/`cargo-audit`),
-  Java/Kotlin, Ruby, PHP, C/C++, .NET. The `langs` machinery already supports it
-  — just more gate files.
+- [ ] **More language suites.** Rust done (`gandalf/gates/rust.py`:
+  `cargo build`/`clippy`/`cargo-audit`/`cargo test`, tagged `langs={"rust"}`).
+  Java/Kotlin, Ruby, PHP, C/C++, .NET still open — same pattern, one gate file
+  per language, see `rust.py`/`golang.py` as the template.
 
 - [ ] **Result caching between runs.** Key gate results by content hash so an
   unchanged file set reuses the prior outcome.

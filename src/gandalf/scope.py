@@ -31,6 +31,7 @@ _EXT_LANG = {
     ".py": "python",
     ".pyi": "python",
     ".go": "go",
+    ".rs": "rust",
     ".js": "node",
     ".jsx": "node",
     ".mjs": "node",
@@ -45,6 +46,7 @@ _EXT_LANG = {
 }
 _MARKER_LANG = {
     "go.mod": "go",
+    "Cargo.toml": "rust",
     "package.json": "node",
     "tsconfig.json": "ts",
     "pyproject.toml": "python",

@@ -74,6 +74,11 @@ def test_discovery_finds_builtins():
         "golangci_lint",
         "govulncheck",
         "go_test",
+        # rust
+        "cargo_build",
+        "clippy",
+        "cargo_audit",
+        "cargo_test",
         # node
         "eslint",
         "tsc",
@@ -91,6 +96,7 @@ def test_discovery_finds_builtins():
     by_name = {g.name: g for g in discover_gates()}
     assert by_name["build"].blocking is True
     assert by_name["go_build"].blocking is True
+    assert by_name["cargo_build"].blocking is True
     assert by_name["gitleaks"].blocking is True
     assert by_name["ruff"].blocking is False
 
@@ -143,6 +149,7 @@ def test_skill_json_parsing():
 
 def test_language_detection():
     assert _classify(["cmd/main.go", "go.mod"]) == {"go"}
+    assert _classify(["src/main.rs", "Cargo.toml"]) == {"rust"}
     assert _classify(["src/app.ts", "tsconfig.json"]) == {"ts"}
     assert _classify(["index.js", "package.json"]) == {"node"}
     assert _classify(["a.py", "install.sh", "compose.yaml"]) == {
@@ -188,6 +195,19 @@ def test_language_filtering():
     assert "mypy" not in active and "ruff" not in active  # python excluded
     assert "gitleaks" in active and "semgrep" in active  # generic still run
     assert "codeql" in active  # codeql tags go among its langs → active
+
+
+def test_rust_language_filtering():
+    """A Rust-only change runs cargo gates, not go/node/python ones."""
+    gates = {g.name: g for g in discover_gates()}
+    detected = {"rust"}
+    active = {
+        n
+        for n, g in gates.items()
+        if not getattr(g, "langs", None) or (set(g.langs) & detected)
+    }
+    assert "cargo_build" in active and "clippy" in active and "cargo_test" in active
+    assert "go_build" not in active and "eslint" not in active
 
 
 # ---- LLM skill gates (grill-me / improve-codebase-architecture / well-architected) ----
