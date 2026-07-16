@@ -24,7 +24,7 @@ from pathlib import Path
 from . import cache as gcache
 from . import config as gconfig
 from . import debug
-from . import junit, llm, plugins, pr_comments, report, sarif, scope, severity, suppress
+from . import badge, junit, llm, plugins, pr_comments, report, sarif, scope, severity, suppress
 from . import trend as gtrend
 from .base import GateContext, GateOutcome
 from .plugins import discover_gates
@@ -251,6 +251,11 @@ def _write_outputs(
         junit_path.write_text(junit.to_junit(results, meta_line))
         print(f"JUnit report: {junit_path}")
 
+    if args.badge is not None:
+        badge_path = Path(args.badge) if args.badge else out_dir / f"{stem}-badge.json"
+        badge_path.write_text(json.dumps(badge.to_badge(verdict), indent=2))
+        print(f"Badge: {badge_path}")
+
     if args.pr_comments is not None or args.pr is not None:
         pr_payload = pr_comments.review_payload(results, verdict, sc.changed_files)
         pr_path = (
@@ -299,6 +304,14 @@ def _build_parser() -> argparse.ArgumentParser:
         const="",
         metavar="PATH",
         help="also write a JUnit XML report (default: reports/<stem>.junit.xml)",
+    )
+    ap.add_argument(
+        "--badge",
+        nargs="?",
+        const="",
+        metavar="PATH",
+        help="also write a shields.io endpoint badge JSON (default: reports/<stem>-badge.json); "
+        "point a README at https://img.shields.io/endpoint?url=<raw-URL-to-that-file>",
     )
     ap.add_argument(
         "--pr-comments",

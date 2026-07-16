@@ -87,7 +87,7 @@ current code.
 - [x] **JUnit XML output.** For CI systems that render test-style reports
   (Jenkins, GitLab) rather than SARIF.
 
-- [ ] **README score badge.** Generate a shields-style badge from the JSON.
+- [x] **README score badge.** Generate a shields-style badge from the JSON.
 
 - [x] **HTML report filtering.** Filter/collapse rows by RAG state and a diff
   view for the changeset, on top of the existing sort/expand.

@@ -276,6 +276,17 @@ outcome but raises the score and hides the muted findings.
 `commit` is the evaluated commit for `--commit`, else the latest commit (HEAD)
 even for `--staged` / working-tree scopes.
 
+## Score badge
+
+`--badge` writes a [shields.io endpoint badge](https://shields.io/badges/endpoint-badge)
+JSON (default: `reports/<stem>-badge.json`) — score and RAG color, no SVG
+rendering on gandalf's side. Commit it somewhere with a stable raw URL (a
+`badge` branch, a gh-pages deploy, …) and point a README at it:
+
+```md
+![gandalf score](https://img.shields.io/endpoint?url=<raw-URL-to-that-file>)
+```
+
 ## Gates are plugins
 
 A gate is any class with `name: str`, `blocking: bool`, and
