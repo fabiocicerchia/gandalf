@@ -24,7 +24,7 @@ from pathlib import Path
 from . import cache as gcache
 from . import config as gconfig
 from . import debug
-from . import llm, plugins, pr_comments, report, sarif, scope, severity, suppress
+from . import junit, llm, plugins, pr_comments, report, sarif, scope, severity, suppress
 from . import trend as gtrend
 from .base import GateContext, GateOutcome
 from .plugins import discover_gates
@@ -246,6 +246,11 @@ def _write_outputs(
         )
         print(f"SARIF report: {sarif_path}")
 
+    if args.junit is not None:
+        junit_path = Path(args.junit) if args.junit else out_dir / f"{stem}.junit.xml"
+        junit_path.write_text(junit.to_junit(results, meta_line))
+        print(f"JUnit report: {junit_path}")
+
     if args.pr_comments is not None or args.pr is not None:
         pr_payload = pr_comments.review_payload(results, verdict, sc.changed_files)
         pr_path = (
@@ -287,6 +292,13 @@ def _build_parser() -> argparse.ArgumentParser:
         const="",
         metavar="PATH",
         help="also write a SARIF 2.1.0 report (default: reports/<stem>.sarif)",
+    )
+    ap.add_argument(
+        "--junit",
+        nargs="?",
+        const="",
+        metavar="PATH",
+        help="also write a JUnit XML report (default: reports/<stem>.junit.xml)",
     )
     ap.add_argument(
         "--pr-comments",

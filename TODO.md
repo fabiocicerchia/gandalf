@@ -84,7 +84,7 @@ current code.
 - [x] **Pre-commit hook shim.** A ready `.pre-commit-hooks.yaml` entry so
   gandalf runs `--staged` on commit.
 
-- [ ] **JUnit XML output.** For CI systems that render test-style reports
+- [x] **JUnit XML output.** For CI systems that render test-style reports
   (Jenkins, GitLab) rather than SARIF.
 
 - [ ] **README score badge.** Generate a shields-style badge from the JSON.
