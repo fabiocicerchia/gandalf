@@ -227,7 +227,8 @@ def _split_gates(md: str) -> tuple[str, list[tuple[str, str]]]:
 
 
 _STUB = re.compile(
-    r"(?i)\b(already covered|duplicate|covered above|see above|omitted)\b"
+    r"(?i)\b(already covered|already addressed|duplicate|covered above|"
+    r"addressed above|see above|omitted)\b"
 )
 
 

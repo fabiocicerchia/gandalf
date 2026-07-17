@@ -22,6 +22,17 @@ class _FakeResp:
         return self._p
 
 
+def test_split_gates_drops_already_addressed_stubs():
+    md = (
+        "@@GATE grill_me@@\n"
+        "- (Already addressed above.)\n"
+        "@@GATE mypy@@\n"
+        "- src/gandalf/report.py:42 add a type hint for `f`\n"
+    )
+    _pre, groups = llm._split_gates(md)
+    assert [name for name, _ in groups] == ["mypy"]
+
+
 def test_retryable_classification():
     assert llm._retryable(urllib.error.URLError("x"))
     assert llm._retryable(urllib.error.HTTPError("u", 503, "m", {}, None))
