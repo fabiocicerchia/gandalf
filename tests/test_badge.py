@@ -10,12 +10,19 @@ from gandalf.base import GateOutcome
 
 def test_badge_shape_and_serializable():
     b = badge.to_badge(report.Verdict(GateOutcome.PASS, 92))
-    assert b == {"schemaVersion": 1, "label": "gandalf", "message": "92/100", "color": "brightgreen"}
+    assert b == {
+        "schemaVersion": 1,
+        "label": "gandalf",
+        "message": "92/100",
+        "color": "brightgreen",
+    }
     json.dumps(b)  # must be JSON-serializable
 
 
 def test_badge_color_follows_rag():
-    assert badge.to_badge(report.Verdict(GateOutcome.PASS, 100))["color"] == "brightgreen"
+    assert (
+        badge.to_badge(report.Verdict(GateOutcome.PASS, 100))["color"] == "brightgreen"
+    )
     assert badge.to_badge(report.Verdict(GateOutcome.WARN, 70))["color"] == "yellow"
     assert badge.to_badge(report.Verdict(GateOutcome.FAIL, 20))["color"] == "red"
 

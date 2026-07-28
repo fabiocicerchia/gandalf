@@ -9,7 +9,6 @@ from dataclasses import dataclass
 
 from .base import GateOutcome, GateResult
 
-
 # Finding dicts come from many tools, so the same field goes by different keys.
 # First truthy value wins (order = preference), mirroring the old or-chains.
 _LOC_KEYS = ("path", "filename", "file", "file_path")
@@ -254,9 +253,11 @@ def render_terminal(
         gc = (
             GateOutcome.FAIL
             if any(r.outcome == GateOutcome.FAIL for r in members)
-            else GateOutcome.WARN
-            if any(r.outcome == GateOutcome.WARN for r in members)
-            else GateOutcome.PASS
+            else (
+                GateOutcome.WARN
+                if any(r.outcome == GateOutcome.WARN for r in members)
+                else GateOutcome.PASS
+            )
         )
         pct = round(sum(r.score for r in members) / len(members) * 100)
         gcol = _RAG[gc][1]
@@ -390,7 +391,7 @@ def _diff_html(diff: str, limit: int = 20000) -> str:
     n = len(diff.splitlines())
     return (
         f'<details class="diff-view"><summary>View raw diff ({n} line{"s" if n != 1 else ""})'
-        f"</summary><pre class=\"diff-pre\">{body}</pre></details>"
+        f'</summary><pre class="diff-pre">{body}</pre></details>'
     )
 
 

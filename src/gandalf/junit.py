@@ -30,13 +30,15 @@ def to_junit(results: list[GateResult], meta: dict | None = None) -> str:
             f' time="{duration:.3f}"' if isinstance(duration, (int, float)) else ""
         )
         lines.append(
-            f"  <testcase classname=\"gandalf\" name={quoteattr(r.name)}{time_attr}>"
+            f'  <testcase classname="gandalf" name={quoteattr(r.name)}{time_attr}>'
         )
         body_lines = [r.summary] if r.summary else []
         body_lines += [fmt_finding(f) for f in r.findings]
         body = escape("\n".join(body_lines))
         if r.outcome == GateOutcome.FAIL:
-            lines.append(f"    <failure message={quoteattr(r.summary or r.name)}>{body}</failure>")
+            lines.append(
+                f"    <failure message={quoteattr(r.summary or r.name)}>{body}</failure>"
+            )
         elif r.outcome == GateOutcome.WARN and body:
             lines.append(f"    <system-out>{body}</system-out>")
         lines.append("  </testcase>")

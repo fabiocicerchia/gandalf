@@ -16,7 +16,9 @@ class LicensesGate:
     category = "Licensing"
 
     async def run(self, ctx: GateContext) -> GateResult:
-        if (m := missing_result(self.name, "trivy", tool="licenses: trivy")) is not None:
+        if (
+            m := missing_result(self.name, "trivy", tool="licenses: trivy")
+        ) is not None:
             return m
         rc, out, _ = await run_tool(
             [

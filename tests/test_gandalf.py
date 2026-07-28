@@ -329,6 +329,33 @@ def test_skill_gate_warns_with_nothing_in_scope(monkeypatch):
     assert res.outcome is GateOutcome.WARN
 
 
+def test_atheris_gate_ignores_its_own_artifact_prefix_flag(monkeypatch, tmp_path):
+    """A clean run must PASS even though the harness is invoked with
+    -artifact_prefix=/tmp/atheris-crash-, which libFuzzer echoes back in its
+    startup banner — a bare "crash" substring match would always self-match."""
+    from gandalf.gates import dynamic
+
+    fuzz_dir = tmp_path / "tests" / "fuzz"
+    fuzz_dir.mkdir(parents=True)
+    (fuzz_dir / "fuzz_adapters.py").write_text("")
+
+    clean_log = (
+        "INFO: Running with entropic power schedule\n"
+        "artifact_prefix='/tmp/atheris-crash-'; Test unit written to ...\n"
+        "#524288\tDONE   cov: 57 ft: 113 corp: 12/475b\n"
+        "Done 702348 runs in 61 second(s)\n"
+    )
+    ctx = GateContext(repo=".", workdir=str(tmp_path), changed_files=[], meta={})
+    monkeypatch.setattr(dynamic, "_run", lambda *a, **k: asyncio.sleep(0, result=(0, clean_log, "")))
+    res = _run(dynamic.AtherisGate(), ctx)
+    assert res.outcome is GateOutcome.PASS
+
+    crash_log = "==12345==ERROR: libFuzzer: deadly signal\n"
+    monkeypatch.setattr(dynamic, "_run", lambda *a, **k: asyncio.sleep(0, result=(77, "", crash_log)))
+    res = _run(dynamic.AtherisGate(), ctx)
+    assert res.outcome is GateOutcome.FAIL
+
+
 if __name__ == "__main__":
     test_aggregate_rag()
     test_aggregate_score()

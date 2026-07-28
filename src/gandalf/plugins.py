@@ -234,7 +234,9 @@ def timeout_result(name: str, rc: int) -> GateResult | None:
     return None
 
 
-def missing_result(name: str, binary: str, *, tool: str | None = None) -> GateResult | None:
+def missing_result(
+    name: str, binary: str, *, tool: str | None = None
+) -> GateResult | None:
     """WARN sentinel for a gate whose `binary` is neither on PATH nor in the tools
     image, else None so the gate proceeds. Mirrors timeout_result's idiom. `tool`
     overrides the name shown in the message (e.g. the licenses gate runs trivy)."""

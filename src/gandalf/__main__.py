@@ -24,7 +24,18 @@ from pathlib import Path
 from . import cache as gcache
 from . import config as gconfig
 from . import debug
-from . import badge, junit, llm, plugins, pr_comments, report, sarif, scope, severity, suppress
+from . import (
+    badge,
+    junit,
+    llm,
+    plugins,
+    pr_comments,
+    report,
+    sarif,
+    scope,
+    severity,
+    suppress,
+)
 from . import trend as gtrend
 from .base import GateContext, GateOutcome
 from .plugins import discover_gates

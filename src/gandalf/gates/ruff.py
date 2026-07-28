@@ -6,7 +6,13 @@ import json
 import re
 
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.plugins import run_tool, timeout_result, tool_missing, _scan_targets, missing_result
+from gandalf.plugins import (
+    run_tool,
+    timeout_result,
+    tool_missing,
+    _scan_targets,
+    missing_result,
+)
 
 
 class RuffGate:

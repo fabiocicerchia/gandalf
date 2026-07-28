@@ -13,7 +13,14 @@ _RESULTS = [
         GateOutcome.FAIL,
         0.4,
         "ruff: 2 findings",
-        [{"filename": "a.py", "code": "E501", "message": "long", "location": {"row": 12}}],
+        [
+            {
+                "filename": "a.py",
+                "code": "E501",
+                "message": "long",
+                "location": {"row": 12},
+            }
+        ],
     ),
     GateResult("bandit", GateOutcome.WARN, 0.8, "1 issue", [{"issue_text": "assert"}]),
     GateResult("gitleaks", GateOutcome.PASS, 1.0, "clean", []),
@@ -44,7 +51,9 @@ def test_fail_becomes_failure_element():
 
 def test_warn_stays_passing_with_system_out():
     root = ET.fromstring(_doc())
-    bandit = next(tc for tc in root.findall("testcase") if tc.attrib["name"] == "bandit")
+    bandit = next(
+        tc for tc in root.findall("testcase") if tc.attrib["name"] == "bandit"
+    )
     assert bandit.find("failure") is None
     out = bandit.find("system-out")
     assert out is not None and "1 issue" in out.text
@@ -52,7 +61,9 @@ def test_warn_stays_passing_with_system_out():
 
 def test_passing_gate_has_no_failure_or_system_out():
     root = ET.fromstring(_doc())
-    clean = next(tc for tc in root.findall("testcase") if tc.attrib["name"] == "gitleaks")
+    clean = next(
+        tc for tc in root.findall("testcase") if tc.attrib["name"] == "gitleaks"
+    )
     assert clean.find("failure") is None
     assert clean.find("system-out") is None
 

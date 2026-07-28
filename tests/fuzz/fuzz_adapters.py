@@ -30,7 +30,7 @@ if _SRC.is_dir() and str(_SRC) not in sys.path:
 try:
     import atheris
 
-    with atheris.instrument_imports():
+    with atheris.instrument_imports():  # type: ignore[attr-defined]  # no stubs for atheris
         from gandalf import llm, report, severity, skills, suppress  # noqa: E402
 except ImportError:
     from gandalf import llm, report, severity, skills, suppress  # noqa: E402
@@ -83,7 +83,8 @@ def _selfcheck() -> None:
         "ruff:E501:foo.py:12",
         ":::::",
         "\x00￿\U0001f4a9",
-        "[" * 20000,  # over-nested JSON: json.loads raises RecursionError, not JSONDecodeError
+        "["
+        * 20000,  # over-nested JSON: json.loads raises RecursionError, not JSONDecodeError
     ]
     for s in seeds:
         _exercise(s)  # must not raise anything outside each adapter's contract

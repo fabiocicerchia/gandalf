@@ -41,12 +41,12 @@ class InterrogateGate:
         )
         if (to := timeout_result(self.name, rc)) is not None:
             return to
-        m = re.search(r"actual:\s*([\d.]+)%", (out or "") + (err or ""))
-        if not m:
+        match = re.search(r"actual:\s*([\d.]+)%", (out or "") + (err or ""))
+        if not match:
             return GateResult(
                 self.name, GateOutcome.PASS, 1.0, "interrogate: no Python to document"
             )
-        actual = float(m.group(1))
+        actual = float(match.group(1))
         score = actual / 100
         if actual >= _MIN:
             return GateResult(

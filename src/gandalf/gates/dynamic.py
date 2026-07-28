@@ -115,7 +115,13 @@ class AtherisGate:
                 0.8,
                 f"atheris: timed out (budget={fuzz_time}s)",
             )
-        if "crash" in combined.lower() or "exception" in combined.lower():
+        # Match libFuzzer's own crash markers, not a bare "crash" substring —
+        # the harness is invoked with -artifact_prefix=/tmp/atheris-crash-,
+        # which libFuzzer echoes back in its startup banner and would always
+        # self-match. A nonzero exit is the authoritative signal (libFuzzer
+        # exits 0 after a clean time-budget run); the marker check is belt
+        # and suspenders for when exit codes get lost through a wrapper.
+        if rc != 0 or "ERROR: libFuzzer" in combined or "Uncaught Python exception" in combined:
             return GateResult(
                 self.name,
                 GateOutcome.FAIL,
