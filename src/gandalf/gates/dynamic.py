@@ -121,7 +121,11 @@ class AtherisGate:
         # self-match. A nonzero exit is the authoritative signal (libFuzzer
         # exits 0 after a clean time-budget run); the marker check is belt
         # and suspenders for when exit codes get lost through a wrapper.
-        if rc != 0 or "ERROR: libFuzzer" in combined or "Uncaught Python exception" in combined:
+        if (
+            rc != 0
+            or "ERROR: libFuzzer" in combined
+            or "Uncaught Python exception" in combined
+        ):
             return GateResult(
                 self.name,
                 GateOutcome.FAIL,
@@ -212,7 +216,7 @@ class SqlmapGate:
         if rc == -1:
             return GateResult(self.name, GateOutcome.WARN, 0.8, "sqlmap: timed out")
         combined = out + err
-        if re.search(r"(is vulnerable|parameter.*injectable)", combined, re.I):
+        if re.search(r"(is vulnerable|parameter.*injectable)", combined, re.IGNORECASE):
             return GateResult(
                 self.name,
                 GateOutcome.FAIL,

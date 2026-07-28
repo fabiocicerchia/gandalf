@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.plugins import run_tool, timeout_result, missing_result
+from gandalf.plugins import missing_result, run_tool, timeout_result
 
 
 class LicensesGate:

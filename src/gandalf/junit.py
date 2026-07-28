@@ -21,8 +21,10 @@ def to_junit(results: list[GateResult], meta: dict | None = None) -> str:
     failures = sum(1 for r in results if r.outcome == GateOutcome.FAIL)
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
-        f'<testsuite name="gandalf" tests="{len(results)}" failures="{failures}" '
-        f'errors="0" skipped="0">',
+        (
+            f'<testsuite name="gandalf" tests="{len(results)}" failures="{failures}" '
+            f'errors="0" skipped="0">'
+        ),
     ]
     for r in results:
         duration = getattr(r, "_duration", None)

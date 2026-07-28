@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.plugins import run_tool, timeout_result, missing_result
+from gandalf.plugins import missing_result, run_tool, timeout_result
 
 _SKIP = (".venv", "node_modules", "llama.cpp", ".git", "reports")
 

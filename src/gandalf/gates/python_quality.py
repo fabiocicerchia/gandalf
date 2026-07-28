@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.plugins import (
+    _scan_targets,
+    missing_result,
     run_tool,
     timeout_result,
     tool_missing,
-    _scan_targets,
-    missing_result,
 )
 
 
@@ -26,7 +26,7 @@ class MypyGate:
             return m
         if not _has_python(ctx):
             return GateResult(self.name, GateOutcome.PASS, 1.0, "mypy: no Python files")
-        rc, out, err = await run_tool(
+        rc, out, _err = await run_tool(
             [
                 "mypy",
                 "--ignore-missing-imports",
@@ -137,7 +137,7 @@ class FormatGate:
         """Rewrite files with `ruff format` (no --check). Called only under `--fix`."""
         if tool_missing("ruff"):
             return (False, "ruff unavailable — nothing formatted")
-        rc, out, err = await run_tool(
+        _rc, out, err = await run_tool(
             ["ruff", "format", "--no-cache", *_scan_targets(ctx, py_only=True)],
             ctx.workdir,
         )

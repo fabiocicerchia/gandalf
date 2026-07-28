@@ -21,7 +21,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from . import debug
-from .base import Gate, GateContext, GateResult, GateOutcome
+from .base import Gate, GateContext, GateOutcome, GateResult
 
 # Bounded so a hung tool degrades to WARN instead of stalling the run.
 SUBPROCESS_TIMEOUT_SECONDS = int(os.environ.get("GANDALF_GATE_TIMEOUT", "120"))
@@ -73,7 +73,7 @@ def _tools_image_available() -> bool:
     if not shutil.which("docker"):
         return False
     r = subprocess.run(  # nosec B603 B607 - fixed docker argv, no shell
-        ["docker", "image", "inspect", TOOLS_IMAGE], capture_output=True
+        ["docker", "image", "inspect", TOOLS_IMAGE], capture_output=True, check=False
     )
     return r.returncode == 0
 
@@ -217,7 +217,7 @@ async def run_tool(
 _DOCKER_UNAVAILABLE = re.compile(
     r"executable file not found|Unable to find image|No such image|"
     r"failed to create task for container",
-    re.I,
+    re.IGNORECASE,
 )
 
 

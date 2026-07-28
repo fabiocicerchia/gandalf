@@ -83,7 +83,7 @@ class ComplianceGate:
             )
 
         try:
-            pct = max(0, min(100, int(round(float(data.get("compliance", 0))))))
+            pct = max(0, min(100, round(float(data.get("compliance", 0)))))
         except (TypeError, ValueError):
             pct = 0
         score = pct / 100.0

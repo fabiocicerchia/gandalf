@@ -43,7 +43,7 @@ def _request_with_retry(req: urllib.request.Request, timeout: int) -> dict:
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec B310 — operator-configured endpoint
                 return json.load(resp)
-        except Exception as exc:  # noqa: BLE001 — re-raised below if not retryable
+        except Exception as exc:
             if attempt >= RETRIES or not _retryable(exc):
                 raise
             delay = BACKOFF * (2**attempt)
@@ -64,7 +64,11 @@ def _context(workdir: str, label: str, diff: str) -> str:
             break
     try:
         tree = subprocess.run(  # nosec B603 B607 - fixed git argv, no shell
-            ["git", "ls-files"], cwd=workdir, capture_output=True, text=True
+            ["git", "ls-files"],
+            cwd=workdir,
+            capture_output=True,
+            text=True,
+            check=False,
         ).stdout
         tree = "\n".join(tree.splitlines()[:200])
     except OSError:
@@ -75,6 +79,7 @@ def _context(workdir: str, label: str, diff: str) -> str:
             cwd=workdir,
             capture_output=True,
             text=True,
+            check=False,
         ).stdout
     except OSError:
         log = ""
@@ -137,7 +142,7 @@ def _split_sections(text: str) -> dict:
         m = re.match(
             r"[\s#*_>-]*@@(SUMMARY|CHANGESET|REMEDIATION|IMPROVEMENT)@@[\s*_]*$",
             line,
-            re.I,
+            re.IGNORECASE,
         )
         if m:
             if key:
@@ -190,7 +195,7 @@ def analyze(workdir: str, label: str, diff: str, verdict: str, scorecard: str) -
     )
     try:
         adv = _split_sections(chat([{"role": "user", "content": prompt}]))
-    except Exception as exc:  # LLM issues must never crash the run; degrade instead
+    except Exception as exc:  # noqa: BLE001 — LLM issues must never crash the run; degrade instead
         adv = {
             "summary": f"LLM unavailable ({LLM_URL}, model {MODEL}): {exc}",
             "changeset": "",
@@ -209,7 +214,7 @@ def _split_gates(md: str) -> tuple[str, list[tuple[str, str]]]:
     name: str | None = None
     buf: list[str] = []
     for line in md.splitlines():
-        m = re.match(r"\s*@@GATE\s+([\w\-./]+)\s*@@\s*$", line, re.I)
+        m = re.match(r"\s*@@GATE\s+([\w\-./]+)\s*@@\s*$", line, re.IGNORECASE)
         if m:
             if name is not None:
                 groups.append((name, "\n".join(buf).strip()))
