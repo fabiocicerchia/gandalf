@@ -5,6 +5,7 @@ from __future__ import annotations
 import html
 import json
 import re
+from collections import defaultdict
 from dataclasses import dataclass
 
 from .base import GateOutcome, GateResult
@@ -222,6 +223,18 @@ def aggregate(results: list[GateResult]) -> Verdict:
     return Verdict(overall, score)
 
 
+def _group_outcome_and_pct(members: list[GateResult]) -> tuple[GateOutcome, int]:
+    """Worst outcome and mean score% across a category's gate results."""
+    if any(r.outcome == GateOutcome.FAIL for r in members):
+        outcome = GateOutcome.FAIL
+    elif any(r.outcome == GateOutcome.WARN for r in members):
+        outcome = GateOutcome.WARN
+    else:
+        outcome = GateOutcome.PASS
+    pct = round(sum(r.score for r in members) / len(members) * 100)
+    return outcome, pct
+
+
 def render_terminal(
     label: str,
     results: list[GateResult],
@@ -250,16 +263,7 @@ def render_terminal(
         )
         if not members:
             continue
-        gc = (
-            GateOutcome.FAIL
-            if any(r.outcome == GateOutcome.FAIL for r in members)
-            else (
-                GateOutcome.WARN
-                if any(r.outcome == GateOutcome.WARN for r in members)
-                else GateOutcome.PASS
-            )
-        )
-        pct = round(sum(r.score for r in members) / len(members) * 100)
+        gc, pct = _group_outcome_and_pct(members)
         gcol = _RAG[gc][1]
         lines.append(f"\n{_BOLD}{gcol}{group}{_RESET} {_DIM}· {pct}%{_RESET}")
         for r in members:
@@ -588,24 +592,16 @@ def render_html(
     cards = []
 
     # Group results by category
-    categorized_results: dict[str, list[GateResult]] = {}
+    categorized_results: dict[str, list[GateResult]] = defaultdict(list)
     for r in results:
-        category = _category_of(r)
-        categorized_results.setdefault(category, []).append(r)
+        categorized_results[_category_of(r)].append(r)
 
     # Generate score cards
     for group in _GROUP_ORDER:
         if group in categorized_results:
-            members = categorized_results[group]
-            if any(r.outcome == GateOutcome.FAIL for r in members):
-                gcls = "fail"
-            elif any(r.outcome == GateOutcome.WARN for r in members):
-                gcls = "warn"
-            else:
-                gcls = "pass"
-            pct = round(sum(r.score for r in members) / len(members) * 100)
+            gc, pct = _group_outcome_and_pct(categorized_results[group])
             cards.append(
-                f'<div class="cat {gcls}"><div class="cat-name">{group}</div>'
+                f'<div class="cat {gc.name.lower()}"><div class="cat-name">{group}</div>'
                 f'<div class="cat-score">{pct}%</div></div>'
             )
 
