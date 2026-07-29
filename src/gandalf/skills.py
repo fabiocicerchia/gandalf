@@ -60,7 +60,7 @@ def _loads(s: str) -> dict:
 
 def _parse_json(text: str) -> dict:
     """Tolerant JSON extraction: strip markdown fences, else grab the first
-    brace-delimited object. Raises json.JSONDecodeError on anything unparseable
+    brace-delimited object. Raises json.JSONDecodeError on anything unparsable
     (including over-nested input). The compliance gate delegates here."""
     cleaned = text.strip()
     if cleaned.startswith("```"):

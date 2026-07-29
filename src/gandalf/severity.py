@@ -40,7 +40,7 @@ _WEIGHT = {
     "info": 0.05,
     "unknown": 0.5,
 }
-# total weight at which the score floors to 0 (≈ two-and-a-half criticals).
+# total weight at which the score floors to 0 (≈ two-and-a-half critical findings).
 _FLOOR_AT = 5.0
 
 _FIELDS = ("severity", "Severity", "issue_severity", "level", "Level")
