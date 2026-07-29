@@ -6,7 +6,6 @@
 [![security](https://github.com/fabiocicerchia/gandalf/actions/workflows/security.yml/badge.svg)](https://github.com/fabiocicerchia/gandalf/actions/workflows/security.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/fabiocicerchia/gandalf/badge)](https://securityscorecards.dev/viewer/?uri=github.com/fabiocicerchia/gandalf)
-[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Ffabiocicerchia%2Fgandalf.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Ffabiocicerchia%2Fgandalf?ref=badge_shield)
 [![Release](https://img.shields.io/github/v/release/fabiocicerchia/gandalf)](https://github.com/fabiocicerchia/gandalf/releases)
 
 Evaluate the codebase as-is, get an LLM summary and a Red/Amber/Green
