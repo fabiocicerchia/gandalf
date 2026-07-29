@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import asyncio
 
-from gandalf import llm, skills, skillgate
+from gandalf import llm, skillgate, skills
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.plugins import discover_gates
 from gandalf.report import _CATEGORY, _GROUP_ORDER, aggregate
@@ -346,12 +346,16 @@ def test_atheris_gate_ignores_its_own_artifact_prefix_flag(monkeypatch, tmp_path
         "Done 702348 runs in 61 second(s)\n"
     )
     ctx = GateContext(repo=".", workdir=str(tmp_path), changed_files=[], meta={})
-    monkeypatch.setattr(dynamic, "_run", lambda *a, **k: asyncio.sleep(0, result=(0, clean_log, "")))
+    monkeypatch.setattr(
+        dynamic, "_run", lambda *a, **k: asyncio.sleep(0, result=(0, clean_log, ""))
+    )
     res = _run(dynamic.AtherisGate(), ctx)
     assert res.outcome is GateOutcome.PASS
 
     crash_log = "==12345==ERROR: libFuzzer: deadly signal\n"
-    monkeypatch.setattr(dynamic, "_run", lambda *a, **k: asyncio.sleep(0, result=(77, "", crash_log)))
+    monkeypatch.setattr(
+        dynamic, "_run", lambda *a, **k: asyncio.sleep(0, result=(77, "", crash_log))
+    )
     res = _run(dynamic.AtherisGate(), ctx)
     assert res.outcome is GateOutcome.FAIL
 

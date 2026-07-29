@@ -17,7 +17,7 @@ import shutil
 import tempfile
 
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.plugins import run_tool, timeout_result, ignore_patterns
+from gandalf.plugins import ignore_patterns, run_tool, timeout_result
 
 _IMAGE = os.environ.get("GANDALF_KICS_IMAGE", "checkmarx/kics:latest")
 
@@ -78,7 +78,9 @@ class KicsGate:
                     0.8,
                     "kics: no results produced — skipped",
                 )
-            with open(results, errors="replace") as fh:
+            # Small local results read right after the subprocess completes —
+            # not worth a thread hop.
+            with open(results, errors="replace") as fh:  # noqa: ASYNC230
                 data = json.load(fh)
         except (OSError, json.JSONDecodeError) as exc:
             return GateResult(self.name, GateOutcome.WARN, 0.8, f"kics: {exc}")

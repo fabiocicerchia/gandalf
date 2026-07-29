@@ -90,7 +90,9 @@ class CodeqlGate:
                 if not await self._analyze(ctx, work, lang, sarif, have_host):
                     continue
                 try:
-                    with open(sarif, errors="replace") as fh:
+                    # Small local SARIF read right after the subprocess
+                    # completes — not worth a thread hop.
+                    with open(sarif, errors="replace") as fh:  # noqa: ASYNC230
                         data = json.load(fh)
                 except (OSError, json.JSONDecodeError):
                     continue

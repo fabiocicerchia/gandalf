@@ -31,9 +31,9 @@ try:
     import atheris
 
     with atheris.instrument_imports():  # type: ignore[attr-defined]  # no stubs for atheris
-        from gandalf import llm, report, severity, skills, suppress  # noqa: E402
+        from gandalf import llm, report, severity, skills, suppress
 except ImportError:
-    from gandalf import llm, report, severity, skills, suppress  # noqa: E402
+    from gandalf import llm, report, severity, skills, suppress
 
 # Exceptions each adapter is CONTRACTED to raise on bad input — expected, not a
 # fuzz finding. Anything outside these propagates and atheris flags it.

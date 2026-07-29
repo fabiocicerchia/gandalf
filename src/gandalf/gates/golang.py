@@ -141,7 +141,7 @@ class GoTestGate:
         combined = (out or "") + (err or "")
         if rc == 0:
             return GateResult(self.name, GateOutcome.PASS, 1.0, "go test: passed")
-        fails = len(re.findall(r"^--- FAIL", combined, re.M))
+        fails = len(re.findall(r"^--- FAIL", combined, re.MULTILINE))
         score = 0.0 if not fails else max(0.0, 1.0 - min(fails, 10) / 10)
         tail = "\n".join(combined.strip().splitlines()[-5:])
         return GateResult(

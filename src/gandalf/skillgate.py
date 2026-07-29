@@ -18,7 +18,7 @@ file is missing, or there is nothing in scope to judge: never a false pass.
 from __future__ import annotations
 
 import asyncio
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 
 from gandalf.base import GateContext, GateOutcome, GateResult
@@ -39,7 +39,7 @@ _SKILL_LIMIT = 16_000  # per skill, so a huge reference doc can't blow the promp
 _MAX_FINDINGS = 20
 
 
-@lru_cache(maxsize=None)
+@cache
 def load_skill(slug: str) -> str:
     """The verbatim ``SKILL.md`` for ``slug`` (bounded). Returns "" when the skill
     isn't embedded, so the gate degrades to WARN rather than scoring blind."""
@@ -179,7 +179,7 @@ class SkillGate:
             )
 
         try:
-            pct = max(0, min(100, int(round(float(data.get("score", 0))))))
+            pct = max(0, min(100, round(float(data.get("score", 0)))))
         except (TypeError, ValueError):
             pct = 0
         score = pct / 100.0

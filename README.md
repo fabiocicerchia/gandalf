@@ -299,9 +299,11 @@ plugin override a built-in.
 # gandalf/gates/mygate.py
 from gandalf.base import GateContext, GateOutcome, GateResult
 
+
 class MyGate:
     name = "mygate"
     blocking = False
+
     async def run(self, ctx: GateContext) -> GateResult:
         return GateResult(self.name, GateOutcome.PASS, 1.0, "all good")
 ```

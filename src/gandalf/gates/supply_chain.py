@@ -13,11 +13,11 @@ from pathlib import Path
 
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.plugins import (
+    _TIMEOUT_RC,
+    ignore_patterns,
+    missing_result,
     run_tool,
     timeout_result,
-    missing_result,
-    ignore_patterns,
-    _TIMEOUT_RC,
 )
 
 

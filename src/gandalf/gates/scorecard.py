@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.plugins import run_tool, timeout_result, missing_result
+from gandalf.plugins import missing_result, run_tool, timeout_result
 
 # Scorecard's aggregate is a 0–10 float. Bands are generous: local mode drops the
 # GitHub-API checks entirely, so a clean file-based posture already sits high.

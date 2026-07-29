@@ -7,11 +7,11 @@ import re
 
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.plugins import (
+    _scan_targets,
+    missing_result,
     run_tool,
     timeout_result,
     tool_missing,
-    _scan_targets,
-    missing_result,
 )
 
 
@@ -51,7 +51,7 @@ class RuffGate:
         """Apply ruff's autofixes in place (--fix). Called only under `--fix`."""
         if tool_missing("ruff"):
             return (False, "ruff unavailable — nothing fixed")
-        rc, out, err = await run_tool(
+        _rc, out, err = await run_tool(
             [
                 "ruff",
                 "check",

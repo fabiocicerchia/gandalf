@@ -93,9 +93,7 @@ class _Rule:
             return False
         if self.rule and self.rule != finding_rule(f):
             return False
-        if self.path and not fnmatch(finding_path(f), self.path):
-            return False
-        return True
+        return not (self.path and not fnmatch(finding_path(f), self.path))
 
 
 class Suppressor:

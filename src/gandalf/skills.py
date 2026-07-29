@@ -32,7 +32,7 @@ _SKILLS_DIR = Path(__file__).resolve().parent.parent.parent / "skills"
 
 _DIFF_LIMIT = 12_000
 _FINDINGS_CAP = 12
-_FRONTMATTER = re.compile(r"^---\n.*?\n---\n", re.S)
+_FRONTMATTER = re.compile(r"^---\n.*?\n---\n", re.DOTALL)
 
 
 class SkillNotFound(Exception):
@@ -60,13 +60,12 @@ def _loads(s: str) -> dict:
 
 def _parse_json(text: str) -> dict:
     """Tolerant JSON extraction: strip markdown fences, else grab the first
-    brace-delimited object. Raises json.JSONDecodeError on anything unparseable
+    brace-delimited object. Raises json.JSONDecodeError on anything unparsable
     (including over-nested input). The compliance gate delegates here."""
     cleaned = text.strip()
     if cleaned.startswith("```"):
         cleaned = cleaned.split("```", 2)[1]
-        if cleaned.startswith("json"):
-            cleaned = cleaned[4:]
+        cleaned = cleaned.removeprefix("json")
     cleaned = cleaned.strip()
     try:
         return _loads(cleaned)
@@ -159,7 +158,7 @@ async def judge(
         )
 
     try:
-        pct = max(0, min(100, int(round(float(data.get("score", 0))))))
+        pct = max(0, min(100, round(float(data.get("score", 0)))))
     except (TypeError, ValueError):
         pct = 0
     score = pct / 100.0

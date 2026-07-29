@@ -12,6 +12,10 @@ import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing import Self
 
 
 def _git(args: list[str], cwd: str = ".") -> str:
@@ -109,7 +113,7 @@ class Scope:
     )  # ref commit (HEAD for staged/working-tree)
     _worktree: str | None = field(default=None, repr=False)
 
-    def __enter__(self) -> "Scope":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *exc) -> None:
@@ -117,6 +121,7 @@ class Scope:
             subprocess.run(  # nosec B603 B607 - fixed git argv, no shell
                 ["git", "worktree", "remove", "--force", self._worktree],
                 capture_output=True,
+                check=False,
             )
             shutil.rmtree(self._worktree, ignore_errors=True)
 

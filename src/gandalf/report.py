@@ -152,7 +152,7 @@ _EMPTY_NOTE = (
 )
 # The model's "everything passes" reply — matched loosely (markdown/punctuation
 # tolerated) so the remediation section is omitted rather than showing a placeholder.
-_NO_REMEDIATION = re.compile(r"^\W*no remediation needed\W*$", re.I)
+_NO_REMEDIATION = re.compile(r"^\W*no remediation needed\W*$", re.IGNORECASE)
 
 
 @dataclass
@@ -175,7 +175,7 @@ class Policy:
         section: dict,
         cli_fail_on: str | None = None,
         cli_min_score: int | None = None,
-    ) -> "Policy":
+    ) -> Policy:
         raw = (cli_fail_on or section.get("fail_on") or "fail").lower()
         fail_on = GateOutcome.WARN if raw == "warn" else GateOutcome.FAIL
         score = (
@@ -267,7 +267,7 @@ def render_terminal(
         gcol = _RAG[gc][1]
         lines.append(f"\n{_BOLD}{gcol}{group}{_RESET} {_DIM}· {pct}%{_RESET}")
         for r in members:
-            emoji, color, _, w = _RAG[r.outcome]
+            emoji, color, _, _w = _RAG[r.outcome]
             block = (
                 f" {_DIM}[blocking]{_RESET}" if getattr(r, "_blocking", False) else ""
             )

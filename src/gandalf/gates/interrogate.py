@@ -7,7 +7,7 @@ import os
 import re
 
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.plugins import run_tool, timeout_result, _scan_targets, missing_result
+from gandalf.plugins import _scan_targets, missing_result, run_tool, timeout_result
 
 _MIN = float(os.environ.get("GANDALF_DOCSTRING_MIN", "60"))
 

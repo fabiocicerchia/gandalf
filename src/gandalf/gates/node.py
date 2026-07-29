@@ -31,7 +31,7 @@ class EslintGate:
             return GateResult(
                 self.name, GateOutcome.WARN, 0.8, "npx/node not installed — skipped"
             )
-        rc, out, err = await run_tool(
+        rc, out, _err = await run_tool(
             ["npx", "--no-install", "eslint", "-f", "json", "."], ctx.workdir
         )
         if (to := timeout_result(self.name, rc)) is not None:
@@ -68,7 +68,7 @@ class EslintGate:
         """Apply eslint's autofixes in place (--fix). Called only under `--fix`."""
         if _no_pkg(ctx) or tool_missing("npx"):
             return (False, "eslint unavailable — nothing fixed")
-        rc, out, err = await run_tool(
+        rc, _out, _err = await run_tool(
             ["npx", "--no-install", "eslint", "--fix", "."], ctx.workdir
         )
         # eslint --fix is silent on success; a clean rc means fixes (if any) applied.

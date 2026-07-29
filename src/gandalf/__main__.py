@@ -21,11 +21,9 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import cache as gcache
-from . import config as gconfig
-from . import debug
 from . import (
     badge,
+    debug,
     junit,
     llm,
     plugins,
@@ -36,6 +34,8 @@ from . import (
     severity,
     suppress,
 )
+from . import cache as gcache
+from . import config as gconfig
 from . import trend as gtrend
 from .base import GateContext, GateOutcome
 from .plugins import discover_gates
@@ -60,7 +60,7 @@ async def _run_gates(gates, ctx, on_done=None, limit=0, timeouts=None):
         async with cm:
             try:
                 res = await g.run(ctx)
-            except Exception as exc:  # a broken plugin must not sink the whole run
+            except Exception as exc:  # noqa: BLE001 — a broken plugin must not sink the whole run
                 from .base import GateResult
 
                 res = GateResult(g.name, GateOutcome.WARN, 0.5, f"gate errored: {exc}")
@@ -89,7 +89,7 @@ async def _run_fixers(gates, ctx):
             continue
         try:
             changed, msg = await fix(ctx)
-        except Exception as exc:  # a broken fixer must not sink the run
+        except Exception as exc:  # noqa: BLE001 — a broken fixer must not sink the run
             changed, msg = False, f"fix errored: {exc}"
         out.append((g.name, changed, msg))
     return out
@@ -447,7 +447,7 @@ def main(argv: list[str] | None = None) -> int:
         active = [
             g
             for g in gates
-            if not getattr(g, "langs", None) or (set(getattr(g, "langs")) & detected)
+            if not getattr(g, "langs", None) or (set(g.langs) & detected)
         ]
         skipped = [g.name for g in gates if g not in active]
 
@@ -584,7 +584,7 @@ def main(argv: list[str] | None = None) -> int:
 
         out_dir = Path(scope.repo_root()) / "reports"
         out_dir.mkdir(exist_ok=True)
-        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+        ts = datetime.now(tz=timezone.utc).strftime("%Y%m%d-%H%M%S")
         stem = f"gandalf-{sc.label.replace('/', '_')}-{ts}"
         payload = _build_payload(
             sc,
