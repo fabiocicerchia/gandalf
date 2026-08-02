@@ -12,6 +12,9 @@
 # Customize for your repo:
 #   * ref: below - pin gandalf to a release tag or commit SHA (not `main`) so CI
 #     is reproducible and you control upgrades.
+#   * Code scanning - INGEST_CODE_SCANNING (below) also sends findings to the
+#     Security tab. Flip it off with a repo Variable; see the README for the
+#     GitHub Advanced Security requirement on private repos.
 #   * --no-llm - drop it (and set GANDALF_LLM_URL) if you have an LLM endpoint.
 #   * Blocking vs advisory - see the final step; advisory by default.
 #   * First-run cost - building the tools image takes a few minutes. To speed
@@ -23,10 +26,20 @@ name: gandalf-pr-review
 on:
   pull_request:
 
-# Least privilege: read the code, write PR review comments. Nothing else.
+# Least privilege: read the code, write PR review comments, and (when the toggle
+# below is on) write code-scanning results. security-events is granted
+# statically - GitHub permissions can't be conditional - but goes unused when
+# INGEST_CODE_SCANNING is false.
 permissions:
   contents: read
   pull-requests: write
+  security-events: write
+
+# Also ingest findings into GitHub Code Scanning (Security tab + PR annotations)?
+# Flip via a repo Variable (Settings > Secrets and variables > Actions > Variables)
+# named GANDALF_INGEST_CODE_SCANNING = "false" to turn it off; defaults to on.
+env:
+  INGEST_CODE_SCANNING: ${{ vars.GANDALF_INGEST_CODE_SCANNING || 'true' }}
 
 concurrency:
   group: gandalf-pr-${{ github.event.pull_request.number }}
@@ -77,6 +90,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          # One run emits both the inline comments (--pr) and the SARIF the next
+          # step uploads to code scanning.
           set +e
           docker run --rm \
             -e GITHUB_TOKEN \
@@ -85,7 +100,8 @@ jobs:
             -v "$PWD:/src" -w /src \
             gandalf-tools \
             sh -c 'git config --global --add safe.directory "*" \
-              && PYTHONPATH=/src/.gandalf/src python -m gandalf --staged --no-llm --pr "$PR_NUMBER"'
+              && PYTHONPATH=/src/.gandalf/src python -m gandalf --staged --no-llm \
+                   --no-html --sarif reports/gandalf.sarif --pr "$PR_NUMBER"'
           code=$?
           set -e
           echo "gandalf exit code: $code (0=green, 1=red verdict)"
@@ -93,3 +109,13 @@ jobs:
           # verdict does NOT fail the check. To gate merges on the verdict,
           # replace the line below with: exit "$code"
           exit 0
+
+      # Ingest the same findings into GitHub Code Scanning (Security tab + PR diff
+      # annotations, with alert lifecycle). Runs only when the toggle is on. Fork
+      # PRs get a read-only token, so this is skipped there - same as comments.
+      - name: Ingest into code scanning
+        if: env.INGEST_CODE_SCANNING == 'true'
+        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v3
+        with:
+          sarif_file: reports/gandalf.sarif
+          category: gandalf

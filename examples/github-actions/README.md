@@ -3,7 +3,8 @@
 What it shows: a drop-in workflow that runs gandalf on every pull request inside
 a container of scanners and posts each finding as an **inline review comment**
 anchored to the `file:line` it flags — plus a rolled-up summary for findings that
-aren't on changed lines.
+aren't on changed lines. It can also **ingest the same findings into GitHub Code
+Scanning** (Security tab + PR diff annotations) behind a true/false toggle.
 
 [`gandalf-pr-review.yml`](gandalf-pr-review.yml) is the whole thing. It needs
 nothing installed on the runner and no secrets beyond the built-in
@@ -52,13 +53,41 @@ The workflow requests the minimum:
 permissions:
   contents: read
   pull-requests: write   # required to post the review
+  security-events: write # required to upload SARIF to code scanning
 ```
 
 It runs on the `pull_request` event, which is the safe choice: untrusted PR code
 never sees your secrets. The trade-off is that **pull requests from forks get a
-read-only token**, so comment posting is skipped there — a GitHub limitation,
-not a gandalf one. For a fork-friendly setup, post from a separate
-`workflow_run` job triggered after this one; keep scanning on `pull_request`.
+read-only token**, so both comment posting and code-scanning upload are skipped
+there — a GitHub limitation, not a gandalf one. For a fork-friendly setup, post
+from a separate `workflow_run` job triggered after this one; keep scanning on
+`pull_request`.
+
+## Code scanning (Security tab)
+
+The workflow also produces SARIF and uploads it via
+`github/codeql-action/upload-sarif`, so findings show up as **code scanning
+alerts** in the Security tab and as annotations on the PR diff — with GitHub's
+alert lifecycle (severity ranking, dismiss, and auto-close when a finding is
+fixed). gandalf appears as its own tool named `gandalf`, alongside CodeQL and
+anything else you upload; it is *not* merged into CodeQL's results.
+
+Toggle it with a repository **Variable** (Settings → Secrets and variables →
+Actions → Variables) named `GANDALF_INGEST_CODE_SCANNING`:
+
+- unset or `true` (default) — upload SARIF to code scanning.
+- `false` — skip the upload; only inline comments post. The `security-events`
+  permission is still granted but goes unused.
+
+Two things to know:
+
+- **Private repos need GitHub Advanced Security** to accept SARIF uploads (code
+  scanning is free on public repos). Without it the upload step fails; set the
+  variable to `false`, or keep the workflow on public repos only.
+- **Scope is the PR diff.** The upload reflects the PR's changed files, which is
+  what you want for per-PR feedback. For a persistent whole-repo baseline in the
+  Security tab, add a second trigger that runs gandalf whole-tree on push to your
+  default branch (drop `--staged`) and uploads that SARIF too.
 
 ## Advisory vs blocking
 

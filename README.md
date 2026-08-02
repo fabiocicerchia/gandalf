@@ -87,10 +87,13 @@ also run on the host.
 pull request it runs gandalf in the `gandalf-tools` container and posts each
 finding as an inline review comment on the `file:line` it flags (`--pr N`),
 scoped to the PR's diff so anchors match GitHub's diff view. It needs only the
-built-in `GITHUB_TOKEN` with `pull-requests: write`. gandalf reviews its own PRs
-the same way via `.github/workflows/gandalf-pr.yml`. See
-[the example's README](examples/github-actions/README.md) for setup and the
-advisory-vs-blocking toggle.
+built-in `GITHUB_TOKEN` with `pull-requests: write`. A true/false toggle
+(`GANDALF_INGEST_CODE_SCANNING`) also ingests the same findings into GitHub Code
+Scanning — the Security tab and PR diff annotations — via `--sarif` +
+`upload-sarif`. gandalf reviews its own PRs the same way via
+`.github/workflows/gandalf-pr.yml`. See
+[the example's README](examples/github-actions/README.md) for setup, code
+scanning, and the advisory-vs-blocking toggle.
 
 ## What it does
 
