@@ -1,0 +1,48 @@
+name: gandalf-pr-review
+
+# gandalf reviewing its own pull requests (dogfood) via the repo's own composite
+# Action (action.yml, invoked as `uses: ./`). This doubles as the reference for
+# how anyone else wires it up - see examples/github-actions/gandalf-pr-review.yml
+# for the drop-in copy that uses `uses: fabiocicerchia/gandalf@<ref>`.
+
+on:
+  pull_request:
+
+# Least privilege: read the code, post the review, and (when the toggle below is
+# on) write code-scanning results.
+permissions:
+  contents: read
+  packages: read # pull the ghcr scanner image
+  pull-requests: write
+  security-events: write
+
+# Also ingest findings into GitHub Code Scanning (Security tab + PR annotations)?
+# Flip via a repo Variable named GANDALF_INGEST_CODE_SCANNING = "false"; default on.
+env:
+  INGEST_CODE_SCANNING: ${{ vars.GANDALF_INGEST_CODE_SCANNING || 'true' }}
+
+concurrency:
+  group: gandalf-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: gandalf inline review
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          fetch-depth: 0 # need base + head + their merge-base for the PR diff
+
+      # `uses: ./` runs this repo's action.yml, so gandalf is exercised from the
+      # PR's own source. It pulls ghcr.io/.../gandalf-tools (falling back to a
+      # source build if the pull fails), scans the diff, posts inline comments,
+      # and uploads SARIF when code-scanning is on.
+      - uses: ./
+        with:
+          code-scanning: ${{ env.INGEST_CODE_SCANNING }}
+          # Post as a custom bot instead of github-actions[bot]. Undefined
+          # secrets resolve to empty, so this falls back gracefully until a
+          # "gandalf" GitHub App exists and APP_ID / APP_PRIVATE_KEY are set.
+          app-id: ${{ secrets.GANDALF_APP_ID }}
+          app-private-key: ${{ secrets.GANDALF_APP_PRIVATE_KEY }}

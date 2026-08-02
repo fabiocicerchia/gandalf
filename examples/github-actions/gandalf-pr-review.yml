@@ -1,0 +1,51 @@
+# gandalf PR review - drop-in GitHub Actions workflow.
+#
+# Copy this to `.github/workflows/gandalf-pr-review.yml` in YOUR repo. On every
+# pull request it runs gandalf's scanners in one container and posts each finding
+# as an inline review comment on the file:line it flags, and (by default) ingests
+# the same findings into GitHub Code Scanning (Security tab + PR annotations).
+#
+# Nothing is installed on the runner and no secrets beyond the built-in
+# GITHUB_TOKEN are needed - the reusable action pulls a prebuilt scanner image.
+#
+# Customize:
+#   * @main below - pin to a gandalf release tag or commit SHA for reproducible CI.
+#   * code-scanning - set "false" to skip the Security-tab upload (see README for
+#     the GitHub Advanced Security requirement on private repos).
+#   * extra-args - e.g. "--fail-on warn" to fail the check on findings.
+
+name: gandalf-pr-review
+
+on:
+  pull_request:
+
+# read the code, post the review, and upload code-scanning results.
+permissions:
+  contents: read
+  packages: read # pull the ghcr scanner image
+  pull-requests: write
+  security-events: write
+
+concurrency:
+  group: gandalf-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: gandalf inline review
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          fetch-depth: 0 # need base + head + their merge-base for the PR diff
+
+      - uses: fabiocicerchia/gandalf@main # pin me: a release tag or commit SHA
+        with:
+          code-scanning: ${{ vars.GANDALF_INGEST_CODE_SCANNING || 'true' }}
+          # Optional: post comments as your own bot (name + logo) instead of
+          # github-actions[bot]. Create a GitHub App, add its APP_ID +
+          # APP_PRIVATE_KEY secrets, and uncomment - see the README.
+          # app-id: ${{ secrets.APP_ID }}
+          # app-private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          # comment-title: gandalf
+          # comment-icon: "🧙"

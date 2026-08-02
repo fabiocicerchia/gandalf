@@ -566,6 +566,7 @@ def main(argv: list[str] | None = None) -> int:
             "generated_at": generated_at,
             "commit": sc.commit,
             "score_delta": score_delta,
+            "workdir": sc.workdir,  # lets sarif.to_sarif rebase paths repo-relative
         }
         _print_summary(
             sc,

@@ -81,6 +81,30 @@ and Node gates use the host toolchain (`go`/`npx`/`npm`), and `ci_act` (host
 Docker daemon), `tests` (project env), the `dynamic` DAST tools, and `atheris`
 also run on the host.
 
+### Review pull requests inline
+
+gandalf ships as a reusable GitHub Action (`action.yml`), so a drop-in PR review
+is a checkout plus one step:
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+- uses: fabiocicerchia/gandalf@main   # pin to a tag/SHA
+  with:
+    code-scanning: true               # also ingest into GitHub Code Scanning
+```
+
+On every pull request it pulls the prebuilt `ghcr.io/fabiocicerchia/gandalf-tools`
+scanner image (building from source if the pull fails), scans the PR's diff, and
+posts each finding as an inline review comment on the `file:line` it flags —
+scoped to the diff so anchors match GitHub's view. With `code-scanning: true` it
+also uploads SARIF so findings appear in the Security tab and as PR diff
+annotations. It needs only the built-in `GITHUB_TOKEN`. gandalf reviews its own
+PRs the same way via `.github/workflows/gandalf-pr.yml` (`uses: ./`). See
+[`examples/github-actions/`](examples/github-actions/README.md) for the full
+drop-in workflow, inputs, code scanning, and the advisory-vs-blocking toggle.
+
 ## What it does
 
 1. **LLM analysis** — one call to the headroom endpoint returns three

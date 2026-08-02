@@ -15,6 +15,7 @@ later CI step to post.
 from __future__ import annotations
 
 import json
+import os
 import urllib.error
 import urllib.request
 
@@ -30,10 +31,19 @@ _RAG_WORD = {
 }
 
 
+def _brand() -> tuple[str, str]:
+    """(icon, name) shown in the comment text. Override to rebrand without a code
+    fork; the account that authors the comment is set by the token, not here."""
+    return (
+        os.environ.get("GANDALF_PR_ICON", "🧙"),
+        os.environ.get("GANDALF_PR_TITLE", "gandalf"),
+    )
+
+
 def _comment_body(gate: str, f: dict) -> str:
     rule = finding_rule(f)
     tag = f"`{gate}`" + (f" · `{rule}`" if rule else "")
-    return f"**gandalf** {tag}\n\n{fmt_finding(f)}"
+    return f"**{_brand()[1]}** {tag}\n\n{fmt_finding(f)}"
 
 
 def build(
@@ -79,7 +89,9 @@ def review_payload(
         GateOutcome.WARN: "AMBER",
         GateOutcome.FAIL: "RED",
     }[verdict.outcome]
-    lines = [f"## 🧙 gandalf — {word} · {verdict.score}/100", ""]
+    icon, name = _brand()
+    header = f"{icon} {name}".strip()
+    lines = [f"## {header} — {word} · {verdict.score}/100", ""]
     if comments:
         lines.append(f"{len(comments)} inline comment(s) below.")
     if overflow:
