@@ -83,17 +83,27 @@ also run on the host.
 
 ### Review pull requests inline
 
-`examples/github-actions/gandalf-pr-review.yml` is a drop-in workflow: on every
-pull request it runs gandalf in the `gandalf-tools` container and posts each
-finding as an inline review comment on the `file:line` it flags (`--pr N`),
-scoped to the PR's diff so anchors match GitHub's diff view. It needs only the
-built-in `GITHUB_TOKEN` with `pull-requests: write`. A true/false toggle
-(`GANDALF_INGEST_CODE_SCANNING`) also ingests the same findings into GitHub Code
-Scanning — the Security tab and PR diff annotations — via `--sarif` +
-`upload-sarif`. gandalf reviews its own PRs the same way via
-`.github/workflows/gandalf-pr.yml`. See
-[the example's README](examples/github-actions/README.md) for setup, code
-scanning, and the advisory-vs-blocking toggle.
+gandalf ships as a reusable GitHub Action (`action.yml`), so a drop-in PR review
+is a checkout plus one step:
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+- uses: fabiocicerchia/gandalf@main   # pin to a tag/SHA
+  with:
+    code-scanning: true               # also ingest into GitHub Code Scanning
+```
+
+On every pull request it pulls the prebuilt `ghcr.io/fabiocicerchia/gandalf-tools`
+scanner image (building from source if the pull fails), scans the PR's diff, and
+posts each finding as an inline review comment on the `file:line` it flags —
+scoped to the diff so anchors match GitHub's view. With `code-scanning: true` it
+also uploads SARIF so findings appear in the Security tab and as PR diff
+annotations. It needs only the built-in `GITHUB_TOKEN`. gandalf reviews its own
+PRs the same way via `.github/workflows/gandalf-pr.yml` (`uses: ./`). See
+[`examples/github-actions/`](examples/github-actions/README.md) for the full
+drop-in workflow, inputs, code scanning, and the advisory-vs-blocking toggle.
 
 ## What it does
 

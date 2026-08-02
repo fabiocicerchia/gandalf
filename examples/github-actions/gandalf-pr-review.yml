@@ -1,45 +1,30 @@
 # gandalf PR review - drop-in GitHub Actions workflow.
 #
-# Copy this file to `.github/workflows/gandalf-pr-review.yml` in YOUR repo. On
-# every pull request it runs gandalf's scanners inside a container and posts each
-# finding as an inline review comment anchored to the file:line it flags, with an
-# overflow summary for findings that aren't on changed lines.
+# Copy this to `.github/workflows/gandalf-pr-review.yml` in YOUR repo. On every
+# pull request it runs gandalf's scanners in one container and posts each finding
+# as an inline review comment on the file:line it flags, and (by default) ingests
+# the same findings into GitHub Code Scanning (Security tab + PR annotations).
 #
-# It needs NOTHING installed on the runner and NO extra secrets: gandalf is
-# pure-stdlib Python, its scanners ship in one image built here, and posting uses
-# the built-in GITHUB_TOKEN.
+# Nothing is installed on the runner and no secrets beyond the built-in
+# GITHUB_TOKEN are needed - the reusable action pulls a prebuilt scanner image.
 #
-# Customize for your repo:
-#   * ref: below - pin gandalf to a release tag or commit SHA (not `main`) so CI
-#     is reproducible and you control upgrades.
-#   * Code scanning - INGEST_CODE_SCANNING (below) also sends findings to the
-#     Security tab. Flip it off with a repo Variable; see the README for the
-#     GitHub Advanced Security requirement on private repos.
-#   * --no-llm - drop it (and set GANDALF_LLM_URL) if you have an LLM endpoint.
-#   * Blocking vs advisory - see the final step; advisory by default.
-#   * First-run cost - building the tools image takes a few minutes. To speed
-#     repeat runs, publish a prebuilt image once and `docker pull` it here
-#     instead of `docker build` (see examples/github-actions/README.md).
+# Customize:
+#   * @main below - pin to a gandalf release tag or commit SHA for reproducible CI.
+#   * code-scanning - set "false" to skip the Security-tab upload (see README for
+#     the GitHub Advanced Security requirement on private repos).
+#   * extra-args - e.g. "--fail-on warn" to fail the check on findings.
 
 name: gandalf-pr-review
 
 on:
   pull_request:
 
-# Least privilege: read the code, write PR review comments, and (when the toggle
-# below is on) write code-scanning results. security-events is granted
-# statically - GitHub permissions can't be conditional - but goes unused when
-# INGEST_CODE_SCANNING is false.
+# read the code, post the review, and upload code-scanning results.
 permissions:
   contents: read
+  packages: read # pull the ghcr scanner image
   pull-requests: write
   security-events: write
-
-# Also ingest findings into GitHub Code Scanning (Security tab + PR annotations)?
-# Flip via a repo Variable (Settings > Secrets and variables > Actions > Variables)
-# named GANDALF_INGEST_CODE_SCANNING = "false" to turn it off; defaults to on.
-env:
-  INGEST_CODE_SCANNING: ${{ vars.GANDALF_INGEST_CODE_SCANNING || 'true' }}
 
 concurrency:
   group: gandalf-pr-${{ github.event.pull_request.number }}
@@ -50,72 +35,10 @@ jobs:
     name: gandalf inline review
     runs-on: ubuntu-latest
     steps:
-      # 1. Your repository - the code under review.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
           fetch-depth: 0 # need base + head + their merge-base for the PR diff
 
-      # 2. gandalf itself, into ./.gandalf (untracked in your repo, so it never
-      #    enters the scan). Pin `ref` to a tag or SHA for reproducible CI.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+      - uses: fabiocicerchia/gandalf@main # pin me: a release tag or commit SHA
         with:
-          repository: fabiocicerchia/gandalf
-          ref: main # pin me: e.g. a release tag or a full commit SHA
-          path: .gandalf
-
-      # 3. Build the all-tools image. Every scanner lands on PATH, so gandalf runs
-      #    them directly inside the container - no nested Docker, no host installs.
-      - name: Build gandalf-tools image
-        run: docker build -f .gandalf/tools.Dockerfile -t gandalf-tools .gandalf
-
-      # 4. Stage the PR's diff. Index = head tree, HEAD = merge-base, so
-      #    `git diff --cached` is exactly the PR diff (merge-base..head), which
-      #    `--staged` scopes gandalf to, and which matches GitHub's diff view so
-      #    line anchors line up (GitHub rejects review comments off the diff).
-      - name: Stage the PR diff
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          merge_base=$(git merge-base "$BASE_SHA" "$HEAD_SHA")
-          git checkout -q "$HEAD_SHA"
-          git reset --soft "$merge_base"
-
-      # 5. Run gandalf against the staged diff and post the review. safe.directory
-      #    clears git's dubious-ownership guard (the mount is owned by the runner
-      #    uid; the image runs as uid 1000). GITHUB_REPOSITORY + GITHUB_TOKEN tell
-      #    pr_comments where and how to post; --pr posts to this PR number.
-      - name: Run gandalf and post inline comments
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          # One run emits both the inline comments (--pr) and the SARIF the next
-          # step uploads to code scanning.
-          set +e
-          docker run --rm \
-            -e GITHUB_TOKEN \
-            -e GITHUB_REPOSITORY \
-            -e PR_NUMBER \
-            -v "$PWD:/src" -w /src \
-            gandalf-tools \
-            sh -c 'git config --global --add safe.directory "*" \
-              && PYTHONPATH=/src/.gandalf/src python -m gandalf --staged --no-llm \
-                   --no-html --sarif reports/gandalf.sarif --pr "$PR_NUMBER"'
-          code=$?
-          set -e
-          echo "gandalf exit code: $code (0=green, 1=red verdict)"
-          # Advisory by default: the inline comments are the signal, so a red
-          # verdict does NOT fail the check. To gate merges on the verdict,
-          # replace the line below with: exit "$code"
-          exit 0
-
-      # Ingest the same findings into GitHub Code Scanning (Security tab + PR diff
-      # annotations, with alert lifecycle). Runs only when the toggle is on. Fork
-      # PRs get a read-only token, so this is skipped there - same as comments.
-      - name: Ingest into code scanning
-        if: env.INGEST_CODE_SCANNING == 'true'
-        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v3
-        with:
-          sarif_file: reports/gandalf.sarif
-          category: gandalf
+          code-scanning: ${{ vars.GANDALF_INGEST_CODE_SCANNING || 'true' }}

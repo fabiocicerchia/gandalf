@@ -1,0 +1,131 @@
+name: gandalf PR review
+description: >-
+  Review a pull request with gandalf's scanners in one container - inline
+  file:line comments, and (optionally) findings ingested into GitHub Code
+  Scanning. Nothing installed on the runner.
+author: fabiocicerchia
+
+branding:
+  icon: shield
+  color: blue
+
+# Consumer workflow must grant permissions (this Action cannot):
+#   contents: read
+#   pull-requests: write    # to post the inline review
+#   security-events: write  # only when code-scanning is on
+# and check out the repo with fetch-depth: 0 before calling this Action.
+
+inputs:
+  pr-number:
+    description: PR number to post the review to.
+    default: ${{ github.event.pull_request.number }}
+  base-sha:
+    description: Base commit of the PR (its diff is what gets scanned).
+    default: ${{ github.event.pull_request.base.sha }}
+  head-sha:
+    description: Head commit of the PR.
+    default: ${{ github.event.pull_request.head.sha }}
+  code-scanning:
+    description: >-
+      Also upload findings to GitHub Code Scanning (Security tab + PR
+      annotations). "true" or "false". Requires security-events: write.
+    default: "true"
+  tools-image:
+    description: >-
+      Scanner image to pull (skips the build). Pass an empty string to always
+      build from this Action's tools.Dockerfile instead.
+    default: ghcr.io/fabiocicerchia/gandalf-tools:latest
+  github-token:
+    description: Token used to pull the image and post the review.
+    default: ${{ github.token }}
+  extra-args:
+    description: Extra flags appended to the gandalf command (e.g. "--fail-on warn").
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    # Pull the prebuilt scanner image and tag it `gandalf-tools`. Falls back to
+    # building from source if the pull fails (e.g. before the image is first
+    # published, or on a fork) or if tools-image is empty.
+    - name: Resolve tools image
+      shell: bash
+      env:
+        TOOLS_IMAGE: ${{ inputs.tools-image }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        ACTOR: ${{ github.actor }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -e
+        if [ -n "$TOOLS_IMAGE" ]; then
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin 2>/dev/null || true
+          if docker pull "$TOOLS_IMAGE"; then
+            docker tag "$TOOLS_IMAGE" gandalf-tools
+            echo "Using pulled image: $TOOLS_IMAGE"
+            exit 0
+          fi
+          echo "Pull failed for $TOOLS_IMAGE - building from source instead."
+        fi
+        docker build -f "$ACTION_PATH/tools.Dockerfile" -t gandalf-tools "$ACTION_PATH"
+
+    # Index = head tree, HEAD = merge-base, so `git diff --cached` is exactly the
+    # PR diff (merge-base..head) - which `--staged` scopes gandalf to, and which
+    # matches GitHub's diff view so line anchors line up.
+    - name: Stage the PR diff
+      shell: bash
+      env:
+        BASE_SHA: ${{ inputs.base-sha }}
+        HEAD_SHA: ${{ inputs.head-sha }}
+      run: |
+        set -e
+        if [ -z "$BASE_SHA" ] || [ -z "$HEAD_SHA" ]; then
+          echo "base-sha/head-sha are empty - this Action expects a pull_request event." >&2
+          exit 1
+        fi
+        merge_base=$(git merge-base "$BASE_SHA" "$HEAD_SHA")
+        git checkout -q "$HEAD_SHA"
+        git reset --soft "$merge_base"
+
+    # Run gandalf from this Action's own source (mounted at /gandalf) against the
+    # consumer's checkout (/src). Runs as the runner uid with a writable HOME so
+    # the container can write reports/ into the workspace (the image's own uid
+    # would not own it). One run emits both the --pr comments and the SARIF.
+    - name: Run gandalf
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        EXTRA_ARGS: ${{ inputs.extra-args }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set +e
+        docker run --rm \
+          --user "$(id -u):$(id -g)" \
+          -e HOME=/tmp \
+          -e PYTHONDONTWRITEBYTECODE=1 \
+          -e GITHUB_TOKEN="$GH_TOKEN" \
+          -e GITHUB_REPOSITORY \
+          -e PR_NUMBER \
+          -e EXTRA_ARGS \
+          -v "$GITHUB_WORKSPACE:/src" \
+          -v "$ACTION_PATH:/gandalf:ro" \
+          -w /src \
+          gandalf-tools \
+          sh -c 'git config --global --add safe.directory "*" \
+            && PYTHONPATH=/gandalf/src python -m gandalf --staged --no-llm --no-html \
+                 --sarif reports/gandalf.sarif --pr "$PR_NUMBER" $EXTRA_ARGS'
+        code=$?
+        set -e
+        echo "gandalf exit code: $code (0=green, 1=red verdict)"
+        # Advisory: the review + alerts are the signal, so a red verdict does not
+        # fail the job. Pass extra-args "--fail-on warn" (and drop this) to gate.
+        exit 0
+
+    # Findings on the PR's changed lines become code-scanning alerts + PR diff
+    # annotations. Skipped on forks (read-only token) and when the toggle is off.
+    - name: Ingest into code scanning
+      if: inputs.code-scanning == 'true'
+      uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v3
+      with:
+        sarif_file: reports/gandalf.sarif
+        category: gandalf

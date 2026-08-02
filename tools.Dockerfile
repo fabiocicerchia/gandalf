@@ -4,6 +4,12 @@
 # when the binary isn't on the host PATH. Pinned for reproducibility — bump freely.
 FROM python:3.12-slim
 
+# OCI labels — org.opencontainers.image.source links the ghcr package to this repo
+# (so it inherits repo visibility and the built-in GITHUB_TOKEN can pull it).
+LABEL org.opencontainers.image.source="https://github.com/fabiocicerchia/gandalf" \
+      org.opencontainers.image.description="gandalf-tools — every scanner gate's CLI in one image" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
 ARG GITLEAKS_VERSION=8.21.2
 ARG HADOLINT_VERSION=2.12.0
 ARG OSV_SCANNER_VERSION=1.9.1
