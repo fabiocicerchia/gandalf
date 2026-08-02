@@ -81,6 +81,17 @@ and Node gates use the host toolchain (`go`/`npx`/`npm`), and `ci_act` (host
 Docker daemon), `tests` (project env), the `dynamic` DAST tools, and `atheris`
 also run on the host.
 
+### Review pull requests inline
+
+`examples/github-actions/gandalf-pr-review.yml` is a drop-in workflow: on every
+pull request it runs gandalf in the `gandalf-tools` container and posts each
+finding as an inline review comment on the `file:line` it flags (`--pr N`),
+scoped to the PR's diff so anchors match GitHub's diff view. It needs only the
+built-in `GITHUB_TOKEN` with `pull-requests: write`. gandalf reviews its own PRs
+the same way via `.github/workflows/gandalf-pr.yml`. See
+[the example's README](examples/github-actions/README.md) for setup and the
+advisory-vs-blocking toggle.
+
 ## What it does
 
 1. **LLM analysis** — one call to the headroom endpoint returns three
