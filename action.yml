@@ -38,6 +38,21 @@ inputs:
   github-token:
     description: Token used to pull the image and post the review.
     default: ${{ github.token }}
+  app-id:
+    description: >-
+      GitHub App id. Set app-id + app-private-key to post comments as your App
+      (<app>[bot], with the App's logo) instead of github-actions[bot]. The App
+      needs Pull requests: write. Leave empty to use github-token.
+    default: ""
+  app-private-key:
+    description: Private key (PEM) for the GitHub App named in app-id.
+    default: ""
+  comment-title:
+    description: Name shown in the comment text (header + per-finding prefix).
+    default: gandalf
+  comment-icon:
+    description: Emoji shown in the comment header.
+    default: "🧙"
   extra-args:
     description: Extra flags appended to the gandalf command (e.g. "--fail-on warn").
     default: ""
@@ -86,6 +101,17 @@ runs:
         git checkout -q "$HEAD_SHA"
         git reset --soft "$merge_base"
 
+    # Optional: mint a GitHub App installation token so the review is authored by
+    # your App (<app>[bot], with its logo) instead of github-actions[bot]. Skipped
+    # when app-id is empty; the review then posts with github-token as before.
+    - name: Mint GitHub App token
+      id: app-token
+      if: inputs.app-id != ''
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.app-private-key }}
+
     # Run gandalf from this Action's own source (mounted at /gandalf) against the
     # consumer's checkout (/src). Runs as the runner uid with a writable HOME so
     # the container can write reports/ into the workspace (the image's own uid
@@ -93,10 +119,13 @@ runs:
     - name: Run gandalf
       shell: bash
       env:
-        GH_TOKEN: ${{ inputs.github-token }}
+        # App token authors the comments when present; else the plain github-token.
+        GH_TOKEN: ${{ steps.app-token.outputs.token || inputs.github-token }}
         PR_NUMBER: ${{ inputs.pr-number }}
         EXTRA_ARGS: ${{ inputs.extra-args }}
         ACTION_PATH: ${{ github.action_path }}
+        GANDALF_PR_TITLE: ${{ inputs.comment-title }}
+        GANDALF_PR_ICON: ${{ inputs.comment-icon }}
       run: |
         set +e
         docker run --rm \
@@ -107,6 +136,8 @@ runs:
           -e GITHUB_REPOSITORY \
           -e PR_NUMBER \
           -e EXTRA_ARGS \
+          -e GANDALF_PR_TITLE \
+          -e GANDALF_PR_ICON \
           -v "$GITHUB_WORKSPACE:/src" \
           -v "$ACTION_PATH:/gandalf:ro" \
           -w /src \

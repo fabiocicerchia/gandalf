@@ -41,3 +41,8 @@ jobs:
       - uses: ./
         with:
           code-scanning: ${{ env.INGEST_CODE_SCANNING }}
+          # Post as a custom bot instead of github-actions[bot]. Undefined
+          # secrets resolve to empty, so this falls back gracefully until a
+          # "gandalf" GitHub App exists and APP_ID / APP_PRIVATE_KEY are set.
+          app-id: ${{ secrets.GANDALF_APP_ID }}
+          app-private-key: ${{ secrets.GANDALF_APP_PRIVATE_KEY }}

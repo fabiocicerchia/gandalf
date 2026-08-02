@@ -48,6 +48,8 @@ jobs:
 | `pr-number` | current PR | PR to post the review to. |
 | `base-sha` / `head-sha` | from the PR event | Commits whose diff is scanned. |
 | `tools-image` | `ghcr.io/fabiocicerchia/gandalf-tools:latest` | Scanner image to pull. Empty string = build from source instead. |
+| `app-id` / `app-private-key` | — | GitHub App credentials to post as your own bot (see below). |
+| `comment-title` / `comment-icon` | `gandalf` / `🧙` | Name + emoji shown in the comment text. |
 | `extra-args` | — | Extra gandalf flags, e.g. `--fail-on warn` to fail the check on findings. |
 | `github-token` | `${{ github.token }}` | Pulls the image and posts the review. |
 
@@ -91,6 +93,37 @@ Two things to know:
   what you want for per-PR feedback. For a persistent whole-repo baseline in the
   Security tab, add a job that runs gandalf whole-tree on push to your default
   branch and uploads that SARIF too.
+
+## Custom bot name + icon
+
+By default comments are authored by **`github-actions[bot]`** with the generic
+Actions avatar — GitHub binds the author to the token, and that name/icon can't be
+changed. To post as your own bot with a custom **name and logo**, use a GitHub
+App:
+
+1. Create a GitHub App (Settings → Developer settings → GitHub Apps → New). Give
+   it a **name** (this becomes `<name>[bot]`) and upload a **logo** (this is the
+   icon shown next to every comment).
+2. Permissions: **Pull requests: Read & write** (and **Contents: Read**). No
+   webhook needed.
+3. Generate a **private key**, then **Install** the App on your repo.
+4. Add two repository secrets: `APP_ID` (the App's numeric id) and
+   `APP_PRIVATE_KEY` (the private-key PEM).
+5. Pass them to the action:
+
+   ```yaml
+   - uses: fabiocicerchia/gandalf@main
+     with:
+       app-id: ${{ secrets.APP_ID }}
+       app-private-key: ${{ secrets.APP_PRIVATE_KEY }}
+   ```
+
+The action mints a short-lived installation token and posts the review as your
+App. Leave the inputs unset to keep `github-actions[bot]`.
+
+Separately, `comment-title` and `comment-icon` change the name + emoji shown
+*inside* the comment text (the `🧙 gandalf — …` header and per-finding prefix) —
+independent of the author account.
 
 ## Permissions, the token, and forks
 

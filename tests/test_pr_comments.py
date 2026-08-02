@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from gandalf import pr_comments, report
 from gandalf.base import GateOutcome, GateResult
 
@@ -69,10 +71,33 @@ def test_post_without_token_is_safe():
     assert ok is False and "skipped" in msg
 
 
+def test_brand_defaults_and_override():
+    v = report.aggregate(_RESULTS)
+    # default branding
+    p = pr_comments.review_payload(_RESULTS, v, ["a.py", "b.py"])
+    assert p["body"].splitlines()[0].startswith("## 🧙 gandalf — ")
+    assert "**gandalf**" in p["comments"][0]["body"]
+    # env override rebrands the header + per-finding prefix
+    saved = {k: os.environ.get(k) for k in ("GANDALF_PR_TITLE", "GANDALF_PR_ICON")}
+    try:
+        os.environ["GANDALF_PR_TITLE"] = "acme-bot"
+        os.environ["GANDALF_PR_ICON"] = "🚀"
+        p = pr_comments.review_payload(_RESULTS, v, ["a.py", "b.py"])
+        assert p["body"].splitlines()[0].startswith("## 🚀 acme-bot — ")
+        assert "**acme-bot**" in p["comments"][0]["body"]
+        assert "gandalf" not in p["body"].splitlines()[0]
+    finally:
+        for k, val in saved.items():
+            os.environ[k] = val if val is not None else ""
+            if val is None:
+                del os.environ[k]
+
+
 if __name__ == "__main__":
     test_same_line_findings_merge()
     test_unanchorable_and_passing_go_to_overflow()
     test_changed_set_excludes_off_diff_lines()
     test_review_payload_shape()
     test_post_without_token_is_safe()
+    test_brand_defaults_and_override()
     print("ok")
