@@ -1,0 +1,31 @@
+gandalf
+Copyright 2026 Fabio Cicerchia
+
+This product includes software developed by
+Fabio Cicerchia (https://github.com/fabiocicerchia).
+
+gandalf itself is stdlib-only and has no runtime dependencies. The bundled
+gate skills under skills/ are not all original work; the following come
+from third parties and are redistributed under their own licenses.
+
+MIT — attribution required, upstream LICENSE reproduced in each directory:
+
+  skills/grill-me                     https://github.com/mattpocock/skills
+  skills/grilling                     https://github.com/mattpocock/skills
+  skills/improve-codebase-architecture https://github.com/mattpocock/skills
+  skills/codebase-design              https://github.com/mattpocock/skills
+
+    Copyright (c) 2025 Matt Pocock. Licensed under the MIT License.
+    See skills/<name>/LICENSE for the full text.
+
+MIT-0 — no attribution required, credited here anyway:
+
+  skills/well-architected             https://github.com/aws-samples/sample-well-architected-skills-and-steering
+
+    Copyright Amazon.com, Inc. or its affiliates.
+    Licensed under the MIT No Attribution License (MIT-0). Adapted from
+    the upstream Well-Architected steering document.
+
+The remaining skills (pr-code-summarizer, quality-gate-review,
+ruthless-refactor, security-assessment) are original work covered by this
+repository's Apache-2.0 LICENSE.
