@@ -64,6 +64,26 @@ def _guard(ctx: GateContext, name: str):
     return target, None
 
 
+async def _atheris_installed(workdir: str) -> bool:
+    """Is the atheris package importable in the target workdir?
+
+    Split out so the log-parsing tests can stub it: they exercise how libFuzzer
+    output is interpreted, which has nothing to do with whether the fuzzer is
+    installed on the machine running the suite. Inline, the probe made those
+    tests pass only on a developer box that happened to have atheris.
+    """
+    check = await asyncio.create_subprocess_exec(
+        "python",
+        "-c",
+        "import atheris",
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+        cwd=workdir,
+    )
+    await check.communicate()
+    return check.returncode == 0
+
+
 class AtherisGate:
     """Coverage-guided fuzzing of Python parsers via atheris.
     Requires a harness at tests/fuzz/fuzz_adapters.py and the atheris package."""
@@ -80,16 +100,7 @@ class AtherisGate:
                 0.8,
                 "atheris: no fuzz harness at tests/fuzz/fuzz_adapters.py",
             )
-        check = await asyncio.create_subprocess_exec(
-            "python",
-            "-c",
-            "import atheris",
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
-            cwd=ctx.workdir,
-        )
-        await check.communicate()
-        if check.returncode != 0:
+        if not await _atheris_installed(ctx.workdir):
             return GateResult(
                 self.name,
                 GateOutcome.WARN,

@@ -346,6 +346,12 @@ def test_atheris_gate_ignores_its_own_artifact_prefix_flag(monkeypatch, tmp_path
         "Done 702348 runs in 61 second(s)\n"
     )
     ctx = GateContext(repo=".", workdir=str(tmp_path), changed_files=[], meta={})
+    # This test is about reading libFuzzer's output, not about whether atheris
+    # is installed on the machine running the suite — stub the probe so it does
+    # not pass locally and fail in CI.
+    monkeypatch.setattr(
+        dynamic, "_atheris_installed", lambda *a, **k: asyncio.sleep(0, result=True)
+    )
     monkeypatch.setattr(
         dynamic, "_run", lambda *a, **k: asyncio.sleep(0, result=(0, clean_log, ""))
     )
