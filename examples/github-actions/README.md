@@ -74,9 +74,10 @@ nothing is dropped.
 Re-runs update, they don't pile up. The summary is a single sticky comment that
 gets **edited in place** with a "Last updated …" stamp on every push, and inline
 comments are reconciled against the PR: unchanged ones are left alone (so reply
-threads and notifications survive), fixed ones are deleted, new ones posted. An
-inline comment someone has replied to is kept rather than deleted, so the
-conversation isn't lost.
+threads and notifications survive), obsolete ones are **resolved**, new ones
+posted. Nothing is ever deleted — a resolved thread collapses out of the way but
+keeps the record of what was flagged and anything said back, and you can reopen
+it. A finding that comes back after being resolved gets a fresh comment.
 
 ## Code scanning (Security tab)
 

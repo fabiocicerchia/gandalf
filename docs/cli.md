@@ -17,7 +17,7 @@
 | `--title` / `--body` | Request title / acceptance criteria for the `compliance` gate. Without them it skips. |
 | `--sarif [PATH]` | Also write a SARIF 2.1.0 report (default `reports/<stem>.sarif`) for GitHub code scanning / CI dashboards. |
 | `--pr-comments [PATH]` | Write GitHub PR review comments (per-finding, anchored to `file:line`) as JSON, ready to POST to the "Create a review" API (default `reports/<stem>-pr-comments.json`). Anchors land on lines the diff adds; everything else rolls up into the summary body. |
-| `--pr N` | Also post those comments to PR #N via the REST API (needs `GITHUB_TOKEN` and `--pr-repo` / `$GITHUB_REPOSITORY`). Idempotent: the summary is one sticky comment edited in place with a "Last updated" stamp, and inline comments are reconciled (unchanged kept, fixed deleted, new posted) instead of re-posted. |
+| `--pr N` | Also post those comments to PR #N via the REST API (needs `GITHUB_TOKEN` and `--pr-repo` / `$GITHUB_REPOSITORY`). Idempotent: the summary is one sticky comment edited in place with a "Last updated" stamp, and inline comments are reconciled (unchanged kept, obsolete resolved, new posted) instead of re-posted — nothing is ever deleted. |
 | `--baseline <path>` | Suppress findings listed in a baseline file (default `.gandalf-baseline.json` if present). |
 | `--write-baseline [PATH]` | Snapshot current findings to a baseline file (default `.gandalf-baseline.json`). |
 | `--config <path>` | Path to a `.gandalf.toml` (default: repo root). |

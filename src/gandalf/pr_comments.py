@@ -8,9 +8,11 @@ never adds — roll up into the summary body so nothing is dropped.
 `post()` is idempotent across re-runs: the summary lives in one sticky issue
 comment that gets edited (with a "last updated" stamp) instead of re-posted,
 and inline comments are diffed against what's already on the PR — unchanged
-ones are left alone, gone ones deleted, new ones added. Both are recognised by
-a hidden HTML marker in the body. Stdlib urllib only, no SDK. Without a token
-and repo the caller just writes the JSON for a later CI step to post.
+ones are left alone, obsolete ones resolved, new ones added. Nothing is ever
+deleted; a resolved thread keeps the record of what was flagged and whatever
+was said back. Both are recognised by a hidden HTML marker in the body. Stdlib
+urllib only, no SDK — though resolving a thread is GraphQL-only. Without a
+token and repo the caller just writes the JSON for a later CI step to post.
 """
 
 from __future__ import annotations
@@ -225,26 +227,100 @@ def _sticky_summary(api: str, pr: int, body: str, token: str, timeout: int) -> s
     return "created summary comment"
 
 
+# Review threads carry the resolve state, and only GraphQL exposes them — the
+# REST comment id is not the thread id `resolveReviewThread` wants.
+_THREADS = """
+query($owner:String!,$name:String!,$pr:Int!,$after:String){
+  repository(owner:$owner,name:$name){
+    pullRequest(number:$pr){
+      reviewThreads(first:100,after:$after){
+        pageInfo{hasNextPage endCursor}
+        nodes{id isResolved comments(first:1){nodes{path line body}}}
+      }
+    }
+  }
+}
+"""
+_RESOLVE = "mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{id}}}"
+
+
+def _graphql(query: str, variables: dict, token: str, timeout: int) -> dict:
+    _, raw = _api(
+        "POST",
+        "https://api.github.com/graphql",
+        token,
+        {"query": query, "variables": variables},
+        timeout,
+    )
+    body = json.loads(raw)
+    if body.get("errors"):  # GraphQL reports failures in a 200
+        raise RuntimeError(str(body["errors"])[:200])
+    return body["data"]
+
+
+def _our_threads(repo: str, pr: int, token: str, timeout: int) -> list[dict]:
+    """Our review threads as {id, resolved, key} — key matching what build()
+    produces, so a thread and a wanted comment compare directly."""
+    owner, _, name = repo.partition("/")
+    out: list[dict] = []
+    after = None
+    for _ in range(10):  # ponytail: 1000 threads is far past any real PR
+        page = _graphql(
+            _THREADS,
+            {"owner": owner, "name": name, "pr": pr, "after": after},
+            token,
+            timeout,
+        )["repository"]["pullRequest"]["reviewThreads"]
+        for node in page["nodes"]:
+            first = (node["comments"]["nodes"] or [None])[0]
+            if first and _ours(first["body"]):
+                out.append(
+                    {
+                        "id": node["id"],
+                        "resolved": node["isResolved"],
+                        "key": (first["path"], first["line"], first["body"]),
+                    }
+                )
+        if not page["pageInfo"]["hasNextPage"]:
+            break
+        after = page["pageInfo"]["endCursor"]
+    return out
+
+
+def _reconcile(
+    threads: list[dict], comments: list[dict]
+) -> tuple[list[str], list[dict]]:
+    """→ (thread ids to resolve, comments to post). An already-resolved thread
+    counts as absent, so a finding that comes back gets a fresh comment rather
+    than silently staying hidden."""
+    live = {t["key"]: t["id"] for t in threads if not t["resolved"]}
+    want = {(c["path"], c["line"], c["body"]): c for c in comments}
+    return (
+        [tid for key, tid in live.items() if key not in want],
+        [c for key, c in want.items() if key not in live],
+    )
+
+
 def _sync_inline(
-    api: str, pr: int, comments: list[dict], token: str, timeout: int
+    repo: str, pr: int, comments: list[dict], token: str, timeout: int
 ) -> str:
     """Reconcile inline comments with the PR: identical ones stay put (no reply
-    thread lost, no notification), stale ones go, new ones are posted."""
-    on_pr = _list_all(f"{api}/pulls/{pr}/comments", token, timeout)
-    replied_to = {c.get("in_reply_to_id") for c in on_pr}
-    live = {(c["path"], c.get("line"), c["body"]): c for c in on_pr if _ours(c["body"])}
-    want = {(c["path"], c["line"], c["body"]): c for c in comments}
-
-    dropped = 0
-    for key, c in live.items():
-        # Leave a thread someone answered — deleting it would take the reply too.
-        if key not in want and c["id"] not in replied_to:
-            _api("DELETE", f"{api}/pulls/comments/{c['id']}", token, timeout=timeout)
-            dropped += 1
-
-    new = [c for k, c in want.items() if k not in live]
+    thread lost, no notification), obsolete ones are *resolved* — never deleted,
+    so the trail of what was flagged and any human reply survive — and new ones
+    are posted."""
+    api = f"https://api.github.com/repos/{repo}"
+    stale, new = _reconcile(_our_threads(repo, pr, token, timeout), comments)
+    resolved, resolve_failed = 0, 0
+    for thread_id in stale:
+        try:
+            _graphql(_RESOLVE, {"id": thread_id}, token, timeout)
+            resolved += 1
+        except (urllib.error.HTTPError, urllib.error.URLError, OSError, RuntimeError):
+            # Cosmetic: a thread left open is noise, not a reason to fail a run.
+            resolve_failed += 1
+    stuck = f", {resolve_failed} could not be resolved" if resolve_failed else ""
     if not new:
-        return f"{len(want)} inline comment(s) already current, {dropped} removed"
+        return f"{len(comments)} inline comment(s) already current, {resolved} resolved{stuck}"
     _, raw = _api("GET", f"{api}/pulls/{pr}", token, timeout=timeout)
     head = json.loads(raw)["head"]["sha"]
     posted, failed = 0, 0
@@ -264,7 +340,7 @@ def _sync_inline(
         except (urllib.error.HTTPError, urllib.error.URLError, OSError):
             failed += 1
     tail = f", {failed} rejected by GitHub" if failed else ""
-    return f"posted {posted} inline comment(s), {dropped} removed{tail}"
+    return f"posted {posted} inline comment(s), {resolved} resolved{stuck}{tail}"
 
 
 def post(
@@ -279,7 +355,7 @@ def post(
         note = _sticky_summary(api, pr, payload["body"], token, timeout)
         return (
             True,
-            f"{note}; {_sync_inline(api, pr, payload['comments'], token, timeout)}",
+            f"{note}; {_sync_inline(repo, pr, payload['comments'], token, timeout)}",
         )
     except urllib.error.HTTPError as exc:
         return (

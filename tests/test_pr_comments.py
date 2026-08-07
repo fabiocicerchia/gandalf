@@ -131,6 +131,26 @@ def test_body_carries_marker_and_update_stamp():
     assert not pr_comments._ours("someone else's comment")
 
 
+def _thread(tid, key, resolved=False):
+    return {"id": tid, "resolved": resolved, "key": key}
+
+
+def test_reconcile_resolves_obsolete_and_keeps_current():
+    want = [
+        {"path": "a.py", "line": 12, "body": "still there"},
+        {"path": "a.py", "line": 20, "body": "brand new"},
+    ]
+    threads = [
+        _thread("T1", ("a.py", 12, "still there")),  # unchanged → left alone
+        _thread("T2", ("a.py", 99, "fixed")),  # gone → resolve, never delete
+        _thread("T3", ("a.py", 20, "brand new"), resolved=True),  # came back
+    ]
+    stale, new = pr_comments._reconcile(threads, want)
+    assert stale == ["T2"]
+    # T3 is resolved, so it counts as absent — the finding gets a fresh comment
+    assert [c["line"] for c in new] == [20]
+
+
 def test_post_without_token_is_safe():
     ok, msg = pr_comments.post("", 1, {"event": "COMMENT", "comments": []}, "")
     assert ok is False and "skipped" in msg
@@ -169,6 +189,7 @@ if __name__ == "__main__":
     test_overflow_is_collapsed()
     test_body_carries_marker_and_update_stamp()
     test_review_payload_shape()
+    test_reconcile_resolves_obsolete_and_keeps_current()
     test_post_without_token_is_safe()
     test_brand_defaults_and_override()
     print("ok")
