@@ -160,3 +160,9 @@ runs:
       with:
         sarif_file: reports/gandalf.sarif
         category: gandalf
+        # Staging the PR diff leaves HEAD at the merge-base (that's what
+        # `reset --soft` does), and upload-sarif otherwise reads the commit from
+        # the checkout - filing the alerts against a base-branch commit that is
+        # not in the PR, where nothing ever surfaces. Pin both to the event.
+        ref: ${{ github.ref }}
+        sha: ${{ github.sha }}

@@ -92,8 +92,14 @@ To turn it off for a repo without editing the file, set a repository **Variable*
 `GANDALF_INGEST_CODE_SCANNING` to `false` — the example wires that variable into
 the `code-scanning` input.
 
-Two things to know:
+Three things to know:
 
+- **The Security tab defaults to your default branch.** This workflow runs on
+  `pull_request`, so its alerts belong to the PR, not to `main` — they show on
+  the PR's *Files changed* tab and under its "Code scanning results" check. On
+  `…/security/code-scanning` you have to switch the **Branch** filter to the PR's
+  branch to see them; an empty list on `main` is expected until a run analyses
+  `main` itself.
 - **Private repos need GitHub Advanced Security** to accept SARIF uploads (code
   scanning is free on public repos). Without it the upload step fails; set
   `code-scanning: false`, or keep the workflow on public repos only.
