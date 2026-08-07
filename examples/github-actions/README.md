@@ -65,10 +65,18 @@ automatically, so it always works.
 
 It stages the PR's diff (`merge-base…head`) and scans with `--staged`, so gandalf
 sees exactly the PR's changed lines — which matters because GitHub rejects review
-comments placed off the diff. Findings on changed lines that carry a file+line
-(`ruff`, `bandit`, `semgrep`, `sqlfluff`, `squawk`, `kics`, …) become inline
-comments; the rest (`yamllint`, `mdl`, `shellcheck`, repo-level checks) roll up
-under "Other findings" in the review summary so nothing is dropped.
+comments placed off the diff. Findings on a line the diff **adds** that carry a
+file+line (`ruff`, `bandit`, `semgrep`, `sqlfluff`, `squawk`, `kics`, …) become
+inline comments; the rest (`yamllint`, `mdl`, `shellcheck`, repo-level checks, and
+anything on an unchanged line) roll up under "Other findings" in the summary so
+nothing is dropped.
+
+Re-runs update, they don't pile up. The summary is a single sticky comment that
+gets **edited in place** with a "Last updated …" stamp on every push, and inline
+comments are reconciled against the PR: unchanged ones are left alone (so reply
+threads and notifications survive), fixed ones are deleted, new ones posted. An
+inline comment someone has replied to is kept rather than deleted, so the
+conversation isn't lost.
 
 ## Code scanning (Security tab)
 

@@ -45,11 +45,19 @@ def test_same_line_findings_merge():
     assert ("b.py", 3) in at  # separate line, separate comment
 
 
-def test_unanchorable_and_passing_go_to_overflow():
+def test_message_only_location_still_anchors():
+    # mypy carries "a.py:8:" in its text, not in structured fields
+    comments, _ = pr_comments.build(_RESULTS, ["a.py", "b.py"])
+    assert ("a.py", 8) in {(c["path"], c["line"]) for c in comments}
+
+
+def test_passing_gate_contributes_nothing():
     _, overflow = pr_comments.build(_RESULTS, ["a.py", "b.py"])
-    # mypy finding has no structured line → overflow; passing gate contributes nothing
-    assert any("mypy" in o for o in overflow)
     assert not any("gitleaks" in o for o in overflow)
+    # no location anywhere → overflow, nothing dropped
+    prose = [GateResult("codeql", GateOutcome.WARN, 0.5, "x", [{"message": "vague"}])]
+    inline, over = pr_comments.build(prose, ["a.py"])
+    assert not inline and any("vague" in o for o in over)
 
 
 def test_changed_set_excludes_off_diff_lines():
@@ -64,6 +72,63 @@ def test_review_payload_shape():
     assert p["event"] == "COMMENT"  # never REQUEST_CHANGES (own-PR safe)
     assert isinstance(p["comments"], list) and p["comments"]
     assert "gandalf" in p["body"] and "67/100" in p["body"]
+
+
+_DIFF = """\
+diff --git a/a.py b/a.py
+--- a/a.py
++++ b/a.py
+@@ -9,3 +11,4 @@ def f():
+     ctx
+-    gone
++    added at 12
++    added at 13
+     ctx
+"""
+
+
+def test_added_lines_tracks_right_hand_numbering():
+    assert pr_comments.added_lines(_DIFF) == {"a.py": {12, 13}}
+    assert pr_comments.added_lines("") == {}  # unknown, not "nothing added"
+
+
+def test_diff_restricts_anchors_to_added_lines():
+    # line 12 is added → inline; line 3 of b.py is not in the diff at all
+    comments, overflow = pr_comments.build(_RESULTS, ["a.py", "b.py"], _DIFF)
+    assert [(c["path"], c["line"]) for c in comments] == [("a.py", 12)]
+    assert any("b.py" in o for o in overflow)
+
+
+def test_container_paths_are_rebased_repo_relative():
+    results = [
+        GateResult(
+            "ruff",
+            GateOutcome.FAIL,
+            0.3,
+            "ruff",
+            [{"path": "/src/a.py", "message": "long", "line": 12}],
+        )
+    ]
+    comments, _ = pr_comments.build(results, ["a.py"], _DIFF, workdir="/src")
+    assert [(c["path"], c["line"]) for c in comments] == [("a.py", 12)]
+
+
+def test_overflow_is_collapsed():
+    v = report.aggregate(_RESULTS)
+    body = pr_comments.review_payload(_RESULTS, v, ["a.py"], diff=_DIFF)["body"]
+    assert "<details>" in body and body.count("</details>") == 1
+    head, rest = body.split("</summary>", 1)
+    assert "Other findings — " in head
+    assert rest.startswith("\n\n- ")  # blank line, else GitHub won't render the list
+
+
+def test_body_carries_marker_and_update_stamp():
+    v = report.aggregate(_RESULTS)
+    p = pr_comments.review_payload(_RESULTS, v, ["a.py", "b.py"])
+    assert "Last updated " in p["body"] and "UTC" in p["body"]
+    assert pr_comments._ours(p["body"])  # a re-run finds and edits this one
+    assert pr_comments._ours(p["comments"][0]["body"])
+    assert not pr_comments._ours("someone else's comment")
 
 
 def test_post_without_token_is_safe():
@@ -95,8 +160,14 @@ def test_brand_defaults_and_override():
 
 if __name__ == "__main__":
     test_same_line_findings_merge()
-    test_unanchorable_and_passing_go_to_overflow()
+    test_message_only_location_still_anchors()
+    test_passing_gate_contributes_nothing()
     test_changed_set_excludes_off_diff_lines()
+    test_added_lines_tracks_right_hand_numbering()
+    test_diff_restricts_anchors_to_added_lines()
+    test_container_paths_are_rebased_repo_relative()
+    test_overflow_is_collapsed()
+    test_body_carries_marker_and_update_stamp()
     test_review_payload_shape()
     test_post_without_token_is_safe()
     test_brand_defaults_and_override()
