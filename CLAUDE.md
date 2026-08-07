@@ -16,7 +16,30 @@ entry point is `src/gandalf/__main__.py` (`python -m gandalf`).
 # run:   PYTHONPATH=src python -m gandalf [--staged | --commit <sha> | --path <dir>]
 # test:  pytest
 # lint:  pre-commit run --all-files
+make help    # Show this help
+make setup   # Install the pre-commit hook
+make lint    # Run all pre-commit checks on the whole tree
+make test    # Run the test suite
+make analyze # Run gandalf against this repo
+make install # Drop a `gandalf` wrapper in BINDIR (default ~/.local/bin)
+make tools   # Build the scanner-tools image (zero host installs)
 ```
+
+## Tooling
+
+Shared config — the GitHub workflows, `.pre-commit-config.yaml`,
+`.editorconfig`, `.hadolint.yaml`, `SECURITY.md` — comes from
+[repo-skeleton](https://github.com/fabiocicerchia/repo-skeleton). Edit it
+there, not here; a local edit is drift and the next sync overwrites it.
+`check-drift.sh` in that repo reports what has diverged.
+
+- `make setup` installs the pre-commit hook, and that is the whole of it.
+  Don't add a `.githooks/` directory: `core.hooksPath` replaces `.git/hooks/`
+  wholesale, so setting it silently stops every pre-commit hook from running.
+- Hooks are pinned by commit SHA with the tag in a trailing comment. A tag can
+  be moved, a SHA cannot.
+- CI runs this same `.pre-commit-config.yaml` through `pre-commit/action`, so
+  what passes locally is what gates the pull request.
 
 ## Conventions
 
