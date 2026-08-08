@@ -268,7 +268,9 @@ def _write_outputs(
         print(f"Badge: {badge_path}")
 
     if args.pr_comments is not None or args.pr is not None:
-        pr_payload = pr_comments.review_payload(results, verdict, sc.changed_files)
+        pr_payload = pr_comments.review_payload(
+            results, verdict, sc.changed_files, diff=sc.diff, workdir=sc.workdir
+        )
         pr_path = (
             Path(args.pr_comments)
             if args.pr_comments

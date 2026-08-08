@@ -65,10 +65,19 @@ automatically, so it always works.
 
 It stages the PR's diff (`merge-base…head`) and scans with `--staged`, so gandalf
 sees exactly the PR's changed lines — which matters because GitHub rejects review
-comments placed off the diff. Findings on changed lines that carry a file+line
-(`ruff`, `bandit`, `semgrep`, `sqlfluff`, `squawk`, `kics`, …) become inline
-comments; the rest (`yamllint`, `mdl`, `shellcheck`, repo-level checks) roll up
-under "Other findings" in the review summary so nothing is dropped.
+comments placed off the diff. Findings on a line the diff **adds** that carry a
+file+line (`ruff`, `bandit`, `semgrep`, `sqlfluff`, `squawk`, `kics`, …) become
+inline comments; the rest (`yamllint`, `mdl`, `shellcheck`, repo-level checks, and
+anything on an unchanged line) roll up under "Other findings" in the summary so
+nothing is dropped.
+
+Re-runs update, they don't pile up. The summary is a single sticky comment that
+gets **edited in place** with a "Last updated …" stamp on every push, and inline
+comments are reconciled against the PR: unchanged ones are left alone (so reply
+threads and notifications survive), obsolete ones are **resolved**, new ones
+posted. Nothing is ever deleted — a resolved thread collapses out of the way but
+keeps the record of what was flagged and anything said back, and you can reopen
+it. A finding that comes back after being resolved gets a fresh comment.
 
 ## Code scanning (Security tab)
 
@@ -84,8 +93,14 @@ To turn it off for a repo without editing the file, set a repository **Variable*
 `GANDALF_INGEST_CODE_SCANNING` to `false` — the example wires that variable into
 the `code-scanning` input.
 
-Two things to know:
+Three things to know:
 
+- **The Security tab defaults to your default branch.** This workflow runs on
+  `pull_request`, so its alerts belong to the PR, not to `main` — they show on
+  the PR's *Files changed* tab and under its "Code scanning results" check. On
+  `…/security/code-scanning` you have to switch the **Branch** filter to the PR's
+  branch to see them; an empty list on `main` is expected until a run analyses
+  `main` itself.
 - **Private repos need GitHub Advanced Security** to accept SARIF uploads (code
   scanning is free on public repos). Without it the upload step fails; set
   `code-scanning: false`, or keep the workflow on public repos only.
