@@ -1,8 +1,7 @@
 name: gandalf PR review
 description: >-
-  Review a pull request with gandalf's scanners in one container - inline
-  file:line comments, and (optionally) findings ingested into GitHub Code
-  Scanning. Nothing installed on the runner.
+  Review a pull request with gandalf's scanners - inline comments,
+  and findings ingested into GitHub Code Scanning.
 author: fabiocicerchia
 
 branding:
