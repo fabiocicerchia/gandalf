@@ -8,16 +8,8 @@ name: gandalf-pr-review
 on:
   pull_request:
 
-# Least privilege: read the code, post the review, and (when the toggle below is
-# on) write code-scanning results.
 permissions:
   contents: read
-  packages: read # pull the ghcr scanner image
-  pull-requests: write
-  security-events: write
-
-# Also ingest findings into GitHub Code Scanning (Security tab + PR annotations)?
-# Flip via a repo Variable named GANDALF_INGEST_CODE_SCANNING = "false"; default on.
 env:
   INGEST_CODE_SCANNING: ${{ vars.GANDALF_INGEST_CODE_SCANNING || 'true' }}
 
@@ -27,6 +19,16 @@ concurrency:
 
 jobs:
   review:
+    # Least privilege: read the code, post the review, and (when the toggle below is
+    # on) write code-scanning results.
+    permissions:
+      contents: read
+      packages: read # pull the ghcr scanner image
+      pull-requests: write
+      security-events: write
+
+    # Also ingest findings into GitHub Code Scanning (Security tab + PR annotations)?
+    # Flip via a repo Variable named GANDALF_INGEST_CODE_SCANNING = "false"; default on.
     name: gandalf inline review
     runs-on: ubuntu-latest
     steps:
