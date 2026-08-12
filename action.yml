@@ -155,7 +155,7 @@ runs:
     # annotations. Skipped on forks (read-only token) and when the toggle is off.
     - name: Ingest into code scanning
       if: inputs.code-scanning == 'true'
-      uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v3
+      uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v3
       with:
         sarif_file: reports/gandalf.sarif
         category: gandalf
