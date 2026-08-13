@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2](https://github.com/fabiocicerchia/gandalf/compare/v0.2.1...v0.2.2) (2026-08-13)
+
+
+### Bug Fixes
+
+* restore the merge commit before uploading SARIF ([#27](https://github.com/fabiocicerchia/gandalf/issues/27)) ([afe5167](https://github.com/fabiocicerchia/gandalf/commit/afe51678ad51da42de086d854f601576b5e17874))
+* security and code-quality findings ([#26](https://github.com/fabiocicerchia/gandalf/issues/26)) ([7b57a9d](https://github.com/fabiocicerchia/gandalf/commit/7b57a9d71c4e9cb42d6c5e07df4eee4136d7de29))
+
 ## [0.2.1](https://github.com/fabiocicerchia/gandalf/compare/v0.2.0...v0.2.1) (2026-08-08)
 
 
