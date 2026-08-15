@@ -4,6 +4,8 @@ Run: pytest gandalf/test_run.py"""
 from __future__ import annotations
 
 import asyncio
+import json
+import subprocess
 
 from gandalf import plugins
 from gandalf.__main__ import (
@@ -11,6 +13,7 @@ from gandalf.__main__ import (
     _resolve_concurrency,
     _run_fixers,
     _run_gates,
+    main,
 )
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.config import Config
@@ -145,3 +148,64 @@ if __name__ == "__main__":
     test_per_gate_timeout_visible_in_run()
     assert _resolve_concurrency(5, Config()) == 5
     print("ok")
+
+
+# --- report destinations: --out-dir / --no-trend --------------------------------
+# End-to-end through main() in a throwaway git repo, with `only = ["build"]` so
+# the run stays stdlib-fast (the build gate just compiles the Python in scope).
+
+
+def _mkrepo(tmp_path):
+    repo = tmp_path / "repo"
+    (repo / "src").mkdir(parents=True)
+    (repo / "src" / "ok.py").write_text("VALUE = 1\n")
+    (repo / ".gandalf.toml").write_text('[gandalf]\nonly = ["build"]\n')
+    git = [
+        "git",
+        "-c",
+        "user.email=t@example.com",
+        "-c",
+        "user.name=test",
+        "-c",
+        "commit.gpgsign=false",
+    ]
+    subprocess.run([*git, "init", "-q", "."], cwd=repo, check=True)
+    subprocess.run([*git, "add", "-A"], cwd=repo, check=True)
+    subprocess.run([*git, "commit", "-qm", "init"], cwd=repo, check=True)
+    return repo
+
+
+def test_out_dir_and_no_trend_keep_the_worktree_clean(tmp_path, monkeypatch, capsys):
+    repo = _mkrepo(tmp_path)
+    monkeypatch.chdir(repo)
+    out = tmp_path / "artifacts" / "nested"  # missing parents must be created
+
+    assert main(["--no-llm", "--no-trend", "--out-dir", str(out)]) == 0
+
+    assert len(list(out.glob("gandalf-*.json"))) == 1
+    assert len(list(out.glob("gandalf-*.html"))) == 1
+    assert not (repo / "reports").exists()
+    assert not (repo / ".gandalf-trend.jsonl").exists()
+    assert str(out) in capsys.readouterr().out
+
+
+def test_reports_default_to_the_repo_and_record_a_trend(tmp_path, monkeypatch):
+    repo = _mkrepo(tmp_path)
+    monkeypatch.chdir(repo)
+
+    assert main(["--no-llm"]) == 0
+
+    assert len(list((repo / "reports").glob("gandalf-*.json"))) == 1
+    trend = json.loads((repo / ".gandalf-trend.jsonl").read_text().splitlines()[0])
+    assert trend["score"] == 100
+
+
+def test_payload_gates_carry_their_category(tmp_path, monkeypatch):
+    repo = _mkrepo(tmp_path)
+    monkeypatch.chdir(repo)
+    out = tmp_path / "artifacts"
+
+    assert main(["--no-llm", "--no-trend", "--no-html", "--out-dir", str(out)]) == 0
+
+    payload = json.loads(next(out.glob("gandalf-*.json")).read_text())
+    assert [g["category"] for g in payload["gates"]] == ["Build & tests"]

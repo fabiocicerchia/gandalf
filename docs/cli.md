@@ -11,6 +11,8 @@
 | `--debug` | Verbose stderr log: per-gate timing and every external command run (also via `GANDALF_DEBUG=1`). Steps the progress bar aside. Gate durations are always recorded under `duration` in the JSON. |
 | `--fix` | Apply gate autofixes (`ruff --fix`, `ruff format`, `eslint --fix`) to the working tree before scoring, so the scorecard reflects the fixed state. Ignored for `--commit` (throwaway worktree). |
 | `--no-html` | Skip the HTML report (JSON is always written). |
+| `--out-dir <dir>` | Write reports to `<dir>` instead of `<repo>/reports` (created if missing). Lets an editor integration or CI job keep its artifacts out of the working tree. |
+| `--no-trend` | Don't append this run to `.gandalf-trend.jsonl`. The score delta is still read from an existing log — useful when a tool re-runs gandalf often and shouldn't pollute the history. |
 | `--json` | Also dump the JSON payload to stdout. |
 | `--target <url>` | Live URL for the dynamic gates (nikto/sqlmap/dalfox). Without it they skip. |
 | `--allow-remote` | Permit dynamic scans against a non-localhost `--target`. |

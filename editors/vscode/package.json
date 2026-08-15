@@ -1,0 +1,383 @@
+{
+  "name": "gandalf-quality-gates",
+  "displayName": "Gandalf \u2014 Quality Gates",
+  "description": "Run Gandalf's quality gates while you code: inline diagnostics, a findings panel, and the full HTML scorecard inside VS Code.",
+  "version": "0.1.0",
+  "publisher": "fabiocicerchia",
+  "license": "Apache-2.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Testing",
+    "Other"
+  ],
+  "keywords": [
+    "gandalf",
+    "quality gate",
+    "static analysis",
+    "security",
+    "sarif"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fabiocicerchia/gandalf.git",
+    "directory": "editors/vscode"
+  },
+  "homepage": "https://github.com/fabiocicerchia/gandalf/tree/main/editors/vscode",
+  "bugs": {
+    "url": "https://github.com/fabiocicerchia/gandalf/issues"
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "gandalf",
+          "title": "Gandalf",
+          "icon": "media/gandalf.svg"
+        }
+      ]
+    },
+    "views": {
+      "gandalf": [
+        {
+          "id": "gandalf.findings",
+          "name": "Findings",
+          "contextualTitle": "Gandalf",
+          "icon": "media/gandalf.svg"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "gandalf.scanWorkspace",
+        "title": "Scan Workspace",
+        "category": "Gandalf",
+        "icon": "$(search)"
+      },
+      {
+        "command": "gandalf.scanCurrentFile",
+        "title": "Scan Current File",
+        "category": "Gandalf",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "gandalf.scanStaged",
+        "title": "Scan Staged Changes",
+        "category": "Gandalf",
+        "icon": "$(git-commit)"
+      },
+      {
+        "command": "gandalf.showReport",
+        "title": "Open Report",
+        "category": "Gandalf",
+        "icon": "$(book)"
+      },
+      {
+        "command": "gandalf.showReportWithLlm",
+        "title": "Open Report (regenerate with LLM summary)",
+        "category": "Gandalf"
+      },
+      {
+        "command": "gandalf.applyFixes",
+        "title": "Apply Gate Autofixes",
+        "category": "Gandalf"
+      },
+      {
+        "command": "gandalf.writeBaseline",
+        "title": "Write Baseline (accept current findings)",
+        "category": "Gandalf"
+      },
+      {
+        "command": "gandalf.checkEnvironment",
+        "title": "Check Environment (Doctor)",
+        "category": "Gandalf",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "gandalf.buildToolsImage",
+        "title": "Build Scanner Tools Image",
+        "category": "Gandalf"
+      },
+      {
+        "command": "gandalf.cancel",
+        "title": "Cancel Running Scan",
+        "category": "Gandalf"
+      },
+      {
+        "command": "gandalf.clearResults",
+        "title": "Clear Results",
+        "category": "Gandalf",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "gandalf.showLog",
+        "title": "Show Log",
+        "category": "Gandalf",
+        "icon": "$(output)"
+      },
+      {
+        "command": "gandalf.filterCurrentFile",
+        "title": "Show Current File Only",
+        "category": "Gandalf",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "gandalf.filterProject",
+        "title": "Show Whole Project",
+        "category": "Gandalf",
+        "icon": "$(filter-filled)"
+      },
+      {
+        "command": "gandalf.filterSeverity",
+        "title": "Filter by Severity",
+        "category": "Gandalf",
+        "icon": "$(list-filter)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "gandalf.filterCurrentFile",
+          "when": "view == gandalf.findings && gandalf.scope == project",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gandalf.filterProject",
+          "when": "view == gandalf.findings && gandalf.scope == file",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gandalf.filterSeverity",
+          "when": "view == gandalf.findings",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gandalf.scanWorkspace",
+          "when": "view == gandalf.findings",
+          "group": "navigation@3"
+        },
+        {
+          "command": "gandalf.showReport",
+          "when": "view == gandalf.findings",
+          "group": "navigation@4"
+        },
+        {
+          "command": "gandalf.scanCurrentFile",
+          "when": "view == gandalf.findings",
+          "group": "1_scan@1"
+        },
+        {
+          "command": "gandalf.scanStaged",
+          "when": "view == gandalf.findings",
+          "group": "1_scan@2"
+        },
+        {
+          "command": "gandalf.checkEnvironment",
+          "when": "view == gandalf.findings",
+          "group": "2_env@1"
+        },
+        {
+          "command": "gandalf.clearResults",
+          "when": "view == gandalf.findings",
+          "group": "3_misc@1"
+        },
+        {
+          "command": "gandalf.showLog",
+          "when": "view == gandalf.findings",
+          "group": "3_misc@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "gandalf.filterCurrentFile",
+          "when": "false"
+        },
+        {
+          "command": "gandalf.filterProject",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Gandalf",
+      "properties": {
+        "gandalf.executable": {
+          "type": "string",
+          "default": "",
+          "scope": "machine-overridable",
+          "markdownDescription": "Path to the `gandalf` wrapper (see `make install`). Empty means auto-detect: `#gandalf.checkoutPath#` \u2192 a gandalf checkout in the workspace \u2192 `gandalf` on `PATH` \u2192 `~/.local/share/gandalf`."
+        },
+        "gandalf.checkoutPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine-overridable",
+          "markdownDescription": "Path to a gandalf source checkout (the directory containing `src/gandalf`). Used with `#gandalf.pythonPath#` as `python -m gandalf`."
+        },
+        "gandalf.pythonPath": {
+          "type": "string",
+          "default": "python3",
+          "scope": "machine-overridable",
+          "description": "Python interpreter used when running gandalf from a source checkout."
+        },
+        "gandalf.configPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to a `.gandalf.toml` passed as `--config`. Point this at an editor-specific config to run a narrower gate set while you type (gate `only`/`skip` selection lives in the config file, not on the CLI)."
+        },
+        "gandalf.extraArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Extra command-line arguments appended to every gandalf invocation."
+        },
+        "gandalf.scan.trigger": {
+          "type": "string",
+          "enum": [
+            "onSave",
+            "onSaveAndInterval",
+            "interval",
+            "manual"
+          ],
+          "enumDescriptions": [
+            "Scan after a file is saved (debounced).",
+            "Scan on save, plus a periodic full-workspace sweep.",
+            "Only sweep the workspace periodically.",
+            "Only scan when a Gandalf command is invoked."
+          ],
+          "default": "onSave",
+          "description": "When scans run. Gandalf never scans on keystroke \u2014 gates spawn real tools."
+        },
+        "gandalf.scan.scopeOnSave": {
+          "type": "string",
+          "enum": [
+            "file",
+            "staged",
+            "workspace"
+          ],
+          "default": "file",
+          "markdownDescription": "What a save-triggered scan covers. `file` scopes gandalf to the saved file (`--path`) and is the only cheap option; `workspace` re-runs every gate over the whole tree."
+        },
+        "gandalf.scan.debounceMs": {
+          "type": "number",
+          "default": 1500,
+          "minimum": 250,
+          "description": "Quiet period after the triggering event before a scan starts. Later events restart the timer."
+        },
+        "gandalf.scan.idleMs": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Additionally require this many milliseconds without edits before starting a scan. 0 disables the idle check."
+        },
+        "gandalf.scan.intervalMinutes": {
+          "type": "number",
+          "default": 15,
+          "minimum": 5,
+          "description": "Period of the full-workspace sweep for the interval triggers."
+        },
+        "gandalf.scan.onStartup": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run one full-workspace scan when the window opens, so the panel is populated."
+        },
+        "gandalf.scan.timeoutSeconds": {
+          "type": "number",
+          "default": 600,
+          "minimum": 10,
+          "description": "Kill a gandalf run that exceeds this wall-clock budget."
+        },
+        "gandalf.scan.concurrency": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "markdownDescription": "Max gates running at once (`--concurrency`). `0` leaves gandalf's default (CPU count). Lower it to keep the machine responsive \u2014 gates spawn `docker run`."
+        },
+        "gandalf.scan.useCache": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Pass `--cache` on workspace/staged scans so unchanged gates are reused. File-scoped scans skip the cache on purpose \u2014 they would overwrite the workspace entries with a one-file hash."
+        },
+        "gandalf.scan.cachePath": {
+          "type": "string",
+          "default": ".gandalf-cache.json",
+          "markdownDescription": "Cache file, relative to the repository root. Add it to `.gitignore`, or use something like `.git/gandalf-cache.json` to keep it out of the tree entirely."
+        },
+        "gandalf.scan.llm": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Include the LLM summary in background scans (`--no-llm` is passed when off). The report can always be regenerated with the summary on demand."
+        },
+        "gandalf.diagnostics.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Publish findings as editor diagnostics (squiggles + hover)."
+        },
+        "gandalf.diagnostics.minSeverity": {
+          "type": "string",
+          "enum": [
+            "error",
+            "warning",
+            "info"
+          ],
+          "default": "info",
+          "description": "Lowest finding severity published as a diagnostic."
+        },
+        "gandalf.diagnostics.maxPerFile": {
+          "type": "number",
+          "default": 500,
+          "minimum": 1,
+          "description": "Cap on diagnostics published per file."
+        },
+        "gandalf.reports.directory": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Where scan artifacts are written (`--out-dir`). Empty means the extension's own storage, so the repository's `reports/` directory is left alone."
+        },
+        "gandalf.reports.keep": {
+          "type": "number",
+          "default": 8,
+          "minimum": 1,
+          "description": "How many of the extension's own report files to keep before pruning the oldest. Only files this extension wrote are ever removed."
+        },
+        "gandalf.reports.recordTrend": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Append editor scans to `.gandalf-trend.jsonl`. Off by default: a scan on every save would swamp the commit-scored history."
+        },
+        "gandalf.tools.image": {
+          "type": "string",
+          "default": "gandalf-tools",
+          "markdownDescription": "Docker image that supplies scanner tools that are not on `PATH` (`GANDALF_TOOLS_IMAGE`)."
+        },
+        "gandalf.statusBar.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the verdict in the status bar."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "check": "tsc --noEmit",
+    "test": "node esbuild.mjs --tests && node --test \"out/**/*.test.js\"",
+    "vscode:prepublish": "npm run check && npm test && node esbuild.mjs --production",
+    "package": "vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.0"
+  }
+}

@@ -226,6 +226,7 @@ def _build_payload(
         "gates": [
             {
                 **dataclasses.asdict(r),
+                "category": report.category_of(r),
                 "blocking": getattr(r, "_blocking", False),
                 "duration": getattr(r, "_duration", None),
             }
@@ -304,6 +305,18 @@ def _build_parser() -> argparse.ArgumentParser:
         "combines with --staged/--commit to narrow the changed set",
     )
     ap.add_argument("--no-html", action="store_true", help="skip the HTML report")
+    ap.add_argument(
+        "--out-dir",
+        metavar="DIR",
+        help="write reports here instead of <repo>/reports (created if missing); "
+        "lets an editor/CI keep its artifacts out of the working tree",
+    )
+    ap.add_argument(
+        "--no-trend",
+        action="store_true",
+        help="don't append this run to .gandalf-trend.jsonl (the score delta is "
+        "still read from it)",
+    )
     ap.add_argument(
         "--sarif",
         nargs="?",
@@ -562,7 +575,7 @@ def main(argv: list[str] | None = None) -> int:
         score_delta = gtrend.previous_score(trend_path, commit_short)
         if score_delta is not None:
             score_delta = verdict.score - score_delta
-        if commit_short:
+        if commit_short and not args.no_trend:
             gtrend.record(trend_path, commit_short, verdict.score, generated_at)
         meta_line = {
             "generated_at": generated_at,
@@ -585,8 +598,10 @@ def main(argv: list[str] | None = None) -> int:
             reason,
         )
 
-        out_dir = Path(scope.repo_root()) / "reports"
-        out_dir.mkdir(exist_ok=True)
+        out_dir = (
+            Path(args.out_dir) if args.out_dir else Path(scope.repo_root()) / "reports"
+        )
+        out_dir.mkdir(parents=True, exist_ok=True)
         ts = datetime.now(tz=timezone.utc).strftime("%Y%m%d-%H%M%S")
         stem = f"gandalf-{sc.label.replace('/', '_')}-{ts}"
         payload = _build_payload(

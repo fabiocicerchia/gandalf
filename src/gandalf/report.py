@@ -125,7 +125,10 @@ _GROUP_ORDER = (
 )
 
 
-def _category_of(r: GateResult) -> str:
+def category_of(r: GateResult) -> str:
+    """The concern a gate reports on — the report's grouping, and part of the
+    JSON payload so downstream consumers (editors, dashboards) group the same
+    way without re-deriving the table."""
     return getattr(r, "_category", "") or _CATEGORY.get(r.name, "Other")
 
 
@@ -259,7 +262,7 @@ def render_terminal(
     width = max((len(r.name) for r in results), default=4)
     for group in _GROUP_ORDER:
         members = sorted(
-            (r for r in results if _category_of(r) == group), key=lambda r: r.name
+            (r for r in results if category_of(r) == group), key=lambda r: r.name
         )
         if not members:
             continue
@@ -576,7 +579,7 @@ def render_html(
             if getattr(r, "_blocking", False)
             else ""
         )
-        category = html.escape(_category_of(r))
+        category = html.escape(category_of(r))
         return (
             f'<tr class="{cls}" data-gate="{html.escape(r.name)}" '
             f'data-rag="{sev[r.outcome]}" data-cat="{category}">'
@@ -594,7 +597,7 @@ def render_html(
     # Group results by category
     categorized_results: dict[str, list[GateResult]] = defaultdict(list)
     for r in results:
-        categorized_results[_category_of(r)].append(r)
+        categorized_results[category_of(r)].append(r)
 
     # Generate score cards
     for group in _GROUP_ORDER:
@@ -619,7 +622,7 @@ def render_html(
     data_rows = [
         row(r)
         for r in sorted(
-            results, key=lambda r: (cat_index.get(_category_of(r), 99), r.name)
+            results, key=lambda r: (cat_index.get(category_of(r), 99), r.name)
         )
     ]
     esc = html.escape(label)
