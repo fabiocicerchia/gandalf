@@ -171,9 +171,19 @@ runs:
       with:
         sarif_file: reports/gandalf.sarif
         category: gandalf
-        # Staging the PR diff leaves HEAD at the merge-base (that's what
-        # `reset --soft` does), and upload-sarif otherwise reads the commit from
-        # the checkout - filing the alerts against a base-branch commit that is
-        # not in the PR, where nothing ever surfaces. Pin both to the event.
-        ref: ${{ github.ref }}
-        sha: ${{ github.sha }}
+        # Both pinned to the PR HEAD, and they have to agree.
+        #
+        # upload-sarif derives the SARIF's provenance from the checkout, and
+        # this Action checks out the head commit to stage the diff (see above).
+        # Passing github.ref there means refs/pull/N/merge, so the upload
+        # declares a merge ref while carrying a non-merge commit, and the API
+        # refuses it: "ref is a pull request merge but commit_oid is not a
+        # merge commit". That failed every review this Action posted, on every
+        # repo, while the review itself had already succeeded.
+        #
+        # refs/pull/N/head is the matching ref for the commit that is actually
+        # checked out, and it is also where the alerts are most useful: against
+        # the commit the author pushed rather than an ephemeral merge that is
+        # recreated whenever the base moves.
+        ref: refs/pull/${{ github.event.pull_request.number }}/head
+        sha: ${{ inputs.head-sha }}
