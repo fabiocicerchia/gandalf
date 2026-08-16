@@ -45,6 +45,10 @@ def finding_rule(f: dict) -> str:
         f.get("rule_id")
         or f.get("check_id")
         or f.get("RuleID")
+        # bandit before the generic keys: its `code` is the offending source
+        # snippet, not an identifier, so `code` would win and every bandit
+        # finding would get a multi-line rule id.
+        or f.get("test_id")
         or f.get("code")
         or f.get("check_name")
         or f.get("QueryName")
