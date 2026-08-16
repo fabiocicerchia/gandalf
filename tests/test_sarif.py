@@ -59,7 +59,8 @@ def test_shape_and_serializable():
 def test_rules_deduped_and_sorted():
     ids = [r["id"] for r in _doc()["runs"][0]["tool"]["driver"]["rules"]]
     assert ids == sorted(ids)
-    assert "ruff/E501" in ids and "ruff/F401" in ids and "go_build" in ids
+    # go_build is absent for the reason in test_results_without_a_location_are_left_out.
+    assert "ruff/E501" in ids and "ruff/F401" in ids
 
 
 def test_levels_and_locations():
@@ -74,8 +75,12 @@ def test_levels_and_locations():
     assert e501["level"] == "error"
     loc = e501["locations"][0]["physicalLocation"]
     assert loc["artifactLocation"]["uri"] == "a.py" and loc["region"]["startLine"] == 12
-    # a failing gate with no findings still surfaces as a gate-level result
-    assert by_rule["go_build"]["level"] == "error"
+    # A failing gate with no findings does NOT surface here. It has no file to
+    # attach an alert to, and Code Scanning rejects the entire upload — every
+    # alert in the run — over a single locationless result:
+    #   locationFromSarifResult: expected at least one location
+    # It is still reported in the console output and the PR review body.
+    assert "go_build" not in by_rule
 
 
 def test_passing_gate_emits_nothing():
@@ -83,12 +88,23 @@ def test_passing_gate_emits_nothing():
     assert "gitleaks" not in ids
 
 
-def test_warn_without_findings_dropped():
-    # A location-less WARN (skipped/unavailable gate) is noise for code scanning.
-    ids = {r["ruleId"] for r in _doc()["runs"][0]["results"]}
-    assert "codespell" not in ids
-    # ...but a hard FAIL with no findings still surfaces (see go_build below).
-    assert "go_build" in ids
+def test_results_without_a_location_are_left_out():
+    # Nothing locationless may reach the file: one such result makes GitHub
+    # reject the upload wholesale, which is how a single repo-level finding
+    # used to lose every alert in the run.
+    doc = _doc()
+    for result in doc["runs"][0]["results"]:
+        assert result.get("locations"), result["ruleId"]
+    ids = {r["ruleId"] for r in doc["runs"][0]["results"]}
+    assert "codespell" not in ids  # WARN, no findings
+    assert "go_build" not in ids  # FAIL, no findings
+
+
+def test_the_count_of_dropped_findings_is_recorded():
+    # Dropped, not disappeared: the number is in the file so "why is this not
+    # an alert?" has an answer without reading the source.
+    run = _doc()["runs"][0]
+    assert run["properties"]["gandalf/findingsWithoutLocation"] >= 1
 
 
 def test_security_severity_on_rules():
@@ -140,7 +156,8 @@ if __name__ == "__main__":
     test_rules_deduped_and_sorted()
     test_levels_and_locations()
     test_passing_gate_emits_nothing()
-    test_warn_without_findings_dropped()
+    test_results_without_a_location_are_left_out()
+    test_the_count_of_dropped_findings_is_recorded()
     test_security_severity_on_rules()
     test_partial_fingerprints_present_and_stable()
     test_automation_details_category()
