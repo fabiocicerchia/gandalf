@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4](https://github.com/fabiocicerchia/gandalf/compare/v0.2.3...v0.2.4) (2026-08-16)
+
+
+### Bug Fixes
+
+* bandit findings produced a 400-character SARIF rule id ([#35](https://github.com/fabiocicerchia/gandalf/issues/35)) ([a4560cf](https://github.com/fabiocicerchia/gandalf/commit/a4560cf91d4034746e9988f8347e804b23693f77))
+
 ## [0.2.3](https://github.com/fabiocicerchia/gandalf/compare/v0.2.2...v0.2.3) (2026-08-16)
 
 
