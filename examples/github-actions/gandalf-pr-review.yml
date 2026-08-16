@@ -21,6 +21,11 @@ on:
 
 # read the code, post the review, and upload code-scanning results.
 permissions:
+  # Private repositories only: upload-sarif reads this run's metadata to
+  # attach the analysis, and without it the ingest step fails with
+  # "Resource not accessible by integration". Harmless on public repos,
+  # where the default token can already read it.
+  actions: read
   contents: read
   packages: read # pull the ghcr scanner image
   pull-requests: write
