@@ -163,3 +163,50 @@ if __name__ == "__main__":
     test_automation_details_category()
     test_paths_made_repo_relative()
     print("ok")
+
+
+def test_bandit_findings_are_identified_by_test_id():
+    # bandit's `code` is the offending source snippet. Reading it as the rule
+    # id produced a multi-line, 400-character id, and Code Scanning rejects the
+    # whole upload over one id past 255 characters.
+    res = [
+        GateResult(
+            "bandit",
+            GateOutcome.WARN,
+            0.8,
+            "1 issue",
+            [
+                {
+                    "filename": "a.py",
+                    "line_number": 27,
+                    "issue_text": "partial path",
+                    "test_id": "B607",
+                    "code": "27 p = subprocess.run(\n28     ['kubectl'],\n",
+                }
+            ],
+        )
+    ]
+    ids = [
+        r["id"] for r in sarif.to_sarif(res, {})["runs"][0]["tool"]["driver"]["rules"]
+    ]
+    assert ids == ["bandit/B607"]
+
+
+def test_over_long_rule_ids_are_truncated_and_stay_distinct():
+    res = [
+        GateResult(
+            "tool",
+            GateOutcome.WARN,
+            0.5,
+            "2",
+            [
+                {"path": "a.py", "line": 1, "message": "m", "rule_id": "x" * 400},
+                {"path": "b.py", "line": 2, "message": "m", "rule_id": "x" * 400 + "y"},
+            ],
+        )
+    ]
+    ids = [
+        r["id"] for r in sarif.to_sarif(res, {})["runs"][0]["tool"]["driver"]["rules"]
+    ]
+    assert len(ids) == 2, "two distinct ids must not collapse into one rule"
+    assert all(len(i) <= 255 for i in ids)

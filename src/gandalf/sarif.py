@@ -12,9 +12,16 @@ carries `automationDetails.id = "gandalf"` so its alerts stay a distinct set.
 
 from __future__ import annotations
 
+import hashlib
+
 from .base import GateOutcome, GateResult
 from .report import fmt_finding
 from .suppress import finding_path, finding_rule, fingerprint
+
+# Code Scanning rejects an upload whose rule id exceeds this, and it rejects
+# the whole file — one tool putting a message where an id belongs takes the
+# entire run down with it.
+_MAX_RULE_ID = 255
 
 SCHEMA = "https://json.schemastore.org/sarif-2.1.0.json"
 INFO_URI = "https://github.com/fabiocicerchia/local-ai-lab"
@@ -117,6 +124,19 @@ def _bump_severity(rule: dict, score: str) -> None:
         props["security-severity"] = score
 
 
+def _rule_id(gate: str, rule_name: str) -> str:
+    """`gate/rule`, kept inside the length Code Scanning accepts.
+
+    Truncated ids keep a digest of the original so two long ids that share a
+    prefix stay two rules rather than collapsing into one.
+    """
+    rule_id = f"{gate}/{rule_name}" if rule_name and rule_name != gate else gate
+    if len(rule_id) <= _MAX_RULE_ID:
+        return rule_id
+    digest = hashlib.sha256(rule_id.encode()).hexdigest()[:12]
+    return f"{rule_id[: _MAX_RULE_ID - len(digest) - 1]}~{digest}"
+
+
 def to_sarif(results: list[GateResult], meta: dict | None = None) -> dict:
     meta = meta or {}
     root = meta.get("workdir", "")
@@ -139,9 +159,7 @@ def to_sarif(results: list[GateResult], meta: dict | None = None) -> dict:
             continue
         for f in r.findings:
             rule_name = finding_rule(f) or r.name
-            rule_id = (
-                f"{r.name}/{rule_name}" if rule_name and rule_name != r.name else r.name
-            )
+            rule_id = _rule_id(r.name, rule_name)
             rule = rules.setdefault(rule_id, {"id": rule_id, "name": rule_name})
             sev = _finding_severity(f)
             level = _SEV_LEVEL.get(sev, gate_level)
