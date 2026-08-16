@@ -46,7 +46,13 @@ jobs:
 
       - uses: fabiocicerchia/gandalf@main # pin me: a release tag or commit SHA
         with:
-          code-scanning: ${{ vars.GANDALF_INGEST_CODE_SCANNING || 'true' }}
+          # Code scanning needs GitHub Advanced Security on a private repo.
+          # Without it the ingest fails and takes the whole review down with
+          # it, after the inline comments — the part that needs none of this —
+          # have already been posted. The repo variable still overrides.
+          code-scanning: >-
+            ${{ vars.GANDALF_INGEST_CODE_SCANNING
+                || (github.event.repository.private && 'false' || 'true') }}
           # Optional: post comments as your own bot (name + logo) instead of
           # github-actions[bot]. Create a GitHub App, add its APP_ID +
           # APP_PRIVATE_KEY secrets, and uncomment - see the README.
