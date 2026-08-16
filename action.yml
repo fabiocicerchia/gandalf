@@ -151,17 +151,17 @@ runs:
         # fail the job. Pass extra-args "--fail-on warn" (and drop this) to gate.
         exit 0
 
-    # `reset --soft` above left HEAD at the merge-base. Pinning ref/sha below is
-    # not enough on its own: when ref ends in /merge, upload-sarif re-checks the
-    # *checked-out* commit (`git rev-parse HEAD^2`) and rejects the upload if it
-    # is not a merge commit — "ref is a pull request merge but commit_oid is not
-    # a merge commit". The merge-base has one parent, so every upload failed
-    # there. The scan is finished and the SARIF is already on disk by now, so
-    # putting the checkout back costs nothing.
-    - name: Restore the merge commit before uploading
+    # `reset --soft` above left HEAD at the merge-base, which is neither the
+    # commit the SARIF describes nor the one declared below. upload-sarif reads
+    # the checkout to fill in the run's provenance, so all three have to name
+    # the same commit: the PR head. The scan is finished and the SARIF is
+    # already on disk by now, so putting the checkout back costs nothing.
+    - name: Restore the head commit before uploading
       if: inputs.code-scanning == 'true'
       shell: bash
-      run: git checkout -q "$GITHUB_SHA"
+      env:
+        HEAD_SHA: ${{ inputs.head-sha }}
+      run: git checkout -q "$HEAD_SHA"
 
     # Findings on the PR's changed lines become code-scanning alerts + PR diff
     # annotations. Skipped on forks (read-only token) and when the toggle is off.
@@ -171,9 +171,19 @@ runs:
       with:
         sarif_file: reports/gandalf.sarif
         category: gandalf
-        # Staging the PR diff leaves HEAD at the merge-base (that's what
-        # `reset --soft` does), and upload-sarif otherwise reads the commit from
-        # the checkout - filing the alerts against a base-branch commit that is
-        # not in the PR, where nothing ever surfaces. Pin both to the event.
-        ref: ${{ github.ref }}
-        sha: ${{ github.sha }}
+        # Both pinned to the PR HEAD, and they have to agree.
+        #
+        # upload-sarif derives the SARIF's provenance from the checkout, and
+        # this Action checks out the head commit to stage the diff (see above).
+        # Passing github.ref there means refs/pull/N/merge, so the upload
+        # declares a merge ref while carrying a non-merge commit, and the API
+        # refuses it: "ref is a pull request merge but commit_oid is not a
+        # merge commit". That failed every review this Action posted, on every
+        # repo, while the review itself had already succeeded.
+        #
+        # refs/pull/N/head is the matching ref for the commit that is actually
+        # checked out, and it is also where the alerts are most useful: against
+        # the commit the author pushed rather than an ephemeral merge that is
+        # recreated whenever the base moves.
+        ref: refs/pull/${{ github.event.pull_request.number }}/head
+        sha: ${{ inputs.head-sha }}

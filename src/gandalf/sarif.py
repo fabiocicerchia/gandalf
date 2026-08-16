@@ -91,6 +91,13 @@ def _relpath(path: str, root: str) -> str:
 
 
 def _location(path: str, line: int, root: str = "") -> list[dict]:
+    """SARIF locations for a finding, or [] when it names no file.
+
+    A result with no location is not merely unhelpful: Code Scanning rejects
+    the WHOLE upload with "locationFromSarifResult: expected at least one
+    location", so one path-less finding loses every alert in the run. Callers
+    must drop those results rather than emit them empty — see to_sarif.
+    """
     path = _relpath(path, root)
     if not path:
         return []
@@ -115,6 +122,7 @@ def to_sarif(results: list[GateResult], meta: dict | None = None) -> dict:
     root = meta.get("workdir", "")
     rules: dict[str, dict] = {}
     sarif_results: list[dict] = []
+    without_location = 0
 
     for r in results:
         gate_level = _OUTCOME_LEVEL[r.outcome]
@@ -123,18 +131,11 @@ def to_sarif(results: list[GateResult], meta: dict | None = None) -> dict:
             # results — a location-less WARN ("judge unavailable", "no target —
             # skipped") is pure noise as a code-scanning alert.
             if r.outcome == GateOutcome.FAIL:
-                rule = rules.setdefault(r.name, {"id": r.name, "name": r.name})
-                _bump_severity(rule, _LEVEL_SCORE[gate_level])
-                sarif_results.append(
-                    {
-                        "ruleId": r.name,
-                        "level": gate_level,
-                        "message": {"text": r.summary or r.name},
-                        "partialFingerprints": {
-                            "gandalf/v1": fingerprint(r.name, {"issue": r.summary})
-                        },
-                    }
-                )
+                # A gate that failed without naming a file — a tool crash, a
+                # config error — has nowhere to appear as an alert, and
+                # including it locationless would sink the whole upload. It is
+                # still in the console output and the PR review body.
+                without_location += 1
             continue
         for f in r.findings:
             rule_name = finding_rule(f) or r.name
@@ -144,13 +145,20 @@ def to_sarif(results: list[GateResult], meta: dict | None = None) -> dict:
             rule = rules.setdefault(rule_id, {"id": rule_id, "name": rule_name})
             sev = _finding_severity(f)
             level = _SEV_LEVEL.get(sev, gate_level)
+            locations = _location(finding_path(f), _finding_line(f), root)
+            if not locations:
+                # Repo-level findings (no path) cannot be rendered as an alert
+                # against anything, and one of them invalidates the entire
+                # SARIF. Counted below rather than silently dropped.
+                without_location += 1
+                continue
             _bump_severity(rule, _SEV_SCORE.get(sev) or _LEVEL_SCORE[level])
             sarif_results.append(
                 {
                     "ruleId": rule_id,
                     "level": level,
                     "message": {"text": fmt_finding(f)},
-                    "locations": _location(finding_path(f), _finding_line(f), root),
+                    "locations": locations,
                     "partialFingerprints": {"gandalf/v1": fingerprint(r.name, f)},
                 }
             )
@@ -163,14 +171,13 @@ def to_sarif(results: list[GateResult], meta: dict | None = None) -> dict:
     version = meta.get("version")
     if version:
         driver["version"] = str(version)
-    return {
-        "$schema": SCHEMA,
-        "version": "2.1.0",
-        "runs": [
-            {
-                "tool": {"driver": driver},
-                "automationDetails": {"id": "gandalf"},
-                "results": sarif_results,
-            }
-        ],
+    run: dict = {
+        "tool": {"driver": driver},
+        "automationDetails": {"id": "gandalf"},
+        "results": sarif_results,
     }
+    if without_location:
+        # Recorded in the file itself, so "why is this finding not an alert?"
+        # has an answer that does not require reading this source.
+        run["properties"] = {"gandalf/findingsWithoutLocation": without_location}
+    return {"$schema": SCHEMA, "version": "2.1.0", "runs": [run]}
