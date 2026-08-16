@@ -35,7 +35,10 @@ RUN gem install --no-document mdl
 
 # (kics runs from the official checkmarx/kics image — it ships its own query assets.)
 
-# Statically-shipped binaries
+# Statically-shipped binaries. `tar` reads from a pipe below, and the default
+# `sh -c` reports only the last command's status — a failed download would
+# bake a truncated binary into the image and pass.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN curl -sSfL "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-Linux-x86_64" \
       -o /usr/local/bin/hadolint && chmod +x /usr/local/bin/hadolint \
  && curl -sSfL "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64" \
@@ -61,7 +64,7 @@ USER gandalf
 # One-shot scanner image (`docker run --rm gandalf-tools <tool>`) — no long-running
 # service to probe. This trivial check just satisfies image-hardening gates
 # (checkov CKV_DOCKER_2) without affecting one-shot runs.
-HEALTHCHECK CMD true
+HEALTHCHECK CMD ["true"]
 
 # No global ENTRYPOINT: `docker run gandalf-tools <tool> ...` resolves the tool on PATH.
 WORKDIR /src
