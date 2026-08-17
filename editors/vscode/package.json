@@ -371,7 +371,7 @@
     "check": "tsc --noEmit",
     "test": "node esbuild.mjs --tests && node --test \"out/**/*.test.js\"",
     "vscode:prepublish": "npm run check && npm test && node esbuild.mjs --production",
-    "package": "vsce package --no-dependencies"
+    "package": "node scripts/copy-legal.mjs && vsce package --no-dependencies"
   },
   "devDependencies": {
     "@types/node": "^20.11.30",

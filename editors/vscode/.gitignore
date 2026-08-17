@@ -2,4 +2,8 @@ node_modules/
 dist/
 out/
 *.vsix
+
+# Copied from the repository root at package time.
+LICENSE
+NOTICE
 package-lock.json

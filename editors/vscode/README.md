@@ -18,6 +18,34 @@ you write the code, instead of finding out in CI.
   you which tools are present, which come from the scanner-tools image, and
   which are missing — so a green board never quietly means "never checked".
 
+## Install
+
+Not on the Marketplace yet — build the `.vsix` and install it locally. You need
+Node 18+ for the build; nothing of it is needed afterwards.
+
+```sh
+git clone https://github.com/fabiocicerchia/gandalf.git   # if you don't have it already
+cd gandalf/editors/vscode
+npm install
+npm run package                                           # → gandalf-quality-gates-0.1.0.vsix
+code --install-extension gandalf-quality-gates-0.1.0.vsix
+```
+
+Then reload the window (**Developer: Reload Window**). A 🧙 **Gandalf** tab
+appears in the bottom panel alongside Problems and Terminal.
+
+No `code` command? Either run **Shell Command: Install 'code' command in PATH**
+from the Command Palette, or skip the CLI: **Extensions** view → `...` menu →
+**Install from VSIX…** → pick the file. In Cursor/Windsurf/VSCodium the CLI is
+`cursor` / `windsurf` / `codium`.
+
+To hack on it instead of installing it: `npm run watch`, open
+`editors/vscode/` as the workspace folder, press <kbd>F5</kbd>. That launches an
+Extension Development Host with the extension loaded from source.
+
+To remove it: **Extensions** view → Gandalf → Uninstall, or
+`code --uninstall-extension fabiocicerchia.gandalf-quality-gates`.
+
 ## Requirements
 
 Gandalf itself. It is pure-stdlib Python with no install step, so the extension
