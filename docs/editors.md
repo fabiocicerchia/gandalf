@@ -19,13 +19,12 @@ What you get:
 ### Install
 
 Not on the Marketplace yet — build the `.vsix` and install it locally (Node 18+
-for the build only):
+for the build only). From the repository root:
 
 ```sh
-cd editors/vscode
-npm install
-npm run package                                            # → gandalf-quality-gates-<version>.vsix
-code --install-extension gandalf-quality-gates-*.vsix      # or: Extensions → ... → Install from VSIX…
+make ext-install                  # build + install
+make ext-install CODE=cursor      # ...into a fork's CLI
+make ext-package                  # just build the .vsix, install it by hand
 ```
 
 Reload the window afterwards; a **Gandalf** tab appears in the bottom panel.

@@ -23,6 +23,8 @@ make test    # Run the test suite
 make analyze # Run gandalf against this repo
 make install # Drop a `gandalf` wrapper in BINDIR (default ~/.local/bin)
 make tools   # Build the scanner-tools image (zero host installs)
+make ext-package # Build the VS Code extension into a .vsix
+make ext-install # ...and install it (CODE=cursor for a fork)
 ```
 
 ## Tooling
