@@ -6,9 +6,14 @@ First release.
 
 - Findings as editor diagnostics, with the gate, category, severity and rule id
   in the hover.
-- Findings pane in the bottom panel as a native tree view: grouped by file,
-  severity icons, error badge, current-file / whole-project toggle and a
-  severity quick pick in the title bar.
+- Findings pane in the bottom panel as a native tree view: grouped by file, a
+  distinct icon per reported level (critical / high / medium / low / info /
+  unrated), error badge, expand-all and collapse-all, current-file /
+  whole-project toggle, and a filter over both reported level and editor
+  severity.
+- The level a tool reports is kept as its own axis rather than collapsed into
+  three editor severities, including the `[HIGH] …` prefix that the kics and
+  licenses gates fold into the message text.
 - The gandalf HTML report, rendered as-is in an editor tab and themed to match
   the editor.
 - Scans on save (scoped to the saved file), on demand, at startup, or on an

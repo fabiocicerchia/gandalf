@@ -9,7 +9,16 @@
  */
 
 export type Outcome = 'pass' | 'warn' | 'fail';
+/** Editor severity — what a squiggle can be. */
 export type Severity = 'error' | 'warning' | 'info';
+/**
+ * The severity the *tool* reported, on the ladder they all roughly share.
+ * `unrated` is not a gap in the data: plenty of gates publish findings with no
+ * severity at all (mypy, vulture, the format gate), and pretending those sit
+ * somewhere on the ladder would invent precision. They are filterable as their
+ * own bucket, and sort by the gate outcome they inherited.
+ */
+export type Level = 'critical' | 'high' | 'medium' | 'low' | 'info' | 'unrated';
 
 export interface RawFinding {
   [key: string]: unknown;
@@ -56,6 +65,8 @@ export interface Finding {
   severity: Severity;
   /** The tool's own severity word ("HIGH", "MEDIUM", …), when it published one. */
   severityLabel: string;
+  /** `severityLabel` placed on the shared ladder, or `unrated` if there wasn't one. */
+  level: Level;
   rule: string;
   message: string;
   /** Path exactly as the tool reported it (may be absolute, or container-relative). */

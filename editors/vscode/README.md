@@ -7,10 +7,11 @@ you write the code, instead of finding out in CI.
   squiggle. The hover explains the problem, which gate found it, its severity
   and the rule id (linked to the tool's docs when there is one).
 - **A findings pane** at the bottom — a normal VS Code tree view, so it behaves
-  like the Problems panel next to it: findings grouped by file, severity icons,
-  type-ahead filtering, keyboard navigation, an error badge on the view. Toggle
-  between the current file and the whole project from the title bar; click a
-  finding to jump to it.
+  like the Problems panel next to it: findings grouped by file, a distinct icon
+  per reported level, type-ahead filtering, keyboard navigation, an error badge
+  on the view. Expand all / collapse all, toggle between the current file and the
+  whole project, and filter by level — all from the title bar. Click a finding to
+  jump to it.
 - **The report**, rendered exactly as `reports/*.html` renders it — the same
   verdict banner, category scores, sortable gate table and LLM sections you get
   from the CLI, because it *is* that file, opened in an editor tab.
@@ -99,8 +100,45 @@ any.
 | `Gandalf: Build Scanner Tools Image` | `docker build -f tools.Dockerfile -t gandalf-tools .` in a terminal. |
 | `Gandalf: Cancel Running Scan` | Kills the current run. |
 | `Gandalf: Clear Results` | Drops all diagnostics and findings. |
-| `Gandalf: Filter by Severity` | Native quick pick — which severities the pane shows. |
+| `Gandalf: Filter Findings` | Native quick pick over both axes: reported level and editor severity. |
 | `Gandalf: Show Gate Timings` | Every gate by wall-clock cost, slowest first. Select gates to copy a `skip` list. |
+
+## Reading the pane
+
+Findings are grouped by file, worst first. The icon is the level the **tool**
+reported, not the editor severity it maps to, because CRITICAL and HIGH both
+squiggle as errors and the difference is the whole point when you are deciding
+what to look at first:
+
+| Icon | Level | Where it comes from |
+|---|---|---|
+| 🔥 `flame` | Critical | `CRITICAL` |
+| ⛔ `error` | High | `HIGH`, `ERROR` |
+| ⚠️ `warning` | Medium | `MEDIUM`, `MODERATE`, `WARNING` |
+| ℹ️ `info` | Low | `LOW` |
+| ○ `circle-outline` | Info | `INFO`, `NOTE` |
+| ● `circle-filled` | Unrated | The tool reported no severity at all |
+
+**Unrated** is a real category, not a gap to paper over: mypy, vulture, the
+format gate and the skill-backed judges publish findings with no severity, and
+placing them on the ladder would invent precision. They take their colour from
+the gate's own outcome, and sort as if they were High (from a red gate) or Medium
+(from an amber one) — a failing mypy error has no business sitting below a
+cosmetic `LOW`. A level the tool actually stated wins a tie against an inferred
+one.
+
+Two gates fold their severity into the message text rather than a field —
+`kics` and `licenses` both report `[HIGH] …` — so a leading bracket holding a
+known severity word is read as the level and moved out of the message. A bracket
+holding anything else (`[B603]`, mypy's trailing `[attr-defined]`) is left alone.
+
+**`Gandalf: Filter Findings`** filters on both axes at once — reported level
+*and* editor severity, with live counts next to each. They are different
+questions ("show me the HIGHs" vs "show me what squiggles as an error"), and a
+finding has to match both. Clearing an entire axis means "all of it" rather than
+"nothing", so the pane can't be filtered into a corner. When a filter is on, the
+view header says `filtered`, and an empty pane tells you how many rows are hidden
+rather than claiming everything is green.
 
 ## While a scan runs
 

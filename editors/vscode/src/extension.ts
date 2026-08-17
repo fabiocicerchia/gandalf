@@ -356,7 +356,8 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('gandalf.filterCurrentFile', () => findingsView.setScope('file')),
     vscode.commands.registerCommand('gandalf.filterProject', () => findingsView.setScope('project')),
-    vscode.commands.registerCommand('gandalf.filterSeverity', () => findingsView.pickSeverities()),
+    vscode.commands.registerCommand('gandalf.filterFindings', () => findingsView.pickFilters()),
+    vscode.commands.registerCommand('gandalf.expandAll', () => findingsView.expandAll()),
     vscode.commands.registerCommand('gandalf.showTimings', () => showTimings()),
     vscode.commands.registerCommand('gandalf.applyFixes', async () => {
       const ok = await confirm(

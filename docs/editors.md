@@ -10,8 +10,9 @@ because an editor is driving it.
 What you get:
 
 - findings as diagnostics, with the gate, category, severity and rule in the hover;
-- a native tree view in the bottom panel listing every finding, grouped by file
-  and filtered to the current file or the whole project;
+- a native tree view in the bottom panel listing every finding, grouped by file,
+  with a distinct icon per reported level (critical / high / medium / low / info /
+  unrated) and filters for level, editor severity and current-file vs project;
 - the HTML scorecard in an editor tab;
 - an environment check that says, tool by tool, which gates can actually run
   here — on `PATH`, from the `gandalf-tools` image, or not at all.

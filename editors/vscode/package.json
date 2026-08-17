@@ -134,16 +134,22 @@
         "icon": "$(filter-filled)"
       },
       {
-        "command": "gandalf.filterSeverity",
-        "title": "Filter by Severity",
-        "category": "Gandalf",
-        "icon": "$(list-filter)"
-      },
-      {
         "command": "gandalf.showTimings",
         "title": "Show Gate Timings",
         "category": "Gandalf",
         "icon": "$(watch)"
+      },
+      {
+        "command": "gandalf.filterFindings",
+        "title": "Filter Findings",
+        "category": "Gandalf",
+        "icon": "$(list-filter)"
+      },
+      {
+        "command": "gandalf.expandAll",
+        "title": "Expand All",
+        "category": "Gandalf",
+        "icon": "$(expand-all)"
       }
     ],
     "menus": {
@@ -159,19 +165,24 @@
           "group": "navigation@1"
         },
         {
-          "command": "gandalf.filterSeverity",
+          "command": "gandalf.filterFindings",
           "when": "view == gandalf.findings",
           "group": "navigation@2"
         },
         {
+          "command": "gandalf.expandAll",
+          "when": "view == gandalf.findings && gandalf.scope == project",
+          "group": "navigation@3"
+        },
+        {
           "command": "gandalf.scanWorkspace",
           "when": "view == gandalf.findings",
-          "group": "navigation@3"
+          "group": "navigation@4"
         },
         {
           "command": "gandalf.showReport",
           "when": "view == gandalf.findings",
-          "group": "navigation@4"
+          "group": "navigation@5"
         },
         {
           "command": "gandalf.scanCurrentFile",
@@ -184,14 +195,14 @@
           "group": "1_scan@2"
         },
         {
-          "command": "gandalf.showTimings",
-          "when": "view == gandalf.findings",
-          "group": "2_env@2"
-        },
-        {
           "command": "gandalf.checkEnvironment",
           "when": "view == gandalf.findings",
           "group": "2_env@1"
+        },
+        {
+          "command": "gandalf.showTimings",
+          "when": "view == gandalf.findings",
+          "group": "2_env@2"
         },
         {
           "command": "gandalf.clearResults",
@@ -211,6 +222,10 @@
         },
         {
           "command": "gandalf.filterProject",
+          "when": "false"
+        },
+        {
+          "command": "gandalf.expandAll",
           "when": "false"
         }
       ]

@@ -11,7 +11,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 
-import { gatesByStatus, normalize, resolvePath } from '../parse';
+import { gatesByStatus, LEVELS, normalize, resolvePath, sortLevel } from '../parse';
 import { Payload, RawFinding, RawGate } from '../types';
 
 let root = '';
@@ -122,10 +122,42 @@ describe('finding normalization', () => {
     assert.equal(f.line, 3);
   });
 
-  it('reads kics: file + line + message', () => {
+  it('reads kics: file + line + a level folded into the message', () => {
     const [f] = one(gate('kics', [{ file: 'Dockerfile', line: 1, message: '[HIGH] Missing user instruction' }]));
     assert.equal(f.resolvedPath, path.join(root, 'Dockerfile'));
     assert.equal(f.line, 1);
+    // kics and the licenses gate carry severity in the text, not a key.
+    assert.equal(f.level, 'high');
+    assert.equal(f.severityLabel, 'HIGH');
+    assert.equal(f.severity, 'error');
+    assert.equal(f.message, 'Missing user instruction', 'the prefix moves to its own column');
+  });
+
+  it('reads a level folded into a licenses-gate message', () => {
+    const [f] = one(
+      gate('licenses', [{ file: 'app.py', message: '[CRITICAL] some-pkg: GPL-3.0' }], {
+        category: 'Licensing',
+      }),
+    );
+    assert.equal(f.level, 'critical');
+    assert.equal(f.message, 'some-pkg: GPL-3.0');
+  });
+
+  it('leaves a bracketed prefix that is not a severity word alone', () => {
+    const [rule] = one(gate('bandit', [{ path: 'app.py', line: 1, message: '[B603] subprocess call' }]));
+    assert.equal(rule.level, 'unrated');
+    assert.equal(rule.message, '[B603] subprocess call');
+
+    // mypy's trailing [attr-defined] is a rule id, and not at the head anyway.
+    const [mypy] = one(gate('mypy', [{ error: 'app.py:1: error: bad  [attr-defined]' }]));
+    assert.equal(mypy.level, 'unrated');
+    assert.match(mypy.message, /\[attr-defined\]$/);
+  });
+
+  it('prefers an explicit severity key over a bracketed message prefix', () => {
+    const [f] = one(gate('kics', [{ file: 'app.py', severity: 'LOW', message: '[HIGH] mismatched' }]));
+    assert.equal(f.level, 'low');
+    assert.equal(f.message, '[HIGH] mismatched', 'nothing was consumed, so nothing is trimmed');
   });
 
   it('scrapes path:line out of a raw tool line (mypy)', () => {
@@ -208,21 +240,76 @@ describe('finding normalization', () => {
     assert.equal(one(gate('ruff', [], { outcome: 'pass', score: 1, summary: 'ruff clean' })).length, 0);
   });
 
-  it('sorts errors before warnings before info', () => {
-    const findings = one(
-      gate('a', [{ path: 'app.py', line: 1, message: 'low', severity: 'LOW' }]),
-      gate('b', [{ path: 'app.py', line: 2, message: 'high', severity: 'HIGH' }]),
-      gate('c', [{ path: 'app.py', line: 3, message: 'medium', severity: 'MEDIUM' }]),
-    );
-    assert.deepEqual(
-      findings.map((f) => f.message),
-      ['high', 'medium', 'low'],
-    );
-  });
-
   it('gives each finding a stable id', () => {
     const fixture = () => one(gate('ruff', [{ filename: 'app.py', code: 'E501', message: 'too long', line: 4 }]))[0].id;
     assert.equal(fixture(), fixture());
+  });
+});
+
+describe('reported level', () => {
+  const levelOf = (severity: unknown, outcome: RawGate['outcome'] = 'warn') =>
+    one(gate('g', [{ path: 'app.py', line: 1, message: 'x', severity }], { outcome }))[0];
+
+  it('places each tool severity word on the ladder', () => {
+    const cases: [string, string][] = [
+      ['CRITICAL', 'critical'],
+      ['HIGH', 'high'],
+      ['ERROR', 'high'],
+      ['MEDIUM', 'medium'],
+      ['MODERATE', 'medium'],
+      ['WARNING', 'medium'],
+      ['LOW', 'low'],
+      ['INFO', 'info'],
+      ['NOTE', 'info'],
+    ];
+    for (const [word, level] of cases) {
+      assert.equal(levelOf(word).level, level, word);
+      assert.equal(levelOf(word.toLowerCase()).level, level, `${word} lowercase`);
+    }
+  });
+
+  it('keeps critical distinct from high, though both squiggle as errors', () => {
+    assert.equal(levelOf('CRITICAL').severity, 'error');
+    assert.equal(levelOf('HIGH').severity, 'error');
+    assert.notEqual(levelOf('CRITICAL').level, levelOf('HIGH').level);
+  });
+
+  it('calls a finding with no severity unrated, not a guess', () => {
+    const f = one(gate('mypy', [{ path: 'app.py', line: 1, message: 'x' }]))[0];
+    assert.equal(f.level, 'unrated');
+    assert.equal(f.severityLabel, '', 'nothing to show as a level');
+    assert.equal(f.severity, 'warning', 'but it still inherits the gate outcome');
+  });
+
+  it('treats a tool that says UNKNOWN as unrated', () => {
+    assert.equal(levelOf('UNKNOWN').level, 'unrated');
+    assert.equal(levelOf('nonsense-word').level, 'unrated');
+  });
+
+  it('sorts an unrated finding by the outcome it inherited', () => {
+    // A failing gate's unrated finding must outrank a tool's LOW.
+    assert.equal(sortLevel(levelOf(undefined, 'fail')), 'high');
+    assert.equal(sortLevel(levelOf(undefined, 'warn')), 'medium');
+    assert.equal(sortLevel(levelOf('LOW')), 'low', 'a rated one keeps its own level');
+  });
+
+  it('orders the pane worst-first across levels', () => {
+    const findings = one(
+      gate('a', [{ path: 'app.py', line: 1, message: 'low', severity: 'LOW' }]),
+      gate('b', [{ path: 'app.py', line: 2, message: 'critical', severity: 'CRITICAL' }]),
+      gate('c', [{ path: 'app.py', line: 3, message: 'unrated-error' }], { outcome: 'fail' }),
+      gate('d', [{ path: 'app.py', line: 4, message: 'medium', severity: 'MEDIUM' }]),
+      gate('e', [{ path: 'app.py', line: 5, message: 'high', severity: 'HIGH' }]),
+    );
+    assert.deepEqual(
+      findings.map((f) => f.message),
+      ['critical', 'high', 'unrated-error', 'medium', 'low'],
+    );
+  });
+
+  it('has a label for every level', () => {
+    assert.equal(LEVELS.length, 6);
+    assert.deepEqual(LEVELS, ['critical', 'high', 'medium', 'low', 'info', 'unrated']);
   });
 });
 
