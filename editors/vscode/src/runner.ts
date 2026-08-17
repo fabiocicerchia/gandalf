@@ -13,7 +13,9 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 
 import { Settings } from './config';
+import { EventParser, GateEvent } from './events';
 import { log } from './log';
+import { ProgressParser, ScanProgress } from './progress';
 import { Payload } from './types';
 
 export class GandalfNotFoundError extends Error {}
@@ -46,6 +48,12 @@ export interface RunRequest {
   outDir: string;
   /** Why this run started — shown in the log. */
   reason: string;
+  /** Called as gandalf reports stages and gate completions. */
+  onProgress?: (p: ScanProgress) => void;
+  /** Called once the gate count is known, before any gate has finished. */
+  onStart?: (gates: number, scope: string) => void;
+  /** Called per gate as it finishes, when the build supports `--stream`. */
+  onGate?: (gate: GateEvent) => void;
 }
 
 export interface RunResult {
@@ -100,7 +108,16 @@ function findOnPath(name: string): string {
 function exec(
   command: string,
   args: string[],
-  opts: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs: number; token?: vscode.CancellationToken },
+  opts: {
+    cwd?: string;
+    env?: NodeJS.ProcessEnv;
+    timeoutMs: number;
+    token?: vscode.CancellationToken;
+    /** Receives stderr as it arrives, for live progress. */
+    onStderr?: (chunk: string) => void;
+    /** Receives stdout as it arrives, for streamed gate results. */
+    onStdout?: (chunk: string) => void;
+  },
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     let child;
@@ -147,12 +164,14 @@ function exec(
         out.push(b);
         outBytes += b.length;
       }
+      opts.onStdout?.(b.toString('utf8'));
     });
     child.stderr?.on('data', (b: Buffer) => {
       if (errBytes < MAX_OUTPUT_BYTES) {
         errOut.push(b);
         errBytes += b.length;
       }
+      opts.onStderr?.(b.toString('utf8'));
     });
     child.on('error', (err) => finish(() => reject(err)));
     child.on('close', (code) =>
@@ -251,6 +270,9 @@ function buildArgs(req: RunRequest, s: Settings, l: Launcher): string[] {
   // and make the next full scan a complete miss. Only wide scopes cache.
   if (s.useCache && req.kind !== 'file' && s.cachePath) args.push('--cache', s.cachePath);
 
+  // Per-gate results as they land, so the pane fills during the run.
+  if ((req.onGate || req.onStart) && supports('--stream')) args.push('--stream');
+
   args.push(...s.extraArgs);
   return args;
 }
@@ -275,12 +297,37 @@ export async function runGandalf(
   await fs.promises.mkdir(req.outDir, { recursive: true });
   log().info(`scan (${req.reason}): ${launcher.command} ${args.join(' ')}`);
 
+  // The progress line and real stderr share the stream, so the parser splits
+  // them: progress drives the UI, the rest is what an error report quotes.
+  const progress = new ProgressParser();
+  const events = new EventParser();
+  let diagnostics = '';
   const { code, stdout, stderr } = await exec(launcher.command, args, {
     cwd: req.folder.uri.fsPath,
-    env: { ...launcher.env, GANDALF_TOOLS_IMAGE: s.toolsImage },
+    env: {
+      ...launcher.env,
+      GANDALF_TOOLS_IMAGE: s.toolsImage,
+      // Progress is TTY-gated; this turns it on for a piped child.
+      GANDALF_PROGRESS: '1',
+      // The skill-backed gates call the LLM whatever --no-llm says, and retry
+      // with backoff when it is unreachable — seconds per gate, every scan.
+      ...(s.llmRetries >= 0 ? { GANDALF_LLM_RETRIES: String(s.llmRetries) } : {}),
+    },
     timeoutMs: s.timeoutSeconds * 1000,
     token,
+    onStderr: (chunk) => {
+      const { progress: state, noise } = progress.feed(chunk);
+      diagnostics += noise;
+      if (state) req.onProgress?.(state);
+    },
+    onStdout: (chunk) => {
+      for (const event of events.feed(chunk)) {
+        if (event.event === 'start') req.onStart?.(event.gates, event.scope);
+        else req.onGate?.(event);
+      }
+    },
   });
+  diagnostics += progress.flush();
 
   if (UNTRACKED.test(stderr)) {
     throw new ScanSkippedError(`${req.relPath ?? req.kind}: not tracked by git — nothing to scan`);
@@ -289,8 +336,9 @@ export async function runGandalf(
   const jsonMatch = JSON_LINE.exec(stdout);
   if (!jsonMatch) {
     // Exit 1 is a red verdict (normal); anything without a report is a real error.
-    log().error(`gandalf produced no report (exit ${code})\n${tail(stderr || stdout)}`);
-    throw new Error(`gandalf failed (exit ${code}): ${tail(stderr || stdout, 3) || 'no output'}`);
+    const detail = diagnostics || stderr;
+    log().error(`gandalf produced no report (exit ${code})\n${tail(detail || stdout)}`);
+    throw new Error(`gandalf failed (exit ${code}): ${tail(detail || stdout, 3) || 'no output'}`);
   }
 
   const jsonPath = jsonMatch[1].trim();

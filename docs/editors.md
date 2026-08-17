@@ -37,6 +37,23 @@ the open workspace (if it is a gandalf checkout), `gandalf` on `PATH`, or the
 **Gandalf: Check Environment** first: it reports which gates can actually run,
 and offers to build the `gandalf-tools` image for the ones that need it.
 
+### While a scan runs
+
+The status bar shows a live gate counter (`Gandalf 12/37`) and a whole-tree scan
+gets a cancellable notification with a progress bar — both read from the progress
+line `gandalf/progress.py` already writes, enabled for a piped run with
+`GANDALF_PROGRESS=1`.
+
+Findings do not wait for the run to end, either: gandalf reports each gate as it
+finishes (`--stream`) and the pane fills as the results land, replacing what the
+last run said about that gate while the rest of the board stays up. The verdict
+and the composite score still come only from the final report — a single gate
+cannot produce them.
+
+`Gandalf: Show Gate Timings` lists every gate by wall-clock cost so a slow scan
+can name its culprits, and copies a `skip` list for the ones you don't want
+while editing.
+
 ### Cost control
 
 Gates spawn real tools, so the extension never scans on keystroke. Saving a file

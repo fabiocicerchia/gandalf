@@ -21,6 +21,7 @@ import * as fs from 'fs';
 import * as vscode from 'vscode';
 
 import { log } from './log';
+import { ScanProgress } from './progress';
 import { ScanKind } from './runner';
 
 export interface Job {
@@ -34,6 +35,8 @@ export interface Job {
   reason: string;
   /** User-initiated: preempts an automatic run and ignores the idle gate. */
   manual: boolean;
+  /** Set by a caller showing its own progress UI for this job. */
+  report?: (p: ScanProgress) => void;
 }
 
 export function jobKey(job: Job): string {
@@ -128,6 +131,12 @@ export class Scheduler {
     this.timer = undefined;
     this.pending = undefined;
     this.active?.source.cancel();
+  }
+
+  /** Cancel one job, whether it is running or still queued. */
+  cancelJob(job: Job): void {
+    if (this.active?.job === job) this.active.source.cancel();
+    if (this.pending === job) this.pending = undefined;
   }
 
   /** (Re)arm the periodic sweep. `factory` returns undefined when there's nothing to sweep. */

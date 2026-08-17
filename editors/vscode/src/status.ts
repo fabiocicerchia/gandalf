@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 
+import { describeProgress, ScanProgress, shortProgress } from './progress';
 import { LastRun } from './store';
 import { Outcome } from './types';
 
@@ -13,9 +14,11 @@ export class StatusBar {
     this.item.name = 'Gandalf';
   }
 
-  scanning(label: string): void {
-    this.item.text = `$(sync~spin) Gandalf`;
-    this.item.tooltip = `Scanning ${label}…`;
+  scanning(label: string, p?: ScanProgress): void {
+    this.item.text = p ? `$(sync~spin) Gandalf ${shortProgress(p)}` : '$(sync~spin) Gandalf';
+    this.item.tooltip = p
+      ? `Scanning ${label}\n${p.stage} — ${describeProgress(p)} (${Math.round(p.percent)}%)`
+      : `Scanning ${label}…`;
     this.item.backgroundColor = undefined;
     this.item.show();
   }

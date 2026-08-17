@@ -100,6 +100,78 @@ any.
 | `Gandalf: Cancel Running Scan` | Kills the current run. |
 | `Gandalf: Clear Results` | Drops all diagnostics and findings. |
 | `Gandalf: Filter by Severity` | Native quick pick — which severities the pane shows. |
+| `Gandalf: Show Gate Timings` | Every gate by wall-clock cost, slowest first. Select gates to copy a `skip` list. |
+
+## While a scan runs
+
+The status bar shows live progress — `$(sync~spin) Gandalf 12/37` — with the
+stage and the gate that just finished in its tooltip. A whole-tree scan you asked
+for also gets a notification with a real progress bar and a **Cancel** button; a
+one-file scan skips the popup, since it is over in seconds.
+
+None of that is guessed at: gandalf already reports its stages and gate counter
+on stderr, and the extension turns that on for a piped run (`GANDALF_PROGRESS=1`)
+and reads it. Stages are equal slices of the bar, and the gate-running stage —
+which is nearly all the runtime — fills by gates completed.
+
+**Findings arrive as they are found.** The pane does not wait for the run to
+finish: gandalf emits each gate's result the moment it completes (`--stream`),
+and each one replaces what the previous run said about that gate while the rest
+of the board stays up. So a slow scan is readable from the first second instead
+of being a blank pane with a spinner. On gandalf's own repository the first rows
+land at ~0.3s and the last at ~7s, in a run that takes 14s to report.
+
+Two things deliberately *don't* stream, because they are properties of a whole
+run rather than of any one gate: the **verdict** and the **composite score**.
+Those appear when the report lands, at which point it replaces the streamed
+results wholesale. Diagnostics are published then too — squiggles appearing and
+moving gate by gate would be worse than squiggles appearing once. Streamed
+findings do respect your baseline, so nothing flashes up that the report will
+suppress.
+
+## When a full scan takes minutes
+
+It usually does, and mostly for one reason: a full run *is* thirty-odd real
+scanners over the whole tree. **`Gandalf: Show Gate Timings`** puts the blame
+somewhere specific — every gate by wall-clock cost, slowest first, with the
+summed and wall-clock totals in the title (they differ because gates run
+concurrently). Select the expensive ones and it copies a ready-to-paste
+`skip = [...]` list. The same top five go to the log after every full scan.
+
+Then, in rough order of payoff:
+
+- **Don't scan the tree on save.** The default already doesn't
+  (`scan.scopeOnSave: "file"`). If you changed it to `workspace`, that is where
+  the minutes come from.
+- **Run a smaller gate set while editing.** Put the expensive gates in a
+  `skip` list in an editor-only config and point `gandalf.configPath` at it —
+  CI still runs `.gandalf.toml` in full. See the profiles below.
+- **The LLM retry tail — already handled, but worth knowing.** The skill-backed
+  judge gates (`grill_me`, `well_architected`, `security_assessment`,
+  `quality_gate_review`, `ruthless_refactor`) call a model *regardless of*
+  `gandalf.scan.llm`; that setting only controls the report's summary. With no
+  endpoint reachable they each burn gandalf's retry backoff (1s + 2s + 4s per
+  call) before giving up, and because they are the slowest gates they set the
+  whole scan's tail. Measured on gandalf's own repository:
+
+  | `GANDALF_LLM_RETRIES` | full scan |
+  |---|---|
+  | 3 (gandalf's default, right for CI) | 14.4s |
+  | 2 | 6.4s |
+  | **1 (this extension's default)** | **3.3s** |
+  | 0 | 3.0s |
+
+  So `gandalf.scan.llmRetries` defaults to `1` here: one retry still absorbs a
+  transient failure but costs 0.3s instead of 11s. Set `-1` to restore gandalf's
+  default. `Gandalf: Check Environment` reports the endpoint either way.
+- **Build the tools image** (`make tools`). Not for speed — for correctness —
+  but note that gates whose tool is missing return almost instantly, so a fast
+  scan on a bare machine mostly means nothing was checked.
+- **Bound the parallelism** with `gandalf.scan.concurrency` if the scan is
+  making the editor sluggish, and give slow gates their own budget with
+  `[gandalf.timeouts]` in `.gandalf.toml`.
+- **Let the cache work.** A repeat full scan with nothing changed reuses every
+  gate result; the cost above is the cold path.
 
 ## Keeping it cheap
 

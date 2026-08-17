@@ -138,6 +138,12 @@
         "title": "Filter by Severity",
         "category": "Gandalf",
         "icon": "$(list-filter)"
+      },
+      {
+        "command": "gandalf.showTimings",
+        "title": "Show Gate Timings",
+        "category": "Gandalf",
+        "icon": "$(watch)"
       }
     ],
     "menus": {
@@ -176,6 +182,11 @@
           "command": "gandalf.scanStaged",
           "when": "view == gandalf.findings",
           "group": "1_scan@2"
+        },
+        {
+          "command": "gandalf.showTimings",
+          "when": "view == gandalf.findings",
+          "group": "2_env@2"
         },
         {
           "command": "gandalf.checkEnvironment",
@@ -361,6 +372,12 @@
           "type": "boolean",
           "default": true,
           "description": "Show the verdict in the status bar."
+        },
+        "gandalf.scan.llmRetries": {
+          "type": "number",
+          "default": 1,
+          "minimum": -1,
+          "markdownDescription": "`GANDALF_LLM_RETRIES` for editor scans. The skill-backed judge gates call the LLM regardless of `#gandalf.scan.llm#` (that setting only controls the report's summary), and gandalf's default of 3 retries with exponential backoff costs ~7s per call when no endpoint is reachable \u2014 measured at 14.4s of a 14.9s scan on gandalf's own repository. `1` retry brings that to 3.3s while still absorbing a transient failure; `0` never retries; `-1` restores gandalf's default."
         }
       }
     }

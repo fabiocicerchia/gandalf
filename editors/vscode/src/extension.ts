@@ -7,7 +7,8 @@ import { DiagnosticGroup, DiagnosticPublisher } from './diagnostics';
 import { buildToolsImage, runDoctor } from './doctor';
 import { FindingsView } from './findingsView';
 import { disposeLog, log } from './log';
-import { normalize } from './parse';
+import { normalize, normalizeGate } from './parse';
+import { describeProgress, ScanProgress } from './progress';
 import { ReportView } from './report';
 import {
   GandalfNotFoundError,
@@ -33,6 +34,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
   let lastErrorAt = 0;
   let notFoundShown = false;
+  /** Label of the scan in flight, if any — the status bar belongs to it. */
+  let scanning: string | undefined;
 
   const settingsFor = (folder?: vscode.WorkspaceFolder): Settings => readSettings(folder?.uri);
 
@@ -48,6 +51,9 @@ export function activate(context: vscode.ExtensionContext): void {
     const folder = primaryFolder();
     const s = settingsFor(folder);
     findingsView.refresh();
+    // While a scan runs the status bar shows its progress; don't overwrite it
+    // with an idle verdict just because a partial result landed.
+    if (scanning !== undefined) return;
     statusBar.idle(
       folder ? store.lastRun(folder) : undefined,
       s.statusBarEnabled,
@@ -140,8 +146,27 @@ export function activate(context: vscode.ExtensionContext): void {
       return;
     }
 
+    scanning = jobLabel(job);
     findingsView.setScanning(jobLabel(job));
     statusBar.scanning(jobLabel(job));
+    // Streamed gates arrive in bursts; the tree is rebuilt on a short leash so
+    // a 40-gate run doesn't mean 40 full re-renders back to back.
+    let refreshAt = 0;
+    let refreshTimer: NodeJS.Timeout | undefined;
+    const refreshSoon = () => {
+      if (refreshTimer) return;
+      const wait = Math.max(0, refreshAt + 250 - Date.now());
+      refreshTimer = setTimeout(() => {
+        refreshTimer = undefined;
+        refreshAt = Date.now();
+        findingsView.refresh();
+      }, wait);
+    };
+    const onProgress = (p: ScanProgress) => {
+      statusBar.scanning(jobLabel(job), p);
+      findingsView.setScanning(`${jobLabel(job)} · ${describeProgress(p)}`);
+      job.report?.(p);
+    };
     // Hash the bytes we are about to scan, and only remember them if the run
     // succeeds — a failed scan must not suppress the next attempt.
     const scanned = job.absPath ? await guard.snapshot(job.absPath) : '';
@@ -158,6 +183,12 @@ export function activate(context: vscode.ExtensionContext): void {
           writeBaseline: job.writeBaseline,
           outDir,
           reason: job.reason,
+          onProgress,
+          onStart: () => store.beginStream(job.folder),
+          onGate: (gate) => {
+            store.pushStream(job.folder, gate.name, normalizeGate(gate, job.folder.uri.fsPath));
+            refreshSoon();
+          },
         },
         s,
         token,
@@ -179,13 +210,35 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       if (job.absPath && scanned) guard.commit(job.absPath, scanned);
       publishDiagnostics();
+      if (isProjectScope) logTimings(result.payload, result.durationMs);
       await prune(outDir, s.reportsKeep);
     } catch (err) {
       reportFailure(err, job);
     } finally {
+      clearTimeout(refreshTimer);
+      // The report (or the failure) is now the whole truth — drop the partials.
+      store.endStream(job.folder);
+      scanning = undefined;
       findingsView.setScanning('');
       paint();
     }
+  };
+
+  /**
+   * Where the time went. Gandalf records each gate's wall-clock in the payload,
+   * so a slow scan can name its own culprits instead of leaving the user to
+   * guess which of ~30 gates to disable.
+   */
+  const logTimings = (payload: Snapshot['payload'], totalMs: number): void => {
+    const timed = (payload.gates ?? [])
+      .filter((g) => typeof g.duration === 'number')
+      .sort((a, b) => (b.duration ?? 0) - (a.duration ?? 0));
+    if (timed.length === 0) return;
+    const top = timed
+      .slice(0, 5)
+      .map((g) => `${g.name} ${(g.duration ?? 0).toFixed(1)}s`)
+      .join(', ');
+    log().info(`slowest gates (of ${timed.length}) in ${(totalMs / 1000).toFixed(1)}s: ${top}`);
   };
 
   const scheduler = new Scheduler(execute, () => {
@@ -231,9 +284,28 @@ export function activate(context: vscode.ExtensionContext): void {
   const run = async (kind: ScanKind, extra: Partial<Job> = {}): Promise<boolean> => {
     const job = manualJob(kind, extra);
     if (!job) return false;
+    // A whole-tree scan runs for minutes, so it gets a notification with a real
+    // bar and a Cancel button. A one-file scan is seconds — the status bar is
+    // enough, and a popup for it would be noise.
+    const heavy = kind !== 'file';
     await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Window, title: `Gandalf: scanning ${jobLabel(job)}` },
-      () => scheduler.runNow(job),
+      {
+        location: heavy ? vscode.ProgressLocation.Notification : vscode.ProgressLocation.Window,
+        title: `Gandalf: scanning ${jobLabel(job)}`,
+        cancellable: heavy,
+      },
+      (progress, token) => {
+        let reported = 0;
+        job.report = (p: ScanProgress) => {
+          progress.report({
+            message: describeProgress(p),
+            increment: Math.max(0, p.percent - reported),
+          });
+          reported = Math.max(reported, p.percent);
+        };
+        token.onCancellationRequested(() => scheduler.cancelJob(job));
+        return scheduler.runNow(job);
+      },
     );
     return true;
   };
@@ -285,6 +357,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('gandalf.filterCurrentFile', () => findingsView.setScope('file')),
     vscode.commands.registerCommand('gandalf.filterProject', () => findingsView.setScope('project')),
     vscode.commands.registerCommand('gandalf.filterSeverity', () => findingsView.pickSeverities()),
+    vscode.commands.registerCommand('gandalf.showTimings', () => showTimings()),
     vscode.commands.registerCommand('gandalf.applyFixes', async () => {
       const ok = await confirm(
         'Gandalf: apply gate autofixes?',
@@ -321,6 +394,48 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.workspace.onDidChangeWorkspaceFolders(armSweep),
   );
+
+  /**
+   * Per-gate timings, slowest first — the answer to "why does a full scan take
+   * so long". Selecting gates copies a ready-to-paste skip list, since trimming
+   * the gate set is the only real lever on a slow scan.
+   */
+  async function showTimings(): Promise<void> {
+    const folder = primaryFolder();
+    const snapshot = folder ? store.project(folder) : undefined;
+    const run = folder ? store.lastRun(folder) : undefined;
+    const timed = (snapshot?.payload.gates ?? [])
+      .filter((g) => typeof g.duration === 'number')
+      .sort((a, b) => (b.duration ?? 0) - (a.duration ?? 0));
+    if (!snapshot || timed.length === 0) {
+      void vscode.window.showInformationMessage(
+        'Gandalf: no timings yet — run “Gandalf: Scan Workspace” first.',
+      );
+      return;
+    }
+    const summed = timed.reduce((n, g) => n + (g.duration ?? 0), 0);
+    const wall = (run?.durationMs ?? 0) / 1000;
+    const chosen = await vscode.window.showQuickPick(
+      timed.map((g) => ({
+        label: g.name,
+        description: `${(g.duration ?? 0).toFixed(1)}s`,
+        detail: g.summary,
+      })),
+      {
+        canPickMany: true,
+        title: `Gate timings — ${wall.toFixed(1)}s wall clock, ${summed.toFixed(1)}s summed (gates run concurrently)`,
+        placeHolder: 'Select gates to copy a .gandalf.toml skip list for editor scans',
+      },
+    );
+    if (!chosen?.length) return;
+    await vscode.env.clipboard.writeText(
+      `[gandalf]\nskip = [${chosen.map((c) => `"${c.label}"`).join(', ')}]\n`,
+    );
+    void vscode.window.showInformationMessage(
+      `Gandalf: copied a skip list for ${chosen.length} gate(s). Paste it into a .gandalf.toml and ` +
+        'point `gandalf.configPath` at that file to use it for editor scans only.',
+    );
+  }
 
   function onSave(doc: vscode.TextDocument): void {
     if (doc.uri.scheme !== 'file') return;

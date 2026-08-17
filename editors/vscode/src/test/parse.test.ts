@@ -169,6 +169,24 @@ describe('finding normalization', () => {
     assert.equal(f.severityLabel, 'CRITICAL');
   });
 
+  it('reads a gate whose whole finding is one sentence in a location key', () => {
+    // The format gate: [{"file": "Would reformat: src/gandalf/__main__.py"}]
+    const [f] = one(gate('format', [{ file: 'Would reformat: src/gandalf/__main__.py' }]));
+    assert.equal(f.message, 'Would reformat: src/gandalf/__main__.py', 'not a JSON dump');
+    assert.equal(
+      f.resolvedPath,
+      path.join(root, 'src', 'gandalf', '__main__.py'),
+      'the path inside the sentence still groups the row under its file',
+    );
+    assert.equal(f.line, 0, 'no line was reported, so it gets no squiggle');
+  });
+
+  it('does not mistake prose for a path', () => {
+    const [f] = one(gate('grill_me', [{ finding: 'Consider splitting this up. It is too big.' }]));
+    assert.equal(f.resolvedPath, '');
+    assert.equal(f.message, 'Consider splitting this up. It is too big.');
+  });
+
   it('falls back to the raw record when no key is recognizable', () => {
     const [f] = one(gate('weird', [{ nothing_we_know: 'about' }]));
     assert.equal(f.message, '{"nothing_we_know":"about"}');

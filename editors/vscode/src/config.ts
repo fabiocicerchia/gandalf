@@ -22,6 +22,7 @@ export interface Settings {
   useCache: boolean;
   cachePath: string;
   llm: boolean;
+  llmRetries: number;
   diagnosticsEnabled: boolean;
   minSeverity: Severity;
   maxPerFile: number;
@@ -52,6 +53,7 @@ export function readSettings(scope?: vscode.Uri): Settings {
     useCache: get('scan.useCache', true),
     cachePath: get('scan.cachePath', '.gandalf-cache.json').trim(),
     llm: get('scan.llm', false),
+    llmRetries: get('scan.llmRetries', 1),
     diagnosticsEnabled: get('diagnostics.enabled', true),
     minSeverity: get<Severity>('diagnostics.minSeverity', 'info'),
     maxPerFile: Math.max(1, get('diagnostics.maxPerFile', 500)),

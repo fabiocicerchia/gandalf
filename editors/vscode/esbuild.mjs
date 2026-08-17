@@ -1,5 +1,7 @@
 // Bundle the extension host code. `vscode` is provided by the editor at runtime,
 // so it stays external; everything else is inlined into one CJS file.
+import { readdirSync } from 'node:fs';
+
 import * as esbuild from 'esbuild';
 
 const production = process.argv.includes('--production');
@@ -10,7 +12,9 @@ const tests = process.argv.includes('--tests');
 
 const options = tests
   ? {
-      entryPoints: ['src/test/parse.test.ts'],
+      entryPoints: readdirSync('src/test')
+        .filter((f) => f.endsWith('.test.ts'))
+        .map((f) => `src/test/${f}`),
       bundle: true,
       outdir: 'out',
       format: 'cjs',

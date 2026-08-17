@@ -157,21 +157,34 @@ export async function runDoctor(folder: vscode.WorkspaceFolder, s: Settings): Pr
     ),
   );
 
-  // 5. The LLM endpoint, when summaries are enabled.
-  if (s.llm) {
-    const url = (process.env.GANDALF_LLM_URL ?? 'http://127.0.0.1:8787/v1').replace(/\/$/, '');
-    let ok = false;
-    let detail = '';
-    try {
-      const res = await fetch(`${url}/models`, { signal: AbortSignal.timeout(3000) });
-      ok = res.ok;
-      detail = `HTTP ${res.status}`;
-    } catch (err) {
-      detail = err instanceof Error ? err.message : String(err);
-    }
-    report.push(section('LLM endpoint', [{ ok, text: `${url} — ${detail}` }]));
-    if (!ok) problems.push('LLM endpoint unreachable (summaries will degrade to a note)');
+  // 5. The LLM endpoint. Always checked, not just when summaries are on: the
+  // skill-backed gates call the model themselves, so an unreachable endpoint
+  // costs every scan the retry backoff whatever the summary setting says.
+  const url = (process.env.GANDALF_LLM_URL ?? 'http://127.0.0.1:8787/v1').replace(/\/$/, '');
+  let llmOk = false;
+  let llmDetail = '';
+  try {
+    const res = await fetch(`${url}/models`, { signal: AbortSignal.timeout(3000) });
+    llmOk = res.ok;
+    llmDetail = `HTTP ${res.status}`;
+  } catch (err) {
+    llmDetail = err instanceof Error ? err.message : String(err);
   }
+  const llmLines: Line[] = [{ ok: llmOk, text: `${url} — ${llmDetail}` }];
+  if (!llmOk) {
+    llmLines.push({
+      ok: s.llmRetries >= 0 && s.llmRetries <= 1,
+      text:
+        'the skill-backed judge gates (grill_me, well_architected, security_assessment, …) call ' +
+        'this endpoint regardless of gandalf.scan.llm. Retry budget for editor scans: ' +
+        (s.llmRetries < 0
+          ? "gandalf's default of 3, which costs ~7s per call while the endpoint is down — " +
+            'lower gandalf.scan.llmRetries to fail fast'
+          : `${s.llmRetries} (gandalf.scan.llmRetries)`),
+    });
+  }
+  report.push(section('LLM endpoint', llmLines));
+  if (!llmOk && s.llm) problems.push('LLM endpoint unreachable (summaries will degrade to a note)');
 
   out.info('\n' + report.join('\n\n') + '\n');
 
@@ -182,10 +195,20 @@ export async function runDoctor(folder: vscode.WorkspaceFolder, s: Settings): Pr
 
   const actions: string[] = ['Show log'];
   if (!imageCheck.ok && docker) actions.push('Build tools image');
-  const choice = await (problems.length || missing.length
+  const offerFastFail = !llmOk && s.llmRetries !== 0;
+  if (offerFastFail) actions.push('Skip LLM retries');
+  const choice = await (problems.length || missing.length || offerFastFail
     ? vscode.window.showWarningMessage(`Gandalf: ${headline}`, ...actions)
     : vscode.window.showInformationMessage(`Gandalf: ${headline}`, ...actions));
   if (choice === 'Build tools image') await vscode.commands.executeCommand('gandalf.buildToolsImage');
+  if (choice === 'Skip LLM retries') {
+    await vscode.workspace
+      .getConfiguration('gandalf')
+      .update('scan.llmRetries', 0, vscode.ConfigurationTarget.Workspace);
+    void vscode.window.showInformationMessage(
+      'Gandalf: judge gates will now fail fast instead of retrying an unreachable endpoint.',
+    );
+  }
   if (choice === 'Show log') out.show(true);
 }
 

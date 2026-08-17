@@ -155,23 +155,22 @@ if __name__ == "__main__":
 # the run stays stdlib-fast (the build gate just compiles the Python in scope).
 
 
+def _git(repo, *args):
+    subprocess.run(
+        ["git", "-c", "user.email=t@example.com", "-c", "user.name=test", *args],
+        cwd=repo,
+        check=True,
+    )
+
+
 def _mkrepo(tmp_path):
     repo = tmp_path / "repo"
     (repo / "src").mkdir(parents=True)
     (repo / "src" / "ok.py").write_text("VALUE = 1\n")
     (repo / ".gandalf.toml").write_text('[gandalf]\nonly = ["build"]\n')
-    git = [
-        "git",
-        "-c",
-        "user.email=t@example.com",
-        "-c",
-        "user.name=test",
-        "-c",
-        "commit.gpgsign=false",
-    ]
-    subprocess.run([*git, "init", "-q", "."], cwd=repo, check=True)
-    subprocess.run([*git, "add", "-A"], cwd=repo, check=True)
-    subprocess.run([*git, "commit", "-qm", "init"], cwd=repo, check=True)
+    _git(repo, "init", "-q", ".")
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "commit.gpgsign=false", "commit", "-qm", "init")
     return repo
 
 
@@ -198,6 +197,83 @@ def test_reports_default_to_the_repo_and_record_a_trend(tmp_path, monkeypatch):
     assert len(list((repo / "reports").glob("gandalf-*.json"))) == 1
     trend = json.loads((repo / ".gandalf-trend.jsonl").read_text().splitlines()[0])
     assert trend["score"] == 100
+
+
+def test_stream_emits_one_ndjson_line_per_gate(tmp_path, monkeypatch, capsys):
+    repo = _mkrepo(tmp_path)
+    monkeypatch.chdir(repo)
+    out = tmp_path / "artifacts"
+
+    args = ["--no-llm", "--no-trend", "--no-html", "--stream", "--out-dir", str(out)]
+    assert main(args) == 0
+
+    events = [
+        json.loads(line)
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith('{"event"')
+    ]
+    assert events[0] == {"event": "start", "scope": "working-tree", "gates": 1}
+    (gate,) = events[1:]
+    assert gate["event"] == "gate"
+    assert (gate["index"], gate["total"]) == (1, 1)
+    assert gate["name"] == "build"
+    assert gate["outcome"] == "pass"
+    assert gate["category"] == "Build & tests"
+    assert gate["findings"] == []
+    assert isinstance(gate["duration"], float)
+
+
+def test_stream_reports_cache_hits_too(tmp_path, monkeypatch, capsys):
+    """A cached gate never runs, so nothing would report it — but a consumer's
+    pane must still fill on a warm cache."""
+    repo = _mkrepo(tmp_path)
+    monkeypatch.chdir(repo)
+    out = tmp_path / "artifacts"
+    args = ["--no-llm", "--no-trend", "--no-html", "--cache", "--out-dir", str(out)]
+
+    assert main(args) == 0  # cold: populates .gandalf-cache.json
+    capsys.readouterr()
+    assert main([*args, "--stream"]) == 0
+
+    events = [
+        json.loads(line)
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith('{"event"')
+    ]
+    assert [e["event"] for e in events] == ["start", "gate"]
+    assert events[1]["name"] == "build"
+
+
+def test_stream_applies_baseline_suppression(tmp_path, monkeypatch, capsys):
+    """A baselined finding must not flash up in a consumer's pane and then
+    vanish when the report lands."""
+    repo = _mkrepo(tmp_path)
+    (repo / "src" / "broken.py").write_text("def oops(:\n")
+    _git(repo, "add", "-A")  # tree scans cover tracked files, so it must be staged
+    monkeypatch.chdir(repo)
+    out = tmp_path / "artifacts"
+    common = ["--no-llm", "--no-trend", "--no-html", "--out-dir", str(out)]
+
+    # Red, and the finding streams through.
+    assert main([*common, "--stream"]) == 1
+    streamed = [
+        json.loads(line)
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith('{"event": "gate"')
+    ]
+    assert len(streamed[0]["findings"]) == 1
+
+    # Accept it, then re-run: the gate now streams clean.
+    assert main([*common, "--write-baseline"]) == 0
+    capsys.readouterr()
+    assert main([*common, "--stream"]) == 0
+    streamed = [
+        json.loads(line)
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith('{"event": "gate"')
+    ]
+    assert streamed[0]["findings"] == []
+    assert streamed[0]["outcome"] == "pass"
 
 
 def test_payload_gates_carry_their_category(tmp_path, monkeypatch):

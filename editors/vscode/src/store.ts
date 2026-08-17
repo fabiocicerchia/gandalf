@@ -1,10 +1,15 @@
 /**
  * What the panel, the diagnostics and the status bar all read from.
  *
- * Two tiers, because the two scan scopes answer different questions:
+ * Three tiers, newest winning, because they answer different questions:
  *  - a workspace/staged run is the project truth (verdict, score, every gate);
  *  - a file run is a fast refresh of one file, and only replaces that file's
- *    findings — everything else stays as the last project run left it.
+ *    findings — everything else stays as the last project run left it;
+ *  - a *stream* is the run in progress: gandalf reports each gate as it
+ *    finishes (`--stream`), so those gates' findings replace what the last run
+ *    said about them while the rest of the board stays up. The verdict and score
+ *    are not part of this tier — they are properties of a whole run, and only
+ *    the final report has them.
  */
 import * as vscode from 'vscode';
 
@@ -27,9 +32,35 @@ export class ResultStore {
   private projects = new Map<string, Snapshot>();
   private files = new Map<string, Map<string, { at: number; findings: Finding[] }>>();
   private runs = new Map<string, LastRun>();
+  /** Gates reported by the run currently in flight, keyed by gate name. */
+  private streams = new Map<string, Map<string, Finding[]>>();
 
   private readonly changed = new vscode.EventEmitter<void>();
   readonly onDidChange = this.changed.event;
+
+  /** A run started reporting gates; its results supersede per-gate history. */
+  beginStream(folder: vscode.WorkspaceFolder): void {
+    this.streams.set(key(folder), new Map());
+  }
+
+  /**
+   * Deliberately does not fire `onDidChange`: gates stream in bursts, and that
+   * event means "a run settled". The caller repaints the pane on its own leash.
+   */
+  pushStream(folder: vscode.WorkspaceFolder, gate: string, findings: Finding[]): void {
+    const stream = this.streams.get(key(folder));
+    if (!stream) return; // The run was cancelled or superseded.
+    stream.set(gate, findings);
+  }
+
+  /** The run ended — its report (or its failure) is now the whole truth. */
+  endStream(folder: vscode.WorkspaceFolder): void {
+    if (this.streams.delete(key(folder))) this.changed.fire();
+  }
+
+  streamedGates(folder: vscode.WorkspaceFolder): number {
+    return this.streams.get(key(folder))?.size ?? 0;
+  }
 
   setProject(folder: vscode.WorkspaceFolder, snapshot: Snapshot, durationMs: number): void {
     const k = key(folder);
@@ -80,26 +111,39 @@ export class ResultStore {
     return this.runs.get(key(folder));
   }
 
-  /** Project findings with any per-file refreshes merged over the top. */
+  /**
+   * The board: the last project run, with per-file refreshes over the top, and
+   * the in-flight run's gates over that.
+   */
   findings(folder: vscode.WorkspaceFolder): Finding[] {
-    const perFile = this.files.get(key(folder));
-    const base = this.projects.get(key(folder))?.findings ?? [];
-    if (!perFile || perFile.size === 0) return base;
-    const overridden = new Set(perFile.keys());
-    const merged = base.filter((f) => !f.resolvedPath || !overridden.has(f.resolvedPath));
-    for (const entry of perFile.values()) merged.push(...entry.findings);
+    const k = key(folder);
+    const stream = this.streams.get(k);
+    const perFile = this.files.get(k);
+    const streamed = stream && stream.size > 0 ? stream : undefined;
+    const fresh = (f: Finding) => !streamed?.has(f.gate);
+
+    let merged = (this.projects.get(k)?.findings ?? []).filter(fresh);
+    if (perFile && perFile.size > 0) {
+      const paths = new Set(perFile.keys());
+      merged = merged.filter((f) => !f.resolvedPath || !paths.has(f.resolvedPath));
+      for (const entry of perFile.values()) merged.push(...entry.findings.filter(fresh));
+    }
+    if (streamed) for (const findings of streamed.values()) merged.push(...findings);
     return merged.sort(compareFindings);
   }
 
   folders(): vscode.WorkspaceFolder[] {
     const all = vscode.workspace.workspaceFolders ?? [];
-    return all.filter((f) => this.projects.has(key(f)) || this.files.has(key(f)));
+    return all.filter(
+      (f) => this.projects.has(key(f)) || this.files.has(key(f)) || this.streams.has(key(f)),
+    );
   }
 
   clear(): void {
     this.projects.clear();
     this.files.clear();
     this.runs.clear();
+    this.streams.clear();
     this.changed.fire();
   }
 
