@@ -11,7 +11,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 
-import { gatesByStatus, LEVEL_LABEL, LEVELS, SEVERITY_LABEL } from './parse';
+import { LEVEL_LABEL, LEVELS, SEVERITY_LABEL } from './parse';
 import { ResultStore } from './store';
 import { Finding, Level, Outcome, Severity } from './types';
 
@@ -352,10 +352,10 @@ export class FindingsView implements vscode.TreeDataProvider<Node> {
     }
 
     if (snapshot) {
-      const { blocked, inapplicable } = gatesByStatus(snapshot.payload);
+      const { blocked, inapplicable } = snapshot;
       if (blocked.length) {
         lines.push(
-          `⚠ ${blocked.length} gate(s) could not run (${blocked.map((g) => g.name).join(', ')}) — run “Gandalf: Check Environment”.`,
+          `⚠ ${blocked.length} gate(s) could not run (${blocked.join(', ')}) — run “Gandalf: Check Environment”.`,
         );
       }
       const quiet: string[] = [];

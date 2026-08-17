@@ -58,28 +58,24 @@ export class ContentGuard {
     return crypto.createHash('sha1').update(buf).digest('hex');
   }
 
-  /** True when the file is byte-identical to the last *successful* scan of it. */
-  async unchanged(absPath: string): Promise<boolean> {
-    const known = this.hashes.get(absPath);
-    if (!known) return false;
+  /**
+   * Hash the file once and say whether it changed since its last successful
+   * scan. Returns the hash too, for `commit` — reading and hashing the file a
+   * second time to answer the same question would double the I/O of every save.
+   */
+  async inspect(absPath: string): Promise<{ unchanged: boolean; hash: string }> {
+    let hash = '';
     try {
-      return (await this.hash(absPath)) === known;
+      hash = await this.hash(absPath);
     } catch {
-      return false;
+      return { unchanged: false, hash: '' };
     }
+    return { unchanged: this.hashes.get(absPath) === hash, hash };
   }
 
-  /** Hash of what a run is about to scan. Pair with `commit` once it succeeds. */
-  async snapshot(absPath: string): Promise<string> {
-    try {
-      return await this.hash(absPath);
-    } catch {
-      return '';
-    }
-  }
-
+  /** Remember what a run actually scanned, once it has succeeded. */
   commit(absPath: string, hash: string): void {
-    this.hashes.set(absPath, hash);
+    if (hash) this.hashes.set(absPath, hash);
   }
 
   forget(): void {

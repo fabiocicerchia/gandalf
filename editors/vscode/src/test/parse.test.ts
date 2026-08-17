@@ -328,14 +328,8 @@ describe('gates that assessed nothing', () => {
 
   it('separates blocked gates from inapplicable ones', () => {
     const { blocked, inapplicable } = gatesByStatus(bare());
-    assert.deepEqual(
-      blocked.map((g) => g.name),
-      ['trivy', 'semgrep', 'ci_act'],
-    );
-    assert.deepEqual(
-      inapplicable.map((g) => g.name),
-      ['dalfox', 'compliance'],
-    );
+    assert.deepEqual(blocked, ['trivy', 'semgrep', 'ci_act']);
+    assert.deepEqual(inapplicable, ['dalfox', 'compliance']);
   });
 
   it('keeps them out of the findings list, but never hides a red gate', () => {

@@ -61,21 +61,39 @@ function toEvent(parsed: unknown): StreamEvent | undefined {
 export class EventParser {
   private tail = '';
 
-  /** Feed a chunk of stdout; returns whatever complete events it contained. */
-  feed(chunk: string): StreamEvent[] {
+  /**
+   * Feed a chunk of stdout. Returns the complete events it contained, and the
+   * rest of the text separately: on a large tree the event lines *are* every
+   * finding as JSON, and buffering them alongside the parsed results would hold
+   * the whole thing in memory twice for the sake of two path lines at the end.
+   */
+  feed(chunk: string): { events: StreamEvent[]; text: string } {
     const lines = (this.tail + chunk).split('\n');
     this.tail = lines.pop() ?? '';
     const events: StreamEvent[] = [];
+    const text: string[] = [];
     for (const line of lines) {
       const trimmed = line.trim();
-      if (!trimmed.startsWith(PREFIX)) continue;
+      if (!trimmed.startsWith(PREFIX)) {
+        text.push(line);
+        continue;
+      }
       try {
         const event = toEvent(JSON.parse(trimmed));
         if (event) events.push(event);
+        else text.push(line); // Not an event after all — keep it readable.
       } catch {
         // A truncated or malformed line is not worth failing a scan over.
+        text.push(line);
       }
     }
-    return events;
+    return { events, text: text.length ? text.join('\n') + '\n' : '' };
+  }
+
+  /** Whatever was left unterminated when the process exited. */
+  flush(): string {
+    const rest = this.tail;
+    this.tail = '';
+    return rest;
   }
 }

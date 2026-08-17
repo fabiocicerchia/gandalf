@@ -7,7 +7,7 @@ import { DiagnosticGroup, DiagnosticPublisher } from './diagnostics';
 import { buildToolsImage, runDoctor } from './doctor';
 import { FindingsView } from './findingsView';
 import { disposeLog, log } from './log';
-import { normalize, normalizeGate } from './parse';
+import { gatesByStatus, normalize, normalizeGate, pathCache, slim } from './parse';
 import { describeProgress, ScanProgress } from './progress';
 import { ReportView } from './report';
 import {
@@ -141,7 +141,10 @@ export function activate(context: vscode.ExtensionContext): void {
     const s = settingsFor(job.folder);
     const isProjectScope = job.kind !== 'file';
 
-    if (job.kind === 'file' && job.absPath && !job.manual && (await guard.unchanged(job.absPath))) {
+    // Hashed once: the answer to "did this change" is also what gets committed
+    // if the run succeeds.
+    const scanned = job.absPath ? await guard.inspect(job.absPath) : undefined;
+    if (job.kind === 'file' && !job.manual && scanned?.unchanged) {
       log().debug(`unchanged since last scan, skipping: ${job.relPath}`);
       return;
     }
@@ -149,6 +152,9 @@ export function activate(context: vscode.ExtensionContext): void {
     scanning = jobLabel(job);
     findingsView.setScanning(jobLabel(job));
     statusBar.scanning(jobLabel(job));
+    // One cache for the whole run: streaming normalizes gate by gate, and a
+    // fresh cache per gate re-stats paths earlier gates already resolved.
+    const paths = pathCache();
     // Streamed gates arrive in bursts; the tree is rebuilt on a short leash so
     // a 40-gate run doesn't mean 40 full re-renders back to back.
     let refreshAt = 0;
@@ -167,9 +173,6 @@ export function activate(context: vscode.ExtensionContext): void {
       findingsView.setScanning(`${jobLabel(job)} · ${describeProgress(p)}`);
       job.report?.(p);
     };
-    // Hash the bytes we are about to scan, and only remember them if the run
-    // succeeds — a failed scan must not suppress the next attempt.
-    const scanned = job.absPath ? await guard.snapshot(job.absPath) : '';
     try {
       const outDir = outDirFor(job.folder, s);
       const result = await runGandalf(
@@ -186,7 +189,7 @@ export function activate(context: vscode.ExtensionContext): void {
           onProgress,
           onStart: () => store.beginStream(job.folder),
           onGate: (gate) => {
-            store.pushStream(job.folder, gate.name, normalizeGate(gate, job.folder.uri.fsPath));
+            store.pushStream(job.folder, gate.name, normalizeGate(gate, job.folder.uri.fsPath, paths));
             refreshSoon();
           },
         },
@@ -194,9 +197,13 @@ export function activate(context: vscode.ExtensionContext): void {
         token,
       );
 
+      const { blocked, inapplicable } = gatesByStatus(result.payload);
       const snapshot: Snapshot = {
-        payload: result.payload,
-        findings: normalize(result.payload, job.folder.uri.fsPath),
+        findings: normalize(result.payload, job.folder.uri.fsPath, paths),
+        blocked,
+        inapplicable,
+        // Slimmed last: everything above still needed the raw findings.
+        payload: slim(result.payload),
         jsonPath: result.jsonPath,
         htmlPath: result.htmlPath,
         scope: result.payload.scope,
@@ -208,7 +215,8 @@ export function activate(context: vscode.ExtensionContext): void {
         store.setProject(job.folder, snapshot, result.durationMs);
         if (result.htmlPath) reportView.current = result.htmlPath;
       }
-      if (job.absPath && scanned) guard.commit(job.absPath, scanned);
+      // Only remembered on success — a failed scan must not suppress the retry.
+      if (job.absPath && scanned) guard.commit(job.absPath, scanned.hash);
       publishDiagnostics();
       if (isProjectScope) logTimings(result.payload, result.durationMs);
       await prune(outDir, s.reportsKeep);

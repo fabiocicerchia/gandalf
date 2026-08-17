@@ -265,6 +265,43 @@ Both are settings if you want the CLI behaviour back.
 model; ask for one when you want to read it (`Gandalf: Open Report (regenerate
 with LLM summary)`), or set `gandalf.scan.llm`.
 
+### What the extension itself costs
+
+Gandalf's gates dominate any scan, but the extension shouldn't add to it. The
+numbers below are from a synthetic tree of 10,000 findings over 2,000 files —
+larger than most real repositories, chosen so the costs are visible at all:
+
+| | Before | Now |
+|---|---|---|
+| Filesystem calls while streaming | 10,000 (one per finding) | 2,000 (one per distinct file) |
+| Normalizing a streamed run | 50 ms | 28 ms |
+| Re-deriving the board per scan | 269 ms | ~0 ms (memoized) |
+| Scan output held in memory | all of stdout | 33% of it |
+| Retained per scan | 4.5 MB | 3.7 MB |
+
+The mechanisms, since they constrain how the code may change:
+
+- **One path cache per run, not per gate.** Placing a finding means asking the
+  filesystem where its file is; streaming normalizes gate by gate, so a
+  per-gate cache re-stats paths an earlier gate already resolved. These are
+  synchronous calls on the extension host's thread, which is the one drawing
+  your editor.
+- **The merged board is memoized** against a revision every mutation bumps. The
+  pane, the status bar and the diagnostics each ask for it, several times per
+  repaint, and a streamed scan repaints often.
+- **Streamed findings are never buffered.** With `--stream` the findings arrive
+  on stdout as JSON; they are parsed as they land and only the scorecard and the
+  two report paths are kept, rather than holding every finding twice for the
+  sake of two lines at the end.
+- **Raw findings are dropped once normalized.** The report is kept for its
+  verdict, gate summaries and durations, not for data that has already been
+  converted.
+- **A saved file is read once**, not once to check whether it changed and again
+  to record what was scanned.
+
+If you want to see where a scan's time actually goes, that is the gates, and
+`Gandalf: Show Gate Timings` names them.
+
 ### Profiles worth copying
 
 Comfortable default — nothing to configure:

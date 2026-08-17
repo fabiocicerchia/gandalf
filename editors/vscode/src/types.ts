@@ -81,8 +81,17 @@ export interface Finding {
 
 /** One completed gandalf run against one workspace folder. */
 export interface Snapshot {
+  /**
+   * The run record, minus each gate's raw `findings` array: those are dropped
+   * once normalized, since nothing reads them again and they are most of the
+   * payload's weight. Everything derived from them is on this object already.
+   */
   payload: Payload;
   findings: Finding[];
+  /** Gates that wanted to run and couldn't — computed before the raw data went. */
+  blocked: string[];
+  /** Gates that had nothing to assess. */
+  inapplicable: string[];
   jsonPath: string;
   htmlPath: string;
   /** Scope label as gandalf resolved it ("working-tree", "staged", "…:src/x.py"). */

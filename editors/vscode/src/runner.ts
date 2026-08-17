@@ -65,6 +65,8 @@ export interface RunResult {
 }
 
 const MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
+/** The scorecard and the report paths are a few KB; this is only a backstop. */
+const MAX_PLAIN_CHARS = 256 * 1024;
 const HELP_TIMEOUT_MS = 20_000;
 
 let launcherCache = new Map<string, Launcher>();
@@ -117,6 +119,8 @@ function exec(
     onStderr?: (chunk: string) => void;
     /** Receives stdout as it arrives, for streamed gate results. */
     onStdout?: (chunk: string) => void;
+    /** When false, stdout is handed to `onStdout` only and never buffered. */
+    collectStdout?: boolean;
   },
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
@@ -160,7 +164,7 @@ function exec(
     });
 
     child.stdout?.on('data', (b: Buffer) => {
-      if (outBytes < MAX_OUTPUT_BYTES) {
+      if (opts.collectStdout !== false && outBytes < MAX_OUTPUT_BYTES) {
         out.push(b);
         outBytes += b.length;
       }
@@ -302,7 +306,10 @@ export async function runGandalf(
   const progress = new ProgressParser();
   const events = new EventParser();
   let diagnostics = '';
-  const { code, stdout, stderr } = await exec(launcher.command, args, {
+  // Only the non-event stdout is kept: the scorecard and the two report paths.
+  // Capped because it is a diagnostic aid, not a document.
+  let plain = '';
+  const { code, stderr } = await exec(launcher.command, args, {
     cwd: req.folder.uri.fsPath,
     env: {
       ...launcher.env,
@@ -320,29 +327,34 @@ export async function runGandalf(
       diagnostics += noise;
       if (state) req.onProgress?.(state);
     },
+    collectStdout: false,
     onStdout: (chunk) => {
-      for (const event of events.feed(chunk)) {
+      const { events: found, text } = events.feed(chunk);
+      plain += text;
+      if (plain.length > MAX_PLAIN_CHARS) plain = plain.slice(-MAX_PLAIN_CHARS);
+      for (const event of found) {
         if (event.event === 'start') req.onStart?.(event.gates, event.scope);
         else req.onGate?.(event);
       }
     },
   });
+  plain += events.flush();
   diagnostics += progress.flush();
 
   if (UNTRACKED.test(stderr)) {
     throw new ScanSkippedError(`${req.relPath ?? req.kind}: not tracked by git — nothing to scan`);
   }
 
-  const jsonMatch = JSON_LINE.exec(stdout);
+  const jsonMatch = JSON_LINE.exec(plain);
   if (!jsonMatch) {
     // Exit 1 is a red verdict (normal); anything without a report is a real error.
     const detail = diagnostics || stderr;
-    log().error(`gandalf produced no report (exit ${code})\n${tail(detail || stdout)}`);
-    throw new Error(`gandalf failed (exit ${code}): ${tail(detail || stdout, 3) || 'no output'}`);
+    log().error(`gandalf produced no report (exit ${code})\n${tail(detail || plain)}`);
+    throw new Error(`gandalf failed (exit ${code}): ${tail(detail || plain, 3) || 'no output'}`);
   }
 
   const jsonPath = jsonMatch[1].trim();
-  const htmlPath = (HTML_LINE.exec(stdout)?.[1] ?? '').trim();
+  const htmlPath = (HTML_LINE.exec(plain)?.[1] ?? '').trim();
   const payload = JSON.parse(await fs.promises.readFile(jsonPath, 'utf8')) as Payload;
   const durationMs = Date.now() - started;
   log().info(

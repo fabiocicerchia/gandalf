@@ -6,8 +6,9 @@ import * as esbuild from 'esbuild';
 
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
-// The unit tests cover the vscode-free modules (parse/types), so they bundle
-// and run under plain `node --test` with no editor and no test framework.
+// The unit tests run under plain `node --test`, with no editor and no test
+// framework: the vscode-free modules import nothing special, and the store gets
+// the small shim in src/test/ aliased in for the `vscode` import.
 const tests = process.argv.includes('--tests');
 
 const options = tests
@@ -20,7 +21,8 @@ const options = tests
       format: 'cjs',
       platform: 'node',
       target: 'node18',
-      external: ['vscode', 'node:*'],
+      external: ['node:*'],
+      alias: { vscode: './src/test/vscode-shim.ts' },
       sourcemap: true,
       logLevel: 'info',
     }

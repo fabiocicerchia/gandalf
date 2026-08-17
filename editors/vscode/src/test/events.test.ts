@@ -16,12 +16,12 @@ const GATE =
 
 describe('stream events', () => {
   it('reads a start event', () => {
-    const [e] = new EventParser().feed(START + '\n');
+    const [e] = new EventParser().feed(START + '\n').events;
     assert.deepEqual(e, { event: 'start', scope: 'working-tree', gates: 3 });
   });
 
   it('reads a gate event with its findings intact', () => {
-    const [e] = new EventParser().feed(GATE + '\n');
+    const [e] = new EventParser().feed(GATE + '\n').events;
     assert.equal(e.event, 'gate');
     const g = e as GateEvent;
     assert.equal(g.name, 'ruff');
@@ -37,40 +37,44 @@ describe('stream events', () => {
     const parser = new EventParser();
     const stream = `${START}\n${GATE}\n`;
     const events = [];
-    for (const ch of stream) events.push(...parser.feed(ch));
+    for (const ch of stream) events.push(...parser.feed(ch).events);
     assert.deepEqual(
       events.map((e) => e.event),
       ['start', 'gate'],
     );
   });
 
-  it('ignores the scorecard sharing the stream', () => {
+  it('separates the scorecard sharing the stream from the events', () => {
     const parser = new EventParser();
-    const events = parser.feed(
+    const { events, text } = parser.feed(
       `${GATE}\n\n🧙  GANDALF — working-tree\n  🟡 ruff  1 finding(s)\nJSON report: /tmp/x.json\n`,
     );
     assert.equal(events.length, 1);
+    // The caller keeps only this, so the report paths must survive in it.
+    assert.match(text, /^JSON report: \/tmp\/x\.json$/m);
+    assert.match(text, /GANDALF/);
+    assert.doesNotMatch(text, /"event"/, 'the findings themselves are not buffered');
   });
 
   it('holds a partial line until the newline arrives', () => {
     const parser = new EventParser();
     const half = GATE.slice(0, 40);
-    assert.deepEqual(parser.feed(half), []);
-    assert.equal(parser.feed(GATE.slice(40) + '\n').length, 1);
+    assert.deepEqual(parser.feed(half).events, []);
+    assert.equal(parser.feed(GATE.slice(40) + '\n').events.length, 1);
   });
 
   it('drops a malformed or truncated event rather than throwing', () => {
     const parser = new EventParser();
-    assert.deepEqual(parser.feed('{"event": "gate", "name": "ru\n'), []);
-    assert.deepEqual(parser.feed('{"event": "gate", "name": 42, "outcome": "warn"}\n'), []);
-    assert.deepEqual(parser.feed('{"event": "gate", "name": "x", "outcome": "sideways"}\n'), []);
-    assert.deepEqual(parser.feed('{"event": "surprise"}\n'), []);
+    assert.deepEqual(parser.feed('{"event": "gate", "name": "ru\n').events, []);
+    assert.deepEqual(parser.feed('{"event": "gate", "name": 42, "outcome": "warn"}\n').events, []);
+    assert.deepEqual(parser.feed('{"event": "gate", "name": "x", "outcome": "sideways"}\n').events, []);
+    assert.deepEqual(parser.feed('{"event": "surprise"}\n').events, []);
     // …and still reads the next good line.
-    assert.equal(parser.feed(GATE + '\n').length, 1);
+    assert.equal(parser.feed(GATE + '\n').events.length, 1);
   });
 
   it('defaults the optional fields of a minimal gate event', () => {
-    const [e] = new EventParser().feed('{"event": "gate", "name": "x", "outcome": "pass"}\n');
+    const [e] = new EventParser().feed('{"event": "gate", "name": "x", "outcome": "pass"}\n').events;
     const g = e as GateEvent;
     assert.deepEqual(g.findings, []);
     assert.equal(g.score, 0);
