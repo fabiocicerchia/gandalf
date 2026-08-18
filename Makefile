@@ -1,7 +1,7 @@
 .PHONY: help setup lint test analyze install tools ext-build ext-package ext-install ext-publish
 
 BINDIR ?= $(HOME)/.local/bin
-EXT_DIR ?= editors/vscode
+EXT_DIR ?= extensions/vscode
 # Read rather than hard-coded: vsce names the VSIX after the version in the
 # manifest, so a release bump must not turn ext-publish into "file not found".
 EXT_VERSION := $(shell node -p "require('./$(EXT_DIR)/package.json').version" 2>/dev/null)

@@ -29,9 +29,9 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/fabiocicerchia/gandalf.git",
-    "directory": "editors/vscode"
+    "directory": "extensions/vscode"
   },
-  "homepage": "https://github.com/fabiocicerchia/gandalf/tree/main/editors/vscode",
+  "homepage": "https://github.com/fabiocicerchia/gandalf/tree/main/extensions/vscode",
   "bugs": {
     "url": "https://github.com/fabiocicerchia/gandalf/issues"
   },

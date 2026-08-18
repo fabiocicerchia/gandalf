@@ -46,7 +46,7 @@ make ext-publish # ...and publish it to both marketplaces (normally CI's job)
 - Keep the code stdlib-only — no runtime dependencies.
 - Gates live in `src/gandalf/gates/`; each `.py` exports a `Gate` subclass and
   is auto-discovered. Tests live in `tests/`.
-- `editors/vscode/` is a separate TypeScript workspace (the VS Code extension).
+- `extensions/vscode/` is a separate TypeScript workspace (the VS Code extension).
   The stdlib-only rule is about gandalf itself — the extension has dev-only npm
   dependencies and ships no runtime ones. It drives gandalf purely through the
   CLI and the JSON report, so don't couple it to internals. `npm run typecheck &&

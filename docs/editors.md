@@ -2,7 +2,7 @@
 
 ## VS Code
 
-The extension lives in [`editors/vscode/`](https://github.com/fabiocicerchia/gandalf/tree/main/editors/vscode)
+The extension lives in [`extensions/vscode/`](https://github.com/fabiocicerchia/gandalf/tree/main/extensions/vscode)
 and runs the same CLI you run by hand — it shells out to `gandalf`, reads the
 JSON report, and shows the HTML report as-is. Nothing about gandalf changes
 because an editor is driving it.
@@ -29,11 +29,11 @@ make ext-package                  # just build the .vsix, install it by hand
 ```
 
 Reload the window afterwards; a **Gandalf** tab appears in the bottom panel.
-For development, `npm run watch` and <kbd>F5</kbd> from `editors/vscode/` launch
+For development, `npm run watch` and <kbd>F5</kbd> from `extensions/vscode/` launch
 an Extension Development Host. It carries no version of its own: release-please
 bumps its manifest along with `version.txt`, and publishing the release publishes
 the extension — see
-[Releasing](https://github.com/fabiocicerchia/gandalf/tree/main/editors/vscode#releasing).
+[Releasing](https://github.com/fabiocicerchia/gandalf/tree/main/extensions/vscode#releasing).
 
 The extension finds gandalf via `gandalf.path` (a wrapper or a checkout — either
 shape is recognised), the open workspace if it is a gandalf checkout, `gandalf`
@@ -70,7 +70,7 @@ unchanged file is not rescanned, wide scans reuse gandalf's `--cache`, and
 artifacts go to the extension's own storage (`--out-dir`) with no trend entry
 (`--no-trend`) rather than into `reports/`.
 
-The [extension README](https://github.com/fabiocicerchia/gandalf/tree/main/editors/vscode#keeping-it-cheap)
+The [extension README](https://github.com/fabiocicerchia/gandalf/tree/main/extensions/vscode#keeping-it-cheap)
 has the full breakdown and ready-made settings profiles for large repositories,
 laptops on battery, and commit-shaped feedback.
 

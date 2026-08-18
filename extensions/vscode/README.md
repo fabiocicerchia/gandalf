@@ -45,7 +45,7 @@ you can install it by hand: **Extensions** view → `...` menu →
 PATH** from the Command Palette and use `make ext-install`.)
 
 To hack on it instead of installing it: `npm run watch`, open
-`editors/vscode/` as the workspace folder, press <kbd>F5</kbd>. That launches an
+`extensions/vscode/` as the workspace folder, press <kbd>F5</kbd>. That launches an
 Extension Development Host with the extension loaded from source.
 
 To remove it: **Extensions** view → Gandalf → Uninstall, or
@@ -419,7 +419,7 @@ with fixtures taken from real gate output.
 ## Releasing
 
 The extension has no version of its own. `release-please-config.json` lists
-`editors/vscode/package.json` (and its lock) as extra files, so the release PR
+`extensions/vscode/package.json` (and its lock) as extra files, so the release PR
 that bumps `version.txt` bumps the extension in the same commit, and the tag
 means one thing for both surfaces.
 

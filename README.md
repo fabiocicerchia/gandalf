@@ -70,7 +70,7 @@ More in [`docs/getting-started.md`](docs/getting-started.md).
 
 ## Editor integration
 
-A VS Code extension lives in [`editors/vscode/`](editors/vscode/): findings as
+A VS Code extension lives in [`extensions/vscode/`](extensions/vscode/): findings as
 inline diagnostics, a bottom pane filtered to the current file or the whole
 project, and the same HTML scorecard in an editor tab. It scans the saved file
 on save and the whole tree on demand, so it stays off your CPU.

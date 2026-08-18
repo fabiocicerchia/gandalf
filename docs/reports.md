@@ -31,7 +31,7 @@ re-derive it; `duration` is the gate's wall-clock time in seconds.
 `findings` are passed through from each underlying tool unchanged, so the same
 field goes by different names across gates (`path` / `filename` / `file`,
 `line` / `line_no` / `location.row`, …). `gandalf/report.py`, `gandalf/sarif.py`
-and `editors/vscode/src/parse.ts` each reconcile the same key lists.
+and `extensions/vscode/src/parse.ts` each reconcile the same key lists.
 
 ## Score badge
 

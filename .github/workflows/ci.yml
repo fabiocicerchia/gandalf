@@ -47,14 +47,14 @@ jobs:
       - name: Test
         run: make test
 
-  # editors/vscode is a separate TypeScript workspace with its own tests, and
+  # extensions/vscode is a separate TypeScript workspace with its own tests, and
   # publish-extension.yml packages it straight from a tag. Without this the tag
   # would be the first time any of it ran here.
   extension:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: editors/vscode
+        working-directory: extensions/vscode
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
@@ -62,7 +62,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: editors/vscode/package-lock.json
+          cache-dependency-path: extensions/vscode/package-lock.json
 
       - name: Install
         run: npm ci
