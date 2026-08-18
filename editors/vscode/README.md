@@ -416,6 +416,55 @@ has to understand gate output; its key lists mirror `gandalf/report.py`,
 `gandalf/sarif.py` and `gandalf/suppress.py`, and it is covered by unit tests
 with fixtures taken from real gate output.
 
+## Releasing
+
+The extension versions itself. release-please tracks gandalf's `version.txt`
+and knows nothing about `editors/vscode/package.json`, so the two numbers move
+independently and the extension is published from its own tag.
+
+One-time setup, for whoever holds the publisher:
+
+1. Create an [Azure DevOps](https://dev.azure.com) organization — the Marketplace
+   authenticates against it, and nothing else about it is used.
+2. Create a Personal Access Token: **User settings ▸ Personal access tokens ▸
+   New Token**, organization **All accessible organizations**, scope
+   **Marketplace ▸ Manage**. Anything narrower cannot publish. Copy it now; it is
+   shown once.
+3. Create the publisher `fabiocicerchia` at
+   <https://marketplace.visualstudio.com/manage> with that account.
+4. For [Open VSX](https://open-vsx.org) — the registry VSCodium, Cursor and
+   Windsurf read — sign in with GitHub, sign the publisher agreement, and create
+   a token under **User settings ▸ Access tokens**.
+5. Put both in the repository as the secrets `VSCE_PAT` and `OVSX_PAT`. Either
+   may be omitted: the step that has no token says so and is skipped.
+
+Then, per release:
+
+```sh
+# 1. bump "version" in package.json and add the section to CHANGELOG.md
+# 2. tag it — the tag must agree with the manifest, CI checks that it does
+git tag vscode-v0.2.0 && git push origin vscode-v0.2.0
+```
+
+`.github/workflows/publish-extension.yml` takes it from there: typecheck, tests,
+production bundle, `.vsix`, both registries, and the `.vsix` attached to a GitHub
+release so it stays installable by hand. It also runs on **workflow_dispatch**,
+which builds and publishes whatever is on the default branch — useful for the
+very first publish, before any tag exists.
+
+To publish from a laptop instead:
+
+```sh
+make ext-publish          # vsce publish, from the repository root
+```
+
+That needs `vsce login fabiocicerchia` once, or `VSCE_PAT` in the environment.
+
+Marketplace listing copy comes from `package.json` (`displayName`,
+`description`, `categories`, `keywords`, `icon`, `galleryBanner`) and this
+README, rendered as the extension's page. Relative links in it break there, so
+keep them absolute.
+
 ## License
 
 Apache-2.0, same as gandalf.

@@ -1,4 +1,4 @@
-.PHONY: help setup lint test analyze install tools ext-package ext-install
+.PHONY: help setup lint test analyze install tools ext-package ext-install ext-publish
 
 BINDIR ?= $(HOME)/.local/bin
 EXT_DIR ?= editors/vscode
@@ -42,3 +42,9 @@ ext-install: ext-package ## Build the VS Code extension and install it (override
 	  exit 1; }
 	@vsix=$$(ls -t "$(EXT_DIR)"/*.vsix | head -1) && "$(CODE)" --install-extension "$$vsix" --force
 	@echo "installed — reload the window (Developer: Reload Window)"
+
+# Needs a Marketplace PAT: `vsce login fabiocicerchia` once, or VSCE_PAT in the
+# environment. CI does this from a `vscode-vX.Y.Z` tag — see
+# .github/workflows/publish-extension.yml.
+ext-publish: ## Publish the VS Code extension to the Marketplace
+	@cd "$(EXT_DIR)" && { [ -d node_modules ] || npm install; } && npm run publish

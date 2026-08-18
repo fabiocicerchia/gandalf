@@ -46,3 +46,24 @@ jobs:
 
       - name: Test
         run: make test
+
+  # editors/vscode is a separate TypeScript workspace with its own tests, and
+  # publish-extension.yml packages it straight from a tag. Without this the tag
+  # would be the first time any of it ran here.
+  extension:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: editors/vscode
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      # The runner's Node is 20+; the lockfile is not in git, so no `npm ci`.
+      - name: Install
+        run: npm install --no-audit --no-fund
+
+      # `package` runs vscode:prepublish first — typecheck, then the tests —
+      # so this is the whole workspace's build, and it also proves the manifest
+      # still packages, which is what publish-extension.yml does from a tag.
+      - name: Typecheck, test and package
+        run: npm run package

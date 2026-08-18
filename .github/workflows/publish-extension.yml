@@ -1,0 +1,86 @@
+name: publish-extension
+
+# Publish editors/vscode to the Visual Studio Marketplace and Open VSX.
+#
+# The extension versions itself: release-please tracks gandalf's version.txt and
+# knows nothing about editors/vscode/package.json. So this runs off its own tag,
+# `vscode-vX.Y.Z`, which must match the version in that manifest — bump the
+# manifest, bump the extension CHANGELOG, tag, push the tag.
+#
+# Both registries are optional: a step whose token secret is missing says so and
+# is skipped, so a fork can build the .vsix without holding either credential.
+#   VSCE_PAT — Azure DevOps PAT, scope "Marketplace ▸ Manage", all accessible
+#              organizations. https://marketplace.visualstudio.com/manage
+#   OVSX_PAT — Open VSX access token. https://open-vsx.org/user-settings/tokens
+
+on:
+  push:
+    tags: [vscode-v*]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-extension-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # attach the .vsix to the GitHub release
+    defaults:
+      run:
+        working-directory: editors/vscode
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      # The runner ships Node 20+, which is all the build asks for, and the
+      # lockfile is not in git (the deps are dev-only), so there is no `npm ci`.
+      - name: Install
+        run: npm install --no-audit --no-fund
+
+      # A tag that disagrees with the manifest would publish the wrong version,
+      # or nothing at all. Fail here rather than halfway through.
+      - name: Check the tag against the manifest
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          manifest=$(node -p "require('./package.json').version")
+          tagged=${GITHUB_REF_NAME#vscode-v}
+          if [ "$manifest" != "$tagged" ]; then
+            echo "tag $GITHUB_REF_NAME says $tagged, package.json says $manifest"
+            exit 1
+          fi
+
+      # `npm run package` runs vscode:prepublish first — typecheck, tests, then
+      # the production bundle. A red test never reaches a registry.
+      - name: Package
+        run: npm run package
+
+      - name: Publish to the Visual Studio Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          if [ -z "$VSCE_PAT" ]; then echo "VSCE_PAT not set — skipping"; exit 0; fi
+          npm exec -- vsce publish --no-dependencies --packagePath ./*.vsix
+
+      # The registry VSCodium, Cursor and Windsurf read. Same .vsix.
+      - name: Publish to Open VSX
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          if [ -z "$OVSX_PAT" ]; then echo "OVSX_PAT not set — skipping"; exit 0; fi
+          npx --yes ovsx@1.1.1 publish ./*.vsix --pat "$OVSX_PAT"
+
+      # So the .vsix is installable by hand from the release page too.
+      - name: Attach the .vsix to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
+            gh release create "$GITHUB_REF_NAME" \
+              --title "VS Code extension $GITHUB_REF_NAME" \
+              --generate-notes
+          gh release upload "$GITHUB_REF_NAME" ./*.vsix --clobber

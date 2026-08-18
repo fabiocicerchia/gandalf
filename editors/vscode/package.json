@@ -5,6 +5,12 @@
   "version": "0.1.0",
   "publisher": "fabiocicerchia",
   "license": "Apache-2.0",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#171A20",
+    "theme": "dark"
+  },
+  "qna": "https://github.com/fabiocicerchia/gandalf/issues",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -341,7 +347,8 @@
     "check": "tsc --noEmit",
     "test": "node esbuild.mjs --tests && node --test \"out/**/*.test.js\"",
     "vscode:prepublish": "npm run check && npm test && node esbuild.mjs --production",
-    "package": "node scripts/copy-legal.mjs && vsce package --no-dependencies"
+    "package": "node scripts/copy-legal.mjs && vsce package --no-dependencies",
+    "publish": "node scripts/copy-legal.mjs && vsce publish --no-dependencies"
   },
   "devDependencies": {
     "@types/node": "^20.11.30",
