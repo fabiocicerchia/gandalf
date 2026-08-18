@@ -9,7 +9,7 @@ import subprocess
 
 import pytest
 
-from gandalf import plugins
+from gandalf import plugins, scope
 from gandalf.base import GateContext
 from gandalf.plugins import _scan_targets, ignore_patterns, is_ignored, scannable_files
 
@@ -145,3 +145,22 @@ def test_scannable_files_is_recomputed_when_the_exclusions_change(tmp_path):
 
     plugins.set_extra_ignores([])
     assert "vendor/lib.py" in scannable_files(str(repo))
+
+
+def test_path_scope_refuses_to_widen_when_everything_under_it_is_excluded(
+    tmp_path, monkeypatch
+):
+    """`--path` on an excluded folder must fail, not fall through to the whole
+    tree: an empty changed set means "scan everything" downstream."""
+    repo = _repo(tmp_path, ["src/app.py", "generated/api.py"])
+    monkeypatch.chdir(repo)
+    plugins.set_extra_ignores(["generated"])
+
+    with pytest.raises(SystemExit, match="every path under it is excluded"):
+        with scope.resolve(None, False, "generated"):
+            pass
+
+    # The same folder without the exclusion narrows normally.
+    plugins.set_extra_ignores([])
+    with scope.resolve(None, False, "generated") as sc:
+        assert sc.changed_files == ["generated/api.py"]

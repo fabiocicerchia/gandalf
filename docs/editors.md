@@ -32,11 +32,12 @@ Reload the window afterwards; a **Gandalf** tab appears in the bottom panel.
 For development, `npm run watch` and <kbd>F5</kbd> from `editors/vscode/` launch
 an Extension Development Host.
 
-The extension finds gandalf via `gandalf.executable`, `gandalf.checkoutPath`,
-the open workspace (if it is a gandalf checkout), `gandalf` on `PATH`, or the
-`~/.local/share/gandalf` clone that `install.sh` creates — in that order. Run
-**Gandalf: Check Environment** first: it reports which gates can actually run,
-and offers to build the `gandalf-tools` image for the ones that need it.
+The extension finds gandalf via `gandalf.path` (a wrapper or a checkout — either
+shape is recognised), the open workspace if it is a gandalf checkout, `gandalf`
+on `PATH`, or the `~/.local/share/gandalf` clone that `install.sh` creates — in
+that order. Run **Gandalf: Check Environment** first: it reports whether
+gandalf, git, docker and the `gandalf-tools` image are present, and offers to
+build the image.
 
 ### While a scan runs
 

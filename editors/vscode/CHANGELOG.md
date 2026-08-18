@@ -31,12 +31,10 @@ First release.
 - Environment check listing every scanner tool and where it comes from, plus a
   one-command build of the `gandalf-tools` image. It also checks the LLM endpoint
   and, when it is unreachable, offers to stop the judge gates retrying it.
-- Editor scans cap the LLM retry budget at 1 (`gandalf.scan.llmRetries`). The
+- Editor scans cap the LLM retry budget at 1. The
   judge gates call the model whatever `--no-llm` says, and gandalf's CI-shaped
   default of 3 retries with backoff was 14.4s of a 14.9s scan with no endpoint
   reachable; one retry brings that to 3.3s.
-- Autofix (`--fix`) and baseline (`--write-baseline`) commands, both confirmed
-  before they touch anything.
 - The folders the editor hides (`files.exclude`, `search.exclude`) are excluded
   from scans too, translated into gandalf's `--exclude`; `gandalf.exclude` adds
   more, and `gandalf.useEditorExcludes` turns the automatic part off. Saving an

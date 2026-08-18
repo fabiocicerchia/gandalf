@@ -30,7 +30,14 @@ const findingsOf = (name: string, messages: string[]): Finding[] =>
 function snapshot(gates: RawGate[]): Snapshot {
   const findings = gates.flatMap((g) => normalizeGate(g, '/repo'));
   return {
-    payload: { gates, verdict: 'warn', score: 50, scope: 'working-tree' } as Snapshot['payload'],
+    payload: {
+      gates,
+      verdict: 'warn',
+      score: 50,
+      scope: 'working-tree',
+      skipped_gates: [],
+      disabled_gates: [],
+    },
     findings,
     blocked: [],
     inapplicable: [],

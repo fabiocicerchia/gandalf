@@ -36,22 +36,17 @@ export interface RawGate {
   duration?: number | null;
 }
 
+/**
+ * The parts of gandalf's run record the extension reads. Not the whole shape —
+ * that is documented in docs/reports.md, and copying it here would mean
+ * maintaining a second description of someone else's JSON.
+ */
 export interface Payload {
   scope: string;
-  generated_at: string;
-  commit: { sha?: string; short?: string; subject?: string; date?: string };
-  languages: string[];
   verdict: Outcome;
-  passed: boolean;
-  policy: { fail_on: string; min_score: number; reason: string };
   score: number;
-  summary: string;
-  changeset: string;
-  remediation: string;
-  improvement: string;
   skipped_gates: string[];
   disabled_gates: string[];
-  fixes: { gate: string; changed: boolean; message: string }[];
   gates: RawGate[];
 }
 

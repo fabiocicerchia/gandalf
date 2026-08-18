@@ -15,9 +15,9 @@ you write the code, instead of finding out in CI.
 - **The report**, rendered exactly as `reports/*.html` renders it — the same
   verdict banner, category scores, sortable gate table and LLM sections you get
   from the CLI, because it *is* that file, opened in an editor tab.
-- **Every gate**, including the containerized ones. The environment check tells
-  you which tools are present, which come from the scanner-tools image, and
-  which are missing — so a green board never quietly means "never checked".
+- **Every gate**, including the containerized ones. Gates that could not run are
+  counted separately from findings, so a green board never quietly means "never
+  checked".
 
 ## Install
 
@@ -56,11 +56,11 @@ To remove it: **Extensions** view → Gandalf → Uninstall, or
 Gandalf itself. It is pure-stdlib Python with no install step, so the extension
 finds it in whichever way you already have it, in this order:
 
-1. `gandalf.executable` — an explicit path to the wrapper `make install` writes.
-2. `gandalf.checkoutPath` — a source checkout (the directory holding `src/gandalf`).
-3. The workspace itself, if you have gandalf's repository open.
-4. `gandalf` on your `PATH`.
-5. `~/.local/share/gandalf` — where the one-line `install.sh` puts its clone.
+1. `gandalf.path` — the wrapper `make install` writes, or a source checkout
+   (the directory holding `src/gandalf`); either shape is recognised.
+2. The workspace itself, if you have gandalf's repository open.
+3. `gandalf` on your `PATH`.
+4. `~/.local/share/gandalf` — where the one-line `install.sh` puts its clone.
 
 Nothing found? `Gandalf: Check Environment` says so, with the fix.
 
@@ -80,10 +80,11 @@ are never containerized — gandalf uses the ones you already develop with. The
 (`nikto`, `sqlmap`, `dalfox`) only run with an explicit `--target`, so they stay
 idle in an editor.
 
-Run **`Gandalf: Check Environment`** to see exactly where each tool is coming
-from. Gates that could not run are reported in the view's message line rather
-than listed as findings — they are not results, and they should not look like
-any.
+Gates that could not run are reported in the view's message line rather than
+listed as findings — they are not results, and they should not look like any.
+That line names them, so it is also the tool inventory; **`Gandalf: Check
+Environment`** answers the question a scan can't, which is why it produced
+nothing at all.
 
 ## Commands
 
@@ -91,16 +92,13 @@ any.
 |---|---|
 | `Gandalf: Scan Workspace` | Full run over the working tree. |
 | `Gandalf: Scan Current File` | Re-runs the gates scoped to the active file (`--path`). |
-| `Gandalf: Scan Staged Changes` | `--staged` — what a commit would be judged on. |
 | `Gandalf: Open Report` | The HTML scorecard, in an editor tab. |
 | `Gandalf: Open Report (regenerate with LLM summary)` | Same, re-run with the LLM sections. |
-| `Gandalf: Apply Gate Autofixes` | `--fix` (ruff `--fix`, ruff format, eslint `--fix`). Asks first — it rewrites files. |
-| `Gandalf: Write Baseline` | `--write-baseline`: accept today's findings so only new ones fail. Asks first. |
-| `Gandalf: Check Environment (Doctor)` | Tool-by-tool inventory of what can actually run. |
+| `Gandalf: Check Environment (Doctor)` | Is gandalf, git, docker, the scanner image and the LLM endpoint present. |
 | `Gandalf: Build Scanner Tools Image` | `docker build -f tools.Dockerfile -t gandalf-tools .` in a terminal. |
 | `Gandalf: Cancel Running Scan` | Kills the current run. |
-| `Gandalf: Clear Results` | Drops all diagnostics and findings. |
 | `Gandalf: Filter Findings` | Native quick pick over both axes: reported level and editor severity. |
+| `Gandalf: Show Findings in the Current File` / `…in the Whole Project` | The pane's scope toggle, in its title bar. |
 | `Gandalf: Show Gate Timings` | Every gate by wall-clock cost, slowest first. Select gates to copy a `skip` list. |
 
 ## Reading the pane
@@ -196,9 +194,8 @@ concurrently). Select the expensive ones and it copies a ready-to-paste
 
 Then, in rough order of payoff:
 
-- **Don't scan the tree on save.** The default already doesn't
-  (`scan.scopeOnSave: "file"`). If you changed it to `workspace`, that is where
-  the minutes come from.
+- **Saves never scan the tree** — only the file you saved. Whole-tree scans are
+  on demand, at startup, or on the interval, so the minutes are never in your way.
 - **Run a smaller gate set while editing.** Put the expensive gates in a
   `skip` list in an editor-only config and point `gandalf.configPath` at it —
   CI still runs `.gandalf.toml` in full. See the profiles below.
@@ -214,12 +211,12 @@ Then, in rough order of payoff:
   |---|---|
   | 3 (gandalf's default, right for CI) | 14.4s |
   | 2 | 6.4s |
-  | **1 (this extension's default)** | **3.3s** |
+  | **1 (what editor scans use)** | **3.3s** |
   | 0 | 3.0s |
 
-  So `gandalf.scan.llmRetries` defaults to `1` here: one retry still absorbs a
-  transient failure but costs 0.3s instead of 11s. Set `-1` to restore gandalf's
-  default. `Gandalf: Check Environment` reports the endpoint either way.
+  So editor scans pass `GANDALF_LLM_RETRIES=1`: one retry still absorbs a
+  transient failure but costs 0.3s instead of 11s. Export the variable yourself
+  to override it. `Gandalf: Check Environment` reports the endpoint either way.
 - **Build the tools image** (`make tools`). Not for speed — for correctness —
   but note that gates whose tool is missing return almost instantly, so a fast
   scan on a bare machine mostly means nothing was checked.
@@ -236,7 +233,7 @@ every keystroke would be unusable, so **the extension never scans while you
 type**. What it does instead, in layers:
 
 **1. Scope, first and foremost.** A save triggers a scan of *that file*
-(`--path <file>`), not the tree. That is the difference between a couple of
+(`--path <file>`), never the tree. That is the difference between a couple of
 seconds and a couple of minutes. The whole project is scanned on demand, at
 startup, and — if you ask for it — on a long interval. Per-file results are
 merged over the last project run, so the pane always shows the project picture
@@ -247,8 +244,7 @@ with the file you just touched refreshed.
 identical to the last scan of it.
 
 **3. Debounce and coalesce.** A burst of saves collapses into one run
-(`gandalf.scan.debounceMs`, default 1.5s). Set `gandalf.scan.idleMs` to also
-require the editor to be quiet for a while first.
+(`gandalf.scan.debounceMs`, default 1.5s).
 
 **4. One process, ever.** Runs are strictly serialized — there is never a
 second gandalf competing for the same CPU and the same Docker daemon. While one
@@ -261,9 +257,8 @@ a gate whose scanned files are unchanged returns its previous result instead of
 re-running its tool. File scans deliberately skip it: the cache is keyed on a
 hash of the whole scanned file set, so a one-file scan would overwrite the
 workspace entries with a one-file hash and turn the next full scan into a total
-miss. The cache file (`.gandalf-cache.json` by default) belongs in `.gitignore`
-— or point `gandalf.scan.cachePath` at `.git/gandalf-cache.json` and forget
-about it.
+miss. The cache file is gandalf's own `.gandalf-cache.json`, which belongs in
+`.gitignore`.
 
 **6. Bound the parallelism.** `gandalf.scan.concurrency` caps gates in flight.
 Gandalf defaults to your CPU count; on a laptop that is also running a dev
@@ -276,12 +271,13 @@ in the background, and skipped entirely if a scan already ran recently.
 **8. Nothing lands in your repository.** Reports go to the extension's storage
 directory (`--out-dir`), not `reports/`, and the trend log is not appended to
 (`--no-trend`) — a scan on every save would swamp a history that is meant to be
-per-commit. Old reports are pruned to the newest `gandalf.reports.keep` runs.
-Both are settings if you want the CLI behaviour back.
+per-commit. Only the newest few reports are kept.
 
 **9. The LLM stays off** for background scans. Summaries cost a round trip to a
 model; ask for one when you want to read it (`Gandalf: Open Report (regenerate
-with LLM summary)`), or set `gandalf.scan.llm`.
+with LLM summary)`), or set `gandalf.scan.llm`. Either way the judge gates cap
+their retries at one, so an unreachable endpoint costs a second per scan rather
+than eleven.
 
 ### What the extension itself costs
 
@@ -322,11 +318,8 @@ If you want to see where a scan's time actually goes, that is the gates, and
 
 ### Profiles worth copying
 
-Comfortable default — nothing to configure:
-
-```jsonc
-{ "gandalf.scan.trigger": "onSave", "gandalf.scan.scopeOnSave": "file" }
-```
+Comfortable default — nothing to configure: a save scans that file, the tree is
+scanned on demand and at startup.
 
 Large repository or slow gates — narrow what runs while you work, and sweep
 everything twice an hour:
@@ -355,25 +348,14 @@ Battery saver — scan only when asked:
 { "gandalf.scan.trigger": "manual", "gandalf.scan.onStartup": false }
 ```
 
-Commit-shaped feedback — judge what you are about to commit:
-
-```jsonc
-{ "gandalf.scan.scopeOnSave": "staged" }
-```
-
 Also worth knowing: a `.gandalfignore` at the repo root keeps tree-scanning
 gates (`trivy`, `checkov`, `kics`) out of local state like `.env` or `data/`,
 and `[gandalf.timeouts]` in `.gandalf.toml` gives a slow gate its own budget.
 
 ## Settings
 
-Every setting is under `gandalf.` — `gandalf.executable`, `gandalf.checkoutPath`,
-`gandalf.pythonPath`, `gandalf.configPath`, `gandalf.extraArgs`, the
-`gandalf.scan.*` group described above, `gandalf.diagnostics.*`
-(`enabled`, `minSeverity`, `maxPerFile`), `gandalf.reports.*`
-(`directory`, `keep`, `recordTrend`), `gandalf.tools.image` and
-`gandalf.statusBar.enabled`. VS Code's settings UI has the full list with
-descriptions (search for "Gandalf").
+Search "Gandalf" in the settings UI — every one is described there. The ones
+worth knowing about are covered above.
 
 Gate selection (`only` / `skip`) lives in `.gandalf.toml`, not on the command
 line — point `gandalf.configPath` at an editor-specific config to run a

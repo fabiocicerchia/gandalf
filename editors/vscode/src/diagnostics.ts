@@ -42,6 +42,9 @@ export interface DiagnosticGroup {
   settings: Settings;
 }
 
+/** Backstop against a pathological file, not something worth configuring. */
+const MAX_PER_FILE = 500;
+
 export class DiagnosticPublisher {
   private readonly collection = vscode.languages.createDiagnosticCollection('gandalf');
 
@@ -60,7 +63,7 @@ export class DiagnosticPublisher {
         if (!f.resolvedPath || !f.line) continue; // No place to put it — the panel has it.
         if (SEVERITY_RANK[f.severity] > floor) continue;
         const list = byFile.get(f.resolvedPath) ?? [];
-        if (list.length >= settings.maxPerFile) continue;
+        if (list.length >= MAX_PER_FILE) continue;
         list.push(toDiagnostic(f));
         byFile.set(f.resolvedPath, list);
       }

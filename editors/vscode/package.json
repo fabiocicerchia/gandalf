@@ -67,12 +67,6 @@
         "icon": "$(refresh)"
       },
       {
-        "command": "gandalf.scanStaged",
-        "title": "Scan Staged Changes",
-        "category": "Gandalf",
-        "icon": "$(git-commit)"
-      },
-      {
         "command": "gandalf.showReport",
         "title": "Open Report",
         "category": "Gandalf",
@@ -81,16 +75,6 @@
       {
         "command": "gandalf.showReportWithLlm",
         "title": "Open Report (regenerate with LLM summary)",
-        "category": "Gandalf"
-      },
-      {
-        "command": "gandalf.applyFixes",
-        "title": "Apply Gate Autofixes",
-        "category": "Gandalf"
-      },
-      {
-        "command": "gandalf.writeBaseline",
-        "title": "Write Baseline (accept current findings)",
         "category": "Gandalf"
       },
       {
@@ -110,12 +94,6 @@
         "category": "Gandalf"
       },
       {
-        "command": "gandalf.clearResults",
-        "title": "Clear Results",
-        "category": "Gandalf",
-        "icon": "$(clear-all)"
-      },
-      {
         "command": "gandalf.showLog",
         "title": "Show Log",
         "category": "Gandalf",
@@ -123,15 +101,15 @@
       },
       {
         "command": "gandalf.filterCurrentFile",
-        "title": "Show Current File Only",
+        "title": "Show Findings in the Current File",
         "category": "Gandalf",
-        "icon": "$(filter)"
+        "icon": "$(file)"
       },
       {
         "command": "gandalf.filterProject",
-        "title": "Show Whole Project",
+        "title": "Show Findings in the Whole Project",
         "category": "Gandalf",
-        "icon": "$(filter-filled)"
+        "icon": "$(files)"
       },
       {
         "command": "gandalf.showTimings",
@@ -190,11 +168,6 @@
           "group": "1_scan@1"
         },
         {
-          "command": "gandalf.scanStaged",
-          "when": "view == gandalf.findings",
-          "group": "1_scan@2"
-        },
-        {
           "command": "gandalf.checkEnvironment",
           "when": "view == gandalf.findings",
           "group": "2_env@1"
@@ -203,11 +176,6 @@
           "command": "gandalf.showTimings",
           "when": "view == gandalf.findings",
           "group": "2_env@2"
-        },
-        {
-          "command": "gandalf.clearResults",
-          "when": "view == gandalf.findings",
-          "group": "3_misc@1"
         },
         {
           "command": "gandalf.showLog",
@@ -233,28 +201,39 @@
     "configuration": {
       "title": "Gandalf",
       "properties": {
-        "gandalf.executable": {
+        "gandalf.path": {
           "type": "string",
           "default": "",
           "scope": "machine-overridable",
-          "markdownDescription": "Path to the `gandalf` wrapper (see `make install`). Empty means auto-detect: `#gandalf.checkoutPath#` \u2192 a gandalf checkout in the workspace \u2192 `gandalf` on `PATH` \u2192 `~/.local/share/gandalf`."
-        },
-        "gandalf.checkoutPath": {
-          "type": "string",
-          "default": "",
-          "scope": "machine-overridable",
-          "markdownDescription": "Path to a gandalf source checkout (the directory containing `src/gandalf`). Used with `#gandalf.pythonPath#` as `python -m gandalf`."
-        },
-        "gandalf.pythonPath": {
-          "type": "string",
-          "default": "python3",
-          "scope": "machine-overridable",
-          "description": "Python interpreter used when running gandalf from a source checkout."
+          "markdownDescription": "Where gandalf is: the `gandalf` wrapper `make install` writes, or a source checkout (the directory holding `src/gandalf`). Empty auto-detects \u2014 the open workspace if it is a checkout, then `gandalf` on `PATH`, then `~/.local/share/gandalf`."
         },
         "gandalf.configPath": {
           "type": "string",
           "default": "",
           "markdownDescription": "Path to a `.gandalf.toml` passed as `--config`. Point this at an editor-specific config to run a narrower gate set while you type (gate `only`/`skip` selection lives in the config file, not on the CLI)."
+        },
+        "gandalf.diagnostics.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Publish findings as editor diagnostics (squiggles + hover)."
+        },
+        "gandalf.diagnostics.minSeverity": {
+          "type": "string",
+          "enum": [
+            "error",
+            "warning",
+            "info"
+          ],
+          "default": "info",
+          "description": "Lowest finding severity published as a diagnostic."
+        },
+        "gandalf.exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Paths no gate should read, as `--exclude` globs. A bare name skips that directory anywhere (`node_modules`), a path anchors at the repository root (`src/generated`), and globs work (`*.min.js`). Adds to the repository's `.gandalfignore` and to `#gandalf.useEditorExcludes#` rather than replacing them."
         },
         "gandalf.extraArgs": {
           "type": "array",
@@ -263,6 +242,46 @@
           },
           "default": [],
           "description": "Extra command-line arguments appended to every gandalf invocation."
+        },
+        "gandalf.pythonPath": {
+          "type": "string",
+          "default": "python3",
+          "scope": "machine-overridable",
+          "description": "Python interpreter used when running gandalf from a source checkout."
+        },
+        "gandalf.scan.concurrency": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "markdownDescription": "Max gates running at once (`--concurrency`). `0` leaves gandalf's default (CPU count). Lower it to keep the machine responsive \u2014 gates spawn `docker run`."
+        },
+        "gandalf.scan.debounceMs": {
+          "type": "number",
+          "default": 1500,
+          "minimum": 250,
+          "description": "Quiet period after the triggering event before a scan starts. Later events restart the timer."
+        },
+        "gandalf.scan.intervalMinutes": {
+          "type": "number",
+          "default": 15,
+          "minimum": 5,
+          "description": "Period of the full-workspace sweep for the interval triggers."
+        },
+        "gandalf.scan.llm": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Include the LLM summary in background scans (`--no-llm` is passed when off). The report can always be regenerated with the summary on demand."
+        },
+        "gandalf.scan.onStartup": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run one full-workspace scan when the window opens, so the panel is populated."
+        },
+        "gandalf.scan.timeoutSeconds": {
+          "type": "number",
+          "default": 600,
+          "minimum": 10,
+          "description": "Kill a gandalf run that exceeds this wall-clock budget."
         },
         "gandalf.scan.trigger": {
           "type": "string",
@@ -281,126 +300,10 @@
           "default": "onSave",
           "description": "When scans run. Gandalf never scans on keystroke \u2014 gates spawn real tools."
         },
-        "gandalf.scan.scopeOnSave": {
-          "type": "string",
-          "enum": [
-            "file",
-            "staged",
-            "workspace"
-          ],
-          "default": "file",
-          "markdownDescription": "What a save-triggered scan covers. `file` scopes gandalf to the saved file (`--path`) and is the only cheap option; `workspace` re-runs every gate over the whole tree."
-        },
-        "gandalf.scan.debounceMs": {
-          "type": "number",
-          "default": 1500,
-          "minimum": 250,
-          "description": "Quiet period after the triggering event before a scan starts. Later events restart the timer."
-        },
-        "gandalf.scan.idleMs": {
-          "type": "number",
-          "default": 0,
-          "minimum": 0,
-          "description": "Additionally require this many milliseconds without edits before starting a scan. 0 disables the idle check."
-        },
-        "gandalf.scan.intervalMinutes": {
-          "type": "number",
-          "default": 15,
-          "minimum": 5,
-          "description": "Period of the full-workspace sweep for the interval triggers."
-        },
-        "gandalf.scan.onStartup": {
-          "type": "boolean",
-          "default": true,
-          "description": "Run one full-workspace scan when the window opens, so the panel is populated."
-        },
-        "gandalf.scan.timeoutSeconds": {
-          "type": "number",
-          "default": 600,
-          "minimum": 10,
-          "description": "Kill a gandalf run that exceeds this wall-clock budget."
-        },
-        "gandalf.scan.concurrency": {
-          "type": "number",
-          "default": 0,
-          "minimum": 0,
-          "markdownDescription": "Max gates running at once (`--concurrency`). `0` leaves gandalf's default (CPU count). Lower it to keep the machine responsive \u2014 gates spawn `docker run`."
-        },
         "gandalf.scan.useCache": {
           "type": "boolean",
           "default": true,
           "markdownDescription": "Pass `--cache` on workspace/staged scans so unchanged gates are reused. File-scoped scans skip the cache on purpose \u2014 they would overwrite the workspace entries with a one-file hash."
-        },
-        "gandalf.scan.cachePath": {
-          "type": "string",
-          "default": ".gandalf-cache.json",
-          "markdownDescription": "Cache file, relative to the repository root. Add it to `.gitignore`, or use something like `.git/gandalf-cache.json` to keep it out of the tree entirely."
-        },
-        "gandalf.scan.llm": {
-          "type": "boolean",
-          "default": false,
-          "markdownDescription": "Include the LLM summary in background scans (`--no-llm` is passed when off). The report can always be regenerated with the summary on demand."
-        },
-        "gandalf.diagnostics.enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Publish findings as editor diagnostics (squiggles + hover)."
-        },
-        "gandalf.diagnostics.minSeverity": {
-          "type": "string",
-          "enum": [
-            "error",
-            "warning",
-            "info"
-          ],
-          "default": "info",
-          "description": "Lowest finding severity published as a diagnostic."
-        },
-        "gandalf.diagnostics.maxPerFile": {
-          "type": "number",
-          "default": 500,
-          "minimum": 1,
-          "description": "Cap on diagnostics published per file."
-        },
-        "gandalf.reports.directory": {
-          "type": "string",
-          "default": "",
-          "markdownDescription": "Where scan artifacts are written (`--out-dir`). Empty means the extension's own storage, so the repository's `reports/` directory is left alone."
-        },
-        "gandalf.reports.keep": {
-          "type": "number",
-          "default": 8,
-          "minimum": 1,
-          "description": "How many of the extension's own report files to keep before pruning the oldest. Only files this extension wrote are ever removed."
-        },
-        "gandalf.reports.recordTrend": {
-          "type": "boolean",
-          "default": false,
-          "markdownDescription": "Append editor scans to `.gandalf-trend.jsonl`. Off by default: a scan on every save would swamp the commit-scored history."
-        },
-        "gandalf.tools.image": {
-          "type": "string",
-          "default": "gandalf-tools",
-          "markdownDescription": "Docker image that supplies scanner tools that are not on `PATH` (`GANDALF_TOOLS_IMAGE`)."
-        },
-        "gandalf.statusBar.enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show the verdict in the status bar."
-        },
-        "gandalf.scan.llmRetries": {
-          "type": "number",
-          "default": 1,
-          "minimum": -1,
-          "markdownDescription": "`GANDALF_LLM_RETRIES` for editor scans. The skill-backed judge gates call the LLM regardless of `#gandalf.scan.llm#` (that setting only controls the report's summary), and gandalf's default of 3 retries with exponential backoff costs ~7s per call when no endpoint is reachable \u2014 measured at 14.4s of a 14.9s scan on gandalf's own repository. `1` retry brings that to 3.3s while still absorbing a transient failure; `0` never retries; `-1` restores gandalf's default."
-        },
-        "gandalf.exclude": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "default": [],
-          "markdownDescription": "Paths no gate should read, as `--exclude` globs. A bare name skips that directory anywhere (`node_modules`), a path anchors at the repository root (`src/generated`), and globs work (`*.min.js`). Adds to the repository's `.gandalfignore` and to `#gandalf.useEditorExcludes#` rather than replacing them."
         },
         "gandalf.useEditorExcludes": {
           "type": "boolean",

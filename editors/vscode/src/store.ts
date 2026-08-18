@@ -71,9 +71,6 @@ export class ResultStore {
     }
   }
 
-  streamedGates(folder: vscode.WorkspaceFolder): number {
-    return this.streams.get(key(folder))?.size ?? 0;
-  }
 
   setProject(folder: vscode.WorkspaceFolder, snapshot: Snapshot, durationMs: number): void {
     const k = key(folder);

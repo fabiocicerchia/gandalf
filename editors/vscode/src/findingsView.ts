@@ -11,9 +11,9 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 
-import { LEVEL_LABEL, LEVELS, SEVERITY_LABEL } from './parse';
+import { LEVEL_LABEL, LEVELS, SEVERITIES, SEVERITY_LABEL, VERDICT_WORD } from './parse';
 import { ResultStore } from './store';
-import { Finding, Level, Outcome, Severity } from './types';
+import { Finding, Level, Severity } from './types';
 
 type ScopeFilter = 'file' | 'project';
 
@@ -32,8 +32,6 @@ interface FindingNode {
 }
 
 export type Node = FileNode | FindingNode;
-
-const WORD: Record<Outcome, string> = { pass: 'GREEN', warn: 'AMBER', fail: 'RED' };
 
 /**
  * A distinct glyph per reported level, so the ladder is readable at a glance
@@ -61,7 +59,6 @@ function iconFor(f: Finding): vscode.ThemeIcon {
 
 interface Model {
   roots: Node[];
-  parents: Map<string, Node | undefined>;
 }
 
 export class FindingsView implements vscode.TreeDataProvider<Node> {
@@ -70,7 +67,7 @@ export class FindingsView implements vscode.TreeDataProvider<Node> {
   private view?: vscode.TreeView<Node>;
   private scope: ScopeFilter = 'project';
   private levels = new Set<Level>(LEVELS);
-  private severities = new Set<Severity>(['error', 'warning', 'info']);
+  private severities = new Set<Severity>(SEVERITIES);
   private scanLabel = '';
   /**
    * Bumped by Expand All. Tree item ids carry it, so a bump makes every node
@@ -129,7 +126,7 @@ export class FindingsView implements vscode.TreeDataProvider<Node> {
         level: l,
       })),
       { label: 'Editor severity', kind: vscode.QuickPickItemKind.Separator },
-      ...(['error', 'warning', 'info'] as Severity[]).map((s) => ({
+      ...SEVERITIES.map((s) => ({
         label: SEVERITY_LABEL[s],
         description: `${countSeverity(s)}`,
         picked: this.severities.has(s),
@@ -149,12 +146,12 @@ export class FindingsView implements vscode.TreeDataProvider<Node> {
     // Clearing a whole axis would empty the pane with no way back from the
     // pane itself, so an empty axis means "all of it".
     this.levels = levels.size ? levels : new Set(LEVELS);
-    this.severities = severities.size ? severities : new Set<Severity>(['error', 'warning', 'info']);
+    this.severities = severities.size ? severities : new Set(SEVERITIES);
     this.refresh();
   }
 
   private get filtered(): boolean {
-    return this.levels.size < LEVELS.length || this.severities.size < 3;
+    return this.levels.size < LEVELS.length || this.severities.size < SEVERITIES.length;
   }
 
   setScanning(label: string): void {
@@ -199,18 +196,13 @@ export class FindingsView implements vscode.TreeDataProvider<Node> {
    * calls once per node — made a scan O(files²).
    */
   private build(): Model {
-    const parents = new Map<string, Node | undefined>();
     const findings = this.visible();
     const rev = this.expansion;
 
     if (this.scope === 'file') {
-      const roots: Node[] = findings.map((f) => ({
-        kind: 'finding',
-        id: `${rev}:finding:${f.id}`,
-        finding: f,
-      }));
-      for (const r of roots) parents.set(r.id, undefined);
-      return { roots, parents };
+      return {
+        roots: findings.map((f) => ({ kind: 'finding', id: `${rev}:finding:${f.id}`, finding: f })),
+      };
     }
 
     const root = this.folder()?.uri.fsPath ?? '';
@@ -234,16 +226,15 @@ export class FindingsView implements vscode.TreeDataProvider<Node> {
         finding: f,
       };
       node.children.push(child);
-      parents.set(child.id, node);
     }
 
-    const roots = [...groups.values()].sort((a, b) => {
-      // Findings with nowhere to point sort last; everything else alphabetically.
-      if (!a.uri !== !b.uri) return a.uri ? -1 : 1;
-      return a.label.localeCompare(b.label);
-    });
-    for (const r of roots) parents.set(r.id, undefined);
-    return { roots, parents };
+    return {
+      roots: [...groups.values()].sort((a, b) => {
+        // Findings with nowhere to point sort last; everything else alphabetically.
+        if (!a.uri !== !b.uri) return a.uri ? -1 : 1;
+        return a.label.localeCompare(b.label);
+      }),
+    };
   }
 
   private get tree(): Model {
@@ -256,9 +247,6 @@ export class FindingsView implements vscode.TreeDataProvider<Node> {
     return element.kind === 'file' ? element.children : [];
   }
 
-  getParent(element: Node): Node | undefined {
-    return this.tree.parents.get(element.id);
-  }
 
   getTreeItem(node: Node): vscode.TreeItem {
     if (node.kind === 'file') {
@@ -322,7 +310,7 @@ export class FindingsView implements vscode.TreeDataProvider<Node> {
     const run = folder ? this.store.lastRun(folder) : undefined;
     const findings = this.visible();
 
-    const state = run ? `${WORD[run.verdict]} · ${run.score}/100 · ${run.scope}` : undefined;
+    const state = run ? `${VERDICT_WORD[run.verdict]} · ${run.score}/100 · ${run.scope}` : undefined;
     view.description = this.scanLabel
       ? `scanning ${this.scanLabel}…`
       : [state, this.filtered ? 'filtered' : ''].filter(Boolean).join(' · ') || undefined;

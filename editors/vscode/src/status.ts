@@ -1,10 +1,8 @@
 import * as vscode from 'vscode';
 
+import { VERDICT_WORD } from './parse';
 import { describeProgress, ScanProgress, shortProgress } from './progress';
 import { LastRun } from './store';
-import { Outcome } from './types';
-
-const WORD: Record<Outcome, string> = { pass: 'GREEN', warn: 'AMBER', fail: 'RED' };
 
 export class StatusBar {
   private readonly item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 40);
@@ -23,11 +21,7 @@ export class StatusBar {
     this.item.show();
   }
 
-  idle(run: LastRun | undefined, enabled: boolean, findings: number): void {
-    if (!enabled) {
-      this.item.hide();
-      return;
-    }
+  idle(run: LastRun | undefined, findings: number): void {
     if (!run) {
       this.item.text = '$(shield) Gandalf';
       this.item.tooltip = 'No scan yet — click to open the report, or run “Gandalf: Scan Workspace”.';
@@ -39,7 +33,7 @@ export class StatusBar {
     this.item.text = `$(${icon}) Gandalf ${run.score}/100`;
     this.item.tooltip = new vscode.MarkdownString(
       [
-        `**${WORD[run.verdict]} · ${run.score}/100**`,
+        `**${VERDICT_WORD[run.verdict]} · ${run.score}/100**`,
         '',
         `Scope: \`${run.scope}\``,
         `Findings: ${findings}`,

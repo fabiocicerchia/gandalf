@@ -2,9 +2,9 @@
  * Locating gandalf and running it.
  *
  * gandalf is pure-stdlib Python with no install step, so "where is it" has
- * several legitimate answers: an explicit setting, the `gandalf` wrapper from
- * `make install`, a source checkout in the workspace, or the clone `install.sh`
- * drops in `~/.local/share/gandalf`. All of them are tried, in that order.
+ * several legitimate answers: `gandalf.path` (a wrapper or a checkout), a
+ * checkout in the open workspace, `gandalf` on PATH, or the clone `install.sh`
+ * drops in `~/.local/share/gandalf`. All are tried, in that order.
  */
 import { spawn } from 'child_process';
 import * as fs from 'fs';
@@ -34,7 +34,7 @@ export interface Launcher {
   flags: Set<string>;
 }
 
-export type ScanKind = 'workspace' | 'file' | 'staged';
+export type ScanKind = 'workspace' | 'file';
 
 export interface RunRequest {
   folder: vscode.WorkspaceFolder;
@@ -43,8 +43,6 @@ export interface RunRequest {
   relPath?: string;
   llm: boolean;
   html: boolean;
-  fix?: boolean;
-  writeBaseline?: boolean;
   outDir: string;
   /** Paths no gate should read, already translated to gandalf's dialect. */
   excludes: string[];
@@ -77,11 +75,8 @@ export function resetLauncherCache(): void {
   launcherCache = new Map();
 }
 
-function expand(p: string, folder: vscode.WorkspaceFolder): string {
-  const swapped = p
-    .replace(/\$\{workspaceFolder\}/g, folder.uri.fsPath)
-    .replace(/\$\{userHome\}/g, os.homedir());
-  return swapped.startsWith('~') ? path.join(os.homedir(), swapped.slice(1)) : swapped;
+function expand(p: string): string {
+  return p.startsWith('~') ? path.join(os.homedir(), p.slice(1)) : p;
 }
 
 function isCheckout(dir: string): boolean {
@@ -220,12 +215,19 @@ function candidates(folder: vscode.WorkspaceFolder, s: Settings): Omit<Launcher,
     checkout: dir,
   });
 
-  if (s.executable) {
-    const exe = expand(s.executable, folder);
-    out.push({ command: exe, args: [], env: { ...process.env }, label: `gandalf.executable: ${exe}`, checkout: '' });
+  // One setting for both shapes: a checkout is a directory we can recognise, so
+  // there is no need to make the user say which kind of path they gave us.
+  const configured = s.path ? expand(s.path) : '';
+  if (isCheckout(configured)) out.push(viaPython(configured, 'gandalf.path'));
+  else if (configured) {
+    out.push({
+      command: configured,
+      args: [],
+      env: { ...process.env },
+      label: `gandalf.path: ${configured}`,
+      checkout: '',
+    });
   }
-  const configured = s.checkoutPath ? expand(s.checkoutPath, folder) : '';
-  if (isCheckout(configured)) out.push(viaPython(configured, 'gandalf.checkoutPath'));
   if (isCheckout(folder.uri.fsPath)) out.push(viaPython(folder.uri.fsPath, 'workspace checkout'));
   const onPath = findOnPath('gandalf');
   if (onPath) {
@@ -258,23 +260,22 @@ function buildArgs(req: RunRequest, s: Settings, l: Launcher): string[] {
   const args = [...l.args];
   const supports = (flag: string) => l.flags.has(flag);
 
-  if (req.kind === 'staged') args.push('--staged');
   if (req.kind === 'file' && req.relPath) args.push('--path', req.relPath.replace(/\\/g, '/'));
 
   if (!req.llm) args.push('--no-llm');
   if (!req.html) args.push('--no-html');
-  if (req.fix) args.push('--fix');
-  if (req.writeBaseline) args.push('--write-baseline');
 
   if (supports('--out-dir')) args.push('--out-dir', req.outDir);
-  if (!s.recordTrend && supports('--no-trend')) args.push('--no-trend');
-  if (s.configPath) args.push('--config', expand(s.configPath, req.folder));
+  // Editor scans never join the trend log: it is meant to be per-commit, and a
+  // scan on every save would swamp it.
+  if (supports('--no-trend')) args.push('--no-trend');
+  if (s.configPath) args.push('--config', expand(s.configPath));
   if (s.concurrency > 0) args.push('--concurrency', String(s.concurrency));
 
   // The cache is keyed per gate on a hash of the whole scanned file set, so a
   // one-file scan would overwrite the workspace entries with a one-file hash
-  // and make the next full scan a complete miss. Only wide scopes cache.
-  if (s.useCache && req.kind !== 'file' && s.cachePath) args.push('--cache', s.cachePath);
+  // and make the next full scan a complete miss. Only whole-tree scans cache.
+  if (s.useCache && req.kind === 'workspace') args.push('--cache');
 
   // Per-gate results as they land, so the pane fills during the run.
   if ((req.onGate || req.onStart) && supports('--stream')) args.push('--stream');
@@ -289,7 +290,8 @@ function buildArgs(req: RunRequest, s: Settings, l: Launcher): string[] {
 
 const JSON_LINE = /^JSON report:\s*(.+)$/m;
 const HTML_LINE = /^HTML report:\s*(.+)$/m;
-const UNTRACKED = /no git-tracked files under this folder/i;
+/** gandalf's ways of saying the requested scope holds nothing to scan. */
+const EMPTY_SCOPE = /no git-tracked files under this folder|every path under it is excluded/i;
 
 function tail(text: string, lines = 12): string {
   return text.trimEnd().split('\n').slice(-lines).join('\n');
@@ -319,12 +321,12 @@ export async function runGandalf(
     cwd: req.folder.uri.fsPath,
     env: {
       ...launcher.env,
-      GANDALF_TOOLS_IMAGE: s.toolsImage,
       // Progress is TTY-gated; this turns it on for a piped child.
       GANDALF_PROGRESS: '1',
       // The skill-backed gates call the LLM whatever --no-llm says, and retry
-      // with backoff when it is unreachable — seconds per gate, every scan.
-      ...(s.llmRetries >= 0 ? { GANDALF_LLM_RETRIES: String(s.llmRetries) } : {}),
+      // with backoff when it is unreachable. gandalf's default of 3 is right for
+      // CI and costs 11s per scan in an editor; one retry still absorbs a blip.
+      GANDALF_LLM_RETRIES: process.env.GANDALF_LLM_RETRIES ?? '1',
     },
     timeoutMs: s.timeoutSeconds * 1000,
     token,
@@ -347,8 +349,8 @@ export async function runGandalf(
   plain += events.flush();
   diagnostics += progress.flush();
 
-  if (UNTRACKED.test(stderr)) {
-    throw new ScanSkippedError(`${req.relPath ?? req.kind}: not tracked by git — nothing to scan`);
+  if (EMPTY_SCOPE.test(stderr)) {
+    throw new ScanSkippedError(`${req.relPath ?? req.kind}: nothing in scope to scan`);
   }
 
   const jsonMatch = JSON_LINE.exec(plain);

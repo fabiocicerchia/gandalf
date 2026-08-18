@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 
 import { readSettings, Settings } from './config';
 import { DiagnosticGroup, DiagnosticPublisher } from './diagnostics';
-import { enabledGlobs, excludePatterns, isExcluded } from './exclude';
+import { enabledGlobs, excludePatterns } from './exclude';
 import { buildToolsImage, runDoctor } from './doctor';
 import { FindingsView } from './findingsView';
 import { disposeLog, log } from './log';
@@ -24,6 +24,8 @@ import { ResultStore } from './store';
 import { Snapshot } from './types';
 
 const ERROR_COOLDOWN_MS = 60_000;
+/** Reports the extension wrote and still keeps, oldest pruned beyond this. */
+const REPORTS_KEPT = 8;
 
 export function activate(context: vscode.ExtensionContext): void {
   const store = new ResultStore();
@@ -50,14 +52,12 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const paint = () => {
     const folder = primaryFolder();
-    const s = settingsFor(folder);
     findingsView.refresh();
     // While a scan runs the status bar shows its progress; don't overwrite it
     // with an idle verdict just because a partial result landed.
     if (scanning !== undefined) return;
     statusBar.idle(
       folder ? store.lastRun(folder) : undefined,
-      s.statusBarEnabled,
       folder ? store.findings(folder).length : 0,
     );
   };
@@ -84,33 +84,22 @@ export function activate(context: vscode.ExtensionContext): void {
   };
 
   /** Artifacts live in the extension's own storage, never in the user's tree. */
-  const outDirFor = (folder: vscode.WorkspaceFolder, s: Settings): string => {
-    if (s.reportsDirectory) {
-      return path.isAbsolute(s.reportsDirectory)
-        ? s.reportsDirectory
-        : path.join(folder.uri.fsPath, s.reportsDirectory);
-    }
-    const base = context.storageUri ?? context.globalStorageUri;
-    return path.join(base.fsPath, 'reports', folder.name);
-  };
+  const outDirFor = (folder: vscode.WorkspaceFolder): string =>
+    path.join((context.storageUri ?? context.globalStorageUri).fsPath, 'reports', folder.name);
 
-  /** Keep the newest `keep` runs (a run is its .json plus its .html). */
-  const prune = async (dir: string, keep: number): Promise<void> => {
+  /**
+   * Keep the newest few runs. The stem carries the run's timestamp, so sorting
+   * the names descending groups each run's .json with its .html for free.
+   */
+  const prune = async (dir: string): Promise<void> => {
     try {
-      const names = (await fs.promises.readdir(dir)).filter((n) => n.startsWith('gandalf-'));
-      const stems = new Map<string, { files: string[]; mtime: number }>();
+      const names = (await fs.promises.readdir(dir)).filter((n) => n.startsWith('gandalf-')).sort();
+      const keep = new Set(
+        [...new Set(names.map((n) => n.replace(/\.[^.]+$/, '')))].slice(-REPORTS_KEPT),
+      );
       for (const name of names) {
-        const full = path.join(dir, name);
-        const stem = name.replace(/\.[^.]+$/, '');
-        const stat = await fs.promises.stat(full);
-        const entry = stems.get(stem) ?? { files: [], mtime: 0 };
-        entry.files.push(full);
-        entry.mtime = Math.max(entry.mtime, stat.mtimeMs);
-        stems.set(stem, entry);
-      }
-      const stale = [...stems.values()].sort((a, b) => b.mtime - a.mtime).slice(keep);
-      for (const entry of stale) {
-        for (const file of entry.files) await fs.promises.rm(file, { force: true });
+        if (keep.has(name.replace(/\.[^.]+$/, ''))) continue;
+        await fs.promises.rm(path.join(dir, name), { force: true });
       }
     } catch (err) {
       log().debug(`report pruning skipped: ${String(err)}`);
@@ -188,7 +177,7 @@ export function activate(context: vscode.ExtensionContext): void {
       job.report?.(p);
     };
     try {
-      const outDir = outDirFor(job.folder, s);
+      const outDir = outDirFor(job.folder);
       const excludes = excludesFor(job.folder, s);
       const result = await runGandalf(
         {
@@ -197,8 +186,6 @@ export function activate(context: vscode.ExtensionContext): void {
           relPath: job.relPath,
           llm: job.llm ?? s.llm,
           html: isProjectScope, // A one-file scorecard is not the report anyone wants.
-          fix: job.fix,
-          writeBaseline: job.writeBaseline,
           outDir,
           excludes,
           reason: job.reason,
@@ -235,7 +222,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (job.absPath && scanned) guard.commit(job.absPath, scanned.hash);
       publishDiagnostics();
       if (isProjectScope) logTimings(result.payload, result.durationMs);
-      await prune(outDir, s.reportsKeep);
+      await prune(outDir);
     } catch (err) {
       reportFailure(err, job);
     } finally {
@@ -253,10 +240,13 @@ export function activate(context: vscode.ExtensionContext): void {
    * so a slow scan can name its own culprits instead of leaving the user to
    * guess which of ~30 gates to disable.
    */
-  const logTimings = (payload: Snapshot['payload'], totalMs: number): void => {
-    const timed = (payload.gates ?? [])
+  const byDuration = (payload: Snapshot['payload'] | undefined) =>
+    (payload?.gates ?? [])
       .filter((g) => typeof g.duration === 'number')
       .sort((a, b) => (b.duration ?? 0) - (a.duration ?? 0));
+
+  const logTimings = (payload: Snapshot['payload'], totalMs: number): void => {
+    const timed = byDuration(payload);
     if (timed.length === 0) return;
     const top = timed
       .slice(0, 5)
@@ -267,7 +257,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const scheduler = new Scheduler(execute, () => {
     const s = settingsFor(primaryFolder());
-    return { debounceMs: s.debounceMs, idleMs: s.idleMs, intervalMinutes: s.intervalMinutes };
+    return { debounceMs: s.debounceMs, intervalMinutes: s.intervalMinutes };
   });
 
   const armSweep = () => {
@@ -349,11 +339,6 @@ export function activate(context: vscode.ExtensionContext): void {
     await reportView.show(reportView.current, snapshot?.scope ?? folder.name);
   };
 
-  const confirm = async (title: string, detail: string): Promise<boolean> => {
-    const choice = await vscode.window.showWarningMessage(title, { modal: true, detail }, 'Run');
-    return choice === 'Run';
-  };
-
   context.subscriptions.push(
     findingsView.register(),
     findingsView,
@@ -367,36 +352,15 @@ export function activate(context: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand('gandalf.scanWorkspace', () => run('workspace')),
     vscode.commands.registerCommand('gandalf.scanCurrentFile', () => run('file')),
-    vscode.commands.registerCommand('gandalf.scanStaged', () => run('staged')),
     vscode.commands.registerCommand('gandalf.showReport', () => openReport(false)),
     vscode.commands.registerCommand('gandalf.showReportWithLlm', () => openReport(true)),
     vscode.commands.registerCommand('gandalf.cancel', () => scheduler.cancel()),
     vscode.commands.registerCommand('gandalf.showLog', () => log().show(true)),
-    vscode.commands.registerCommand('gandalf.clearResults', () => {
-      store.clear();
-      diagnostics.clear();
-      guard.forget();
-      paint();
-    }),
     vscode.commands.registerCommand('gandalf.filterCurrentFile', () => findingsView.setScope('file')),
     vscode.commands.registerCommand('gandalf.filterProject', () => findingsView.setScope('project')),
     vscode.commands.registerCommand('gandalf.filterFindings', () => findingsView.pickFilters()),
     vscode.commands.registerCommand('gandalf.expandAll', () => findingsView.expandAll()),
     vscode.commands.registerCommand('gandalf.showTimings', () => showTimings()),
-    vscode.commands.registerCommand('gandalf.applyFixes', async () => {
-      const ok = await confirm(
-        'Gandalf: apply gate autofixes?',
-        'Runs gandalf --fix, which rewrites files in the working tree (ruff --fix, ruff format, eslint --fix).',
-      );
-      if (ok) await run('workspace', { fix: true, reason: 'apply fixes' });
-    }),
-    vscode.commands.registerCommand('gandalf.writeBaseline', async () => {
-      const ok = await confirm(
-        'Gandalf: accept every current finding as the baseline?',
-        'Writes .gandalf-baseline.json in the repository root. Findings recorded there stop failing the gate, so only new ones can.',
-      );
-      if (ok) await run('workspace', { writeBaseline: true, reason: 'write baseline' });
-    }),
     vscode.commands.registerCommand('gandalf.checkEnvironment', async () => {
       const folder = primaryFolder();
       if (folder) await runDoctor(folder, settingsFor(folder));
@@ -406,7 +370,6 @@ export function activate(context: vscode.ExtensionContext): void {
       if (folder) await buildToolsImage(folder, settingsFor(folder));
     }),
 
-    vscode.workspace.onDidChangeTextDocument(() => scheduler.noteEdit()),
     vscode.window.onDidChangeActiveTextEditor(() => findingsView.refresh()),
     vscode.workspace.onDidSaveTextDocument((doc) => onSave(doc)),
     vscode.workspace.onDidChangeConfiguration((e) => {
@@ -429,9 +392,7 @@ export function activate(context: vscode.ExtensionContext): void {
     const folder = primaryFolder();
     const snapshot = folder ? store.project(folder) : undefined;
     const run = folder ? store.lastRun(folder) : undefined;
-    const timed = (snapshot?.payload.gates ?? [])
-      .filter((g) => typeof g.duration === 'number')
-      .sort((a, b) => (b.duration ?? 0) - (a.duration ?? 0));
+    const timed = byDuration(snapshot?.payload);
     if (!snapshot || timed.length === 0) {
       void vscode.window.showInformationMessage(
         'Gandalf: no timings yet — run “Gandalf: Scan Workspace” first.',
@@ -473,16 +434,10 @@ export function activate(context: vscode.ExtensionContext): void {
     // Never let gandalf's own output re-trigger gandalf.
     if (relPath.startsWith('..') || /^(reports|\.git)[/\\]/.test(relPath)) return;
     if (/^\.gandalf-(cache|trend|baseline)/.test(path.basename(relPath))) return;
-    // An excluded file has nothing to scan, and a file-scoped run that resolves
-    // to nothing falls back to the whole tree — the opposite of what was asked.
-    if (isExcluded(relPath, excludesFor(folder, s))) {
-      log().debug(`excluded, not scanning: ${relPath}`);
-      return;
-    }
 
     const job: Job = {
       folder,
-      kind: s.scopeOnSave === 'file' ? 'file' : s.scopeOnSave === 'staged' ? 'staged' : 'workspace',
+      kind: 'file',
       reason: `saved ${relPath}`,
       manual: false,
     };

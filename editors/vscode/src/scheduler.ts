@@ -6,7 +6,6 @@
  * following rules:
  *
  *  - **debounce** — a burst of saves collapses into one run;
- *  - **idle gate** — optionally wait for the editor to be quiet first;
  *  - **single flight** — exactly one gandalf process at a time, ever;
  *  - **coalescing** — while one runs, only the newest request survives to be
  *    run next, so a save storm never queues a backlog;
@@ -30,8 +29,6 @@ export interface Job {
   relPath?: string;
   absPath?: string;
   llm?: boolean;
-  fix?: boolean;
-  writeBaseline?: boolean;
   reason: string;
   /** User-initiated: preempts an automatic run and ignores the idle gate. */
   manual: boolean;
@@ -39,14 +36,8 @@ export interface Job {
   report?: (p: ScanProgress) => void;
 }
 
-export function jobKey(job: Job): string {
-  return `${job.folder.uri.toString()}|${job.kind}|${job.relPath ?? ''}`;
-}
-
 export function jobLabel(job: Job): string {
-  if (job.kind === 'file') return job.relPath ?? 'file';
-  if (job.kind === 'staged') return 'staged changes';
-  return job.folder.name;
+  return job.kind === 'file' ? (job.relPath ?? 'file') : job.folder.name;
 }
 
 /** Remembers what a file looked like when it was last scanned. */
@@ -88,19 +79,14 @@ export class Scheduler {
   private sweep?: NodeJS.Timeout;
   private pending?: Job;
   private active?: { job: Job; source: vscode.CancellationTokenSource };
-  private lastEditAt = 0;
   private lastCompletedAt = 0;
   /** Serializes every run, so `runNow` resolves when *its* job is done. */
   private chain: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly execute: (job: Job, token: vscode.CancellationToken) => Promise<void>,
-    private readonly settings: () => { debounceMs: number; idleMs: number; intervalMinutes: number },
+    private readonly settings: () => { debounceMs: number; intervalMinutes: number },
   ) {}
-
-  noteEdit(): void {
-    this.lastEditAt = Date.now();
-  }
 
   /** Queue a job behind the debounce timer. The newest request for a scope wins. */
   schedule(job: Job): void {
@@ -110,9 +96,9 @@ export class Scheduler {
   }
 
   /**
-   * Run now: cancels an automatic run in flight and skips the idle gate. The
-   * returned promise resolves when *this* job is done, so a caller that needs
-   * the result (opening the report) can await it.
+   * Run now: cancels an automatic run already in flight. The returned promise
+   * resolves when *this* job is done, so a caller that needs the result
+   * (opening the report) can await it.
    */
   runNow(job: Job): Promise<void> {
     if (this.active && !this.active.job.manual) {
@@ -160,15 +146,6 @@ export class Scheduler {
   private async fire(): Promise<void> {
     const job = this.pending;
     if (!job) return;
-
-    const { idleMs } = this.settings();
-    if (idleMs > 0 && !job.manual) {
-      const quietFor = Date.now() - this.lastEditAt;
-      if (quietFor < idleMs) {
-        this.arm(idleMs - quietFor);
-        return;
-      }
-    }
     if (this.active) return; // Picked up when the current run finishes.
 
     this.pending = undefined;

@@ -31,20 +31,10 @@ function gate(name: string, findings: RawFinding[], extra: Partial<RawGate> = {}
 function payloadOf(...gates: RawGate[]): Payload {
   return {
     scope: 'working-tree',
-    generated_at: '2026-08-15 10:00:00 UTC',
-    commit: { short: 'abc1234', subject: 'test' },
-    languages: ['python'],
     verdict: 'warn',
-    passed: true,
-    policy: { fail_on: 'fail', min_score: 0, reason: 'policy satisfied' },
     score: 70,
-    summary: '',
-    changeset: '',
-    remediation: '',
-    improvement: '',
     skipped_gates: [],
     disabled_gates: [],
-    fixes: [],
     gates,
   };
 }
