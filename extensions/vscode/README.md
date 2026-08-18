@@ -423,13 +423,19 @@ The extension has no version of its own. `release-please-config.json` lists
 that bumps `version.txt` bumps the extension in the same commit, and the tag
 means one thing for both surfaces.
 
-Merging that PR tags the release, and `release.yml` calls
+Merging that PR cuts a **draft** release, and `release.yml` calls
 `publish-extension.yml` in the same run: version from the tag, `npm ci`,
 `npm run package` (typecheck, tests, bundle, legal files, `vsce package`), then
 publish to the VS Marketplace and to Open VSX, attach the `.vsix` to the
-release. Calling it rather than hanging it off `on: release` is deliberate: the
-release release-please publishes carries GITHUB_TOKEN, and GitHub does not start
-workflows from GITHUB_TOKEN events. It re-stamps the version from the tag before packaging —
+release. A last job flips the draft to published, which is what creates the tag.
+That order is the whole point: this repository has immutable releases, so a
+published release's assets are frozen — the `.vsix` has to be attached while it
+is still a draft. If the publish job fails the release stays a draft, which is
+the recoverable half of the two outcomes.
+
+Calling the workflow rather than hanging it off `on: release` is deliberate too:
+the release release-please creates carries GITHUB_TOKEN, and GitHub does not
+start workflows from GITHUB_TOKEN events. It re-stamps the version from the tag before packaging —
 normally a no-op, but `workflow_dispatch` takes a version too, and a manifest
 that disagrees with the tag must never ship.
 

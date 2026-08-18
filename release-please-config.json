@@ -5,6 +5,7 @@
       "release-type": "simple",
       "package-name": "gandalf",
       "include-component-in-tag": false,
+      "draft": true,
       "extra-files": [
         {
           "type": "json",
