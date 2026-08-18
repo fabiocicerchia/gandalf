@@ -1,4 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-  <path d="M12 2 3 5.2v6.1c0 4.7 3.6 8.5 9 10.7 5.4-2.2 9-6 9-10.7V5.2L12 2Zm0 2.1 7 2.5v4.7c0 3.6-2.7 6.7-7 8.6-4.3-1.9-7-5-7-8.6V6.6l7-2.5Z"/>
-  <path d="M12 6.4 8.6 13h6.8L12 6.4Zm0 4.3 1 1.9h-2l1-1.9ZM8 14.3h8v1.6H8v-1.6Z"/>
+<!-- Panel icon. Monochrome and drawn with currentColor: VS Code tints view
+     container icons itself, and a coloured icon fights every theme it lands in.
+     Same mark as media/icon.png — the hat, leaning, with one spark. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"
+     fill="currentColor" role="img" aria-label="Gandalf">
+  <title>Gandalf</title>
+  <path d="M15.96 2.52 Q10.44 7.56 6.36 15.6 H17.88 Q17.64 8.76 15.96 2.52 Z"/>
+  <ellipse cx="12" cy="16.4" rx="9" ry="1.7"/>
+  <path d="M4.7 4.3 6 6.5 8.2 6.9 6 7.3 4.7 9.5 3.4 7.3 1.2 6.9 3.4 6.5 Z"/>
 </svg>
