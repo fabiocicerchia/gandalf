@@ -418,47 +418,47 @@ with fixtures taken from real gate output.
 
 ## Releasing
 
-The extension versions itself. release-please tracks gandalf's `version.txt`
-and knows nothing about `editors/vscode/package.json`, so the two numbers move
-independently and the extension is published from its own tag.
+The extension has no version of its own. `release-please-config.json` lists
+`editors/vscode/package.json` (and its lock) as extra files, so the release PR
+that bumps `version.txt` bumps the extension in the same commit, and the tag
+means one thing for both surfaces.
 
-One-time setup, for whoever holds the publisher:
+Merging that PR publishes a GitHub Release, and `publish-extension.yml` takes it
+from there: version from the tag, `npm ci`, typecheck, tests, bundle,
+`vsce package`, then publish to the VS Marketplace and to Open VSX, attach the
+`.vsix` to the release. It re-stamps the version from the tag before packaging —
+normally a no-op, but `workflow_dispatch` takes a version too, and a manifest
+that disagrees with the tag must never ship.
 
-1. Create an [Azure DevOps](https://dev.azure.com) organization — the Marketplace
-   authenticates against it, and nothing else about it is used.
-2. Create a Personal Access Token: **User settings ▸ Personal access tokens ▸
-   New Token**, organization **All accessible organizations**, scope
-   **Marketplace ▸ Manage**. Anything narrower cannot publish. Copy it now; it is
-   shown once.
-3. Create the publisher `fabiocicerchia` at
-   <https://marketplace.visualstudio.com/manage> with that account.
-4. For [Open VSX](https://open-vsx.org) — the registry VSCodium, Cursor and
-   Windsurf read — sign in with GitHub, sign the publisher agreement, and create
-   a token under **User settings ▸ Access tokens**.
-5. Put both in the repository as the secrets `VSCE_PAT` and `OVSX_PAT`. Either
-   may be omitted: the step that has no token says so and is skipped.
+The workflow is inert until the tokens exist. Each publish step is skipped when
+its secret is missing, and the job summary says which registries were skipped
+and why, so a run without secrets packages and attaches rather than fails.
 
-Then, per release:
+Two one-time setup steps only the repository owner can do:
 
-```sh
-# 1. bump "version" in package.json and add the section to CHANGELOG.md
-# 2. tag it — the tag must agree with the manifest, CI checks that it does
-git tag vscode-v0.2.0 && git push origin vscode-v0.2.0
-```
+| | VS Marketplace | Open VSX |
+| --- | --- | --- |
+| Account | [Azure DevOps](https://dev.azure.com) organisation | GitHub, via [open-vsx.org](https://open-vsx.org) |
+| Namespace | publisher `fabiocicerchia`, created at [marketplace.visualstudio.com/manage](https://marketplace.visualstudio.com/manage) | namespace `fabiocicerchia`, `ovsx create-namespace` |
+| Token | PAT scoped **All accessible organizations** + **Marketplace → Manage** | access token from the Open VSX profile page |
+| Secret | `VSCE_PAT` | `OVSX_PAT` |
 
-`.github/workflows/publish-extension.yml` takes it from there: typecheck, tests,
-production bundle, `.vsix`, both registries, and the `.vsix` attached to a GitHub
-release so it stays installable by hand. It also runs on **workflow_dispatch**,
-which builds and publishes whatever is on the default branch — useful for the
-very first publish, before any tag exists.
+The PAT's organisation scope is the one that catches people out: a PAT limited
+to a single Azure DevOps organisation authenticates and then fails to publish.
 
-To publish from a laptop instead:
+`make ext-publish` does the same thing from a laptop when CI is not an option.
+It needs the same environment variables and it publishes whatever is in the
+working tree, which is why it is the escape hatch rather than the route.
 
-```sh
-make ext-publish          # vsce publish, from the repository root
-```
+Marketplace versions are immutable — a version can be superseded, never
+replaced — so the workflow rejects anything that is not `x.y.z` before it starts
+rather than half way through.
 
-That needs `vsce login fabiocicerchia` once, or `VSCE_PAT` in the environment.
+Three files exist only so that chain runs unattended, all of them gitignored and
+copied in by `npm run package`: `LICENSE` and `NOTICE`, because Apache-2.0 §4
+wants them shipped with anything we distribute; and `CHANGELOG.md`, because the
+Marketplace renders one as a tab and there is one changelog — release-please's,
+at the repository root. A second one beside it would only ever be out of date.
 
 Marketplace listing copy comes from `package.json` (`displayName`,
 `description`, `categories`, `keywords`, `icon`, `galleryBanner`) and this

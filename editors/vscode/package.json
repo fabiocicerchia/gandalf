@@ -1,8 +1,8 @@
 {
   "name": "gandalf-quality-gates",
-  "displayName": "Gandalf \u2014 Quality Gates",
+  "displayName": "Gandalf — Quality Gates",
   "description": "Run Gandalf's quality gates while you code: inline diagnostics, a findings panel, and the full HTML scorecard inside VS Code.",
-  "version": "0.1.0",
+  "version": "0.2.4",
   "publisher": "fabiocicerchia",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
@@ -143,7 +143,7 @@
       },
       {
         "command": "gandalf.exportReport",
-        "title": "Export Report\u2026",
+        "title": "Export Report…",
         "category": "Gandalf",
         "icon": "$(save-as)"
       }
@@ -233,7 +233,7 @@
           "type": "string",
           "default": "",
           "scope": "machine-overridable",
-          "markdownDescription": "Where gandalf is: the `gandalf` wrapper `make install` writes, or a source checkout (the directory holding `src/gandalf`). Empty auto-detects \u2014 the open workspace if it is a checkout, then `gandalf` on `PATH`, then `~/.local/share/gandalf`."
+          "markdownDescription": "Where gandalf is: the `gandalf` wrapper `make install` writes, or a source checkout (the directory holding `src/gandalf`). Empty auto-detects — the open workspace if it is a checkout, then `gandalf` on `PATH`, then `~/.local/share/gandalf`."
         },
         "gandalf.configPath": {
           "type": "string",
@@ -281,7 +281,7 @@
           "type": "number",
           "default": 0,
           "minimum": 0,
-          "markdownDescription": "Max gates running at once (`--concurrency`). `0` leaves gandalf's default (CPU count). Lower it to keep the machine responsive \u2014 gates spawn `docker run`."
+          "markdownDescription": "Max gates running at once (`--concurrency`). `0` leaves gandalf's default (CPU count). Lower it to keep the machine responsive — gates spawn `docker run`."
         },
         "gandalf.scan.debounceMs": {
           "type": "number",
@@ -326,12 +326,12 @@
             "Only scan when a Gandalf command is invoked."
           ],
           "default": "onSave",
-          "description": "When scans run. Gandalf never scans on keystroke \u2014 gates spawn real tools."
+          "description": "When scans run. Gandalf never scans on keystroke — gates spawn real tools."
         },
         "gandalf.scan.useCache": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Pass `--cache` on workspace/staged scans so unchanged gates are reused. File-scoped scans skip the cache on purpose \u2014 they would overwrite the workspace entries with a one-file hash."
+          "markdownDescription": "Pass `--cache` on workspace/staged scans so unchanged gates are reused. File-scoped scans skip the cache on purpose — they would overwrite the workspace entries with a one-file hash."
         },
         "gandalf.useEditorExcludes": {
           "type": "boolean",
@@ -347,8 +347,8 @@
     "check": "tsc --noEmit",
     "test": "node esbuild.mjs --tests && node --test \"out/**/*.test.js\"",
     "vscode:prepublish": "npm run check && npm test && node esbuild.mjs --production",
-    "package": "node scripts/copy-legal.mjs && vsce package --no-dependencies",
-    "publish": "node scripts/copy-legal.mjs && vsce publish --no-dependencies"
+    "package": "node scripts/copy-package-files.mjs && vsce package --no-dependencies",
+    "publish": "node scripts/copy-package-files.mjs && vsce publish --no-dependencies"
   },
   "devDependencies": {
     "@types/node": "^20.11.30",

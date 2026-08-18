@@ -58,12 +58,17 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-      # The runner's Node is 20+; the lockfile is not in git, so no `npm ci`.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: editors/vscode/package-lock.json
+
       - name: Install
-        run: npm install --no-audit --no-fund
+        run: npm ci
 
       # `package` runs vscode:prepublish first — typecheck, then the tests —
       # so this is the whole workspace's build, and it also proves the manifest
-      # still packages, which is what publish-extension.yml does from a tag.
+      # still packages, which is what publish-extension.yml does on a release.
       - name: Typecheck, test and package
         run: npm run package

@@ -3,7 +3,8 @@ dist/
 out/
 *.vsix
 
-# Copied from the repository root at package time.
+# Copied in from the repository root at package time. There is one changelog,
+# release-please's, and this is not it.
 LICENSE
 NOTICE
-package-lock.json
+CHANGELOG.md

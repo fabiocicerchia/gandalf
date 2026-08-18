@@ -30,8 +30,9 @@ make ext-package                  # just build the .vsix, install it by hand
 
 Reload the window afterwards; a **Gandalf** tab appears in the bottom panel.
 For development, `npm run watch` and <kbd>F5</kbd> from `editors/vscode/` launch
-an Extension Development Host. Publishing it to the Marketplace and to Open VSX
-is a push of a `vscode-vX.Y.Z` tag — see
+an Extension Development Host. It carries no version of its own: release-please
+bumps its manifest along with `version.txt`, and publishing the release publishes
+the extension — see
 [Releasing](https://github.com/fabiocicerchia/gandalf/tree/main/editors/vscode#releasing).
 
 The extension finds gandalf via `gandalf.path` (a wrapper or a checkout — either

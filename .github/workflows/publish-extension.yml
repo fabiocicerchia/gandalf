@@ -1,86 +1,120 @@
 name: publish-extension
 
-# Publish editors/vscode to the Visual Studio Marketplace and Open VSX.
+# Publishes the VS Code extension when a GitHub Release is published — which is
+# what merging release-please's PR does. The version comes from the tag, so the
+# extension and gandalf ship as one version and there is no second number to
+# keep in step.
 #
-# The extension versions itself: release-please tracks gandalf's version.txt and
-# knows nothing about editors/vscode/package.json. So this runs off its own tag,
-# `vscode-vX.Y.Z`, which must match the version in that manifest — bump the
-# manifest, bump the extension CHANGELOG, tag, push the tag.
-#
-# Both registries are optional: a step whose token secret is missing says so and
-# is skipped, so a fork can build the .vsix without holding either credential.
-#   VSCE_PAT — Azure DevOps PAT, scope "Marketplace ▸ Manage", all accessible
-#              organizations. https://marketplace.visualstudio.com/manage
-#   OVSX_PAT — Open VSX access token. https://open-vsx.org/user-settings/tokens
+# Nothing happens without the tokens: each publish step is skipped when its
+# secret is missing, so this file is inert until VSCE_PAT (VS Marketplace) and
+# OVSX_PAT (Open VSX) are set in the repository's secrets. Marketplace versions
+# are immutable — a version published once can never be replaced, only
+# superseded — so the version check below is deliberately strict.
 
 on:
-  push:
-    tags: [vscode-v*]
+  release:
+    types: [published]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish, without the leading v (e.g. 0.2.5)"
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: publish-extension-${{ github.ref }}
+  group: publish-extension
   cancel-in-progress: false
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # attach the .vsix to the GitHub release
-    defaults:
-      run:
-        working-directory: editors/vscode
+      contents: write # attach the VSIX to the release
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-      # The runner ships Node 20+, which is all the build asks for, and the
-      # lockfile is not in git (the deps are dev-only), so there is no `npm ci`.
-      - name: Install
-        run: npm install --no-audit --no-fund
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: editors/vscode/package-lock.json
 
-      # A tag that disagrees with the manifest would publish the wrong version,
-      # or nothing at all. Fail here rather than halfway through.
-      - name: Check the tag against the manifest
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Resolve the version
+        id: version
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          INPUT: ${{ inputs.version }}
         run: |
-          manifest=$(node -p "require('./package.json').version")
-          tagged=${GITHUB_REF_NAME#vscode-v}
-          if [ "$manifest" != "$tagged" ]; then
-            echo "tag $GITHUB_REF_NAME says $tagged, package.json says $manifest"
+          set -euo pipefail
+          VERSION="${INPUT:-${TAG#v}}"
+          # The Marketplace takes x.y.z and nothing else, and refuses a version
+          # it has seen before — better to fail here than half way through.
+          if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::'$VERSION' is not a publishable version (want x.y.z)"
             exit 1
           fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # release-please already writes this version into the manifest (see
+          # release-please-config.json), so this is normally a no-op. It stays
+          # for workflow_dispatch, and so that a mismatch can never ship.
+          node -e '
+            const fs = require("node:fs")
+            const path = "editors/vscode/package.json"
+            const pkg = JSON.parse(fs.readFileSync(path, "utf8"))
+            pkg.version = process.argv[1]
+            fs.writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`)
+          ' "$VERSION"
+          echo "publishing gandalf-quality-gates $VERSION"
 
-      # `npm run package` runs vscode:prepublish first — typecheck, tests, then
-      # the production bundle. A red test never reaches a registry.
+      - name: Install
+        run: npm --prefix editors/vscode ci
+
+      # `package` runs vscode:prepublish first — typecheck, then the tests — and
+      # copies in LICENSE, NOTICE and the generated CHANGELOG. A red test never
+      # reaches a registry.
       - name: Package
-        run: npm run package
+        run: npm --prefix editors/vscode run package
 
-      - name: Publish to the Visual Studio Marketplace
+      # `secrets` cannot be read from a job-level `if`, so which registries are
+      # reachable is decided here and read back as step outputs.
+      - name: Which registries are configured
+        id: tokens
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: |
-          if [ -z "$VSCE_PAT" ]; then echo "VSCE_PAT not set — skipping"; exit 0; fi
-          npm exec -- vsce publish --no-dependencies --packagePath ./*.vsix
-
-      # The registry VSCodium, Cursor and Windsurf read. Same .vsix.
-      - name: Publish to Open VSX
-        env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
         run: |
-          if [ -z "$OVSX_PAT" ]; then echo "OVSX_PAT not set — skipping"; exit 0; fi
-          npx --yes ovsx@1.1.1 publish ./*.vsix --pat "$OVSX_PAT"
+          {
+            echo "marketplace=$([ -n "$VSCE_PAT" ] && echo true || echo false)"
+            echo "openvsx=$([ -n "$OVSX_PAT" ] && echo true || echo false)"
+          } >> "$GITHUB_OUTPUT"
 
-      # So the .vsix is installable by hand from the release page too.
-      - name: Attach the .vsix to the release
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Publish to the VS Marketplace
+        if: steps.tokens.outputs.marketplace == 'true'
+        working-directory: editors/vscode
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx --yes @vscode/vsce@3.9.2 publish --no-dependencies --packagePath "gandalf-quality-gates-${{ steps.version.outputs.version }}.vsix"
+
+      # Where VSCodium and Cursor look. A separate registry with its own
+      # namespace and token, not a mirror of the Marketplace.
+      - name: Publish to Open VSX
+        if: steps.tokens.outputs.openvsx == 'true'
+        working-directory: editors/vscode
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: npx --yes ovsx@1.1.1 publish "gandalf-quality-gates-${{ steps.version.outputs.version }}.vsix" -p "$OVSX_PAT"
+
+      - name: Attach the VSIX to the release
+        if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" "editors/vscode/gandalf-quality-gates-${{ steps.version.outputs.version }}.vsix" --clobber
+
+      - name: Say what happened
         run: |
-          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
-            gh release create "$GITHUB_REF_NAME" \
-              --title "VS Code extension $GITHUB_REF_NAME" \
-              --generate-notes
-          gh release upload "$GITHUB_REF_NAME" ./*.vsix --clobber
+          echo "### gandalf-quality-gates ${{ steps.version.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- VS Marketplace: ${{ steps.tokens.outputs.marketplace == 'true' && 'published' || 'skipped (no VSCE_PAT)' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Open VSX: ${{ steps.tokens.outputs.openvsx == 'true' && 'published' || 'skipped (no OVSX_PAT)' }}" >> "$GITHUB_STEP_SUMMARY"
