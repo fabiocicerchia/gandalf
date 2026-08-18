@@ -11,6 +11,8 @@ export interface Settings {
   pythonPath: string;
   configPath: string;
   extraArgs: string[];
+  exclude: string[];
+  useEditorExcludes: boolean;
   trigger: Trigger;
   scopeOnSave: SaveScope;
   debounceMs: number;
@@ -42,6 +44,8 @@ export function readSettings(scope?: vscode.Uri): Settings {
     pythonPath: get('pythonPath', 'python3').trim() || 'python3',
     configPath: get('configPath', '').trim(),
     extraArgs: get<string[]>('extraArgs', []),
+    exclude: get<string[]>('exclude', []),
+    useEditorExcludes: get('useEditorExcludes', true),
     trigger: get<Trigger>('scan.trigger', 'onSave'),
     scopeOnSave: get<SaveScope>('scan.scopeOnSave', 'file'),
     debounceMs: Math.max(250, get('scan.debounceMs', 1500)),

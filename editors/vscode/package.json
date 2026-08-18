@@ -393,6 +393,19 @@
           "default": 1,
           "minimum": -1,
           "markdownDescription": "`GANDALF_LLM_RETRIES` for editor scans. The skill-backed judge gates call the LLM regardless of `#gandalf.scan.llm#` (that setting only controls the report's summary), and gandalf's default of 3 retries with exponential backoff costs ~7s per call when no endpoint is reachable \u2014 measured at 14.4s of a 14.9s scan on gandalf's own repository. `1` retry brings that to 3.3s while still absorbing a transient failure; `0` never retries; `-1` restores gandalf's default."
+        },
+        "gandalf.exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Paths no gate should read, as `--exclude` globs. A bare name skips that directory anywhere (`node_modules`), a path anchors at the repository root (`src/generated`), and globs work (`*.min.js`). Adds to the repository's `.gandalfignore` and to `#gandalf.useEditorExcludes#` rather than replacing them."
+        },
+        "gandalf.useEditorExcludes": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Also skip whatever `#files.exclude#` and `#search.exclude#` hide from the editor. These are usually already the vendored, generated and build directories you don't want scanned, so gandalf reads them rather than asking for the same list twice. VS Code globs are translated: a leading or trailing `**` is dropped (a bare name already means \"at any depth\" to gandalf) and `{a,b}` alternation is expanded. `when` clauses are skipped, since they ask about the workspace rather than naming a path."
         }
       }
     }

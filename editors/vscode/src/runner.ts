@@ -46,6 +46,8 @@ export interface RunRequest {
   fix?: boolean;
   writeBaseline?: boolean;
   outDir: string;
+  /** Paths no gate should read, already translated to gandalf's dialect. */
+  excludes: string[];
   /** Why this run started — shown in the log. */
   reason: string;
   /** Called as gandalf reports stages and gate completions. */
@@ -276,6 +278,10 @@ function buildArgs(req: RunRequest, s: Settings, l: Launcher): string[] {
 
   // Per-gate results as they land, so the pane fills during the run.
   if ((req.onGate || req.onStart) && supports('--stream')) args.push('--stream');
+
+  // Repeated rather than comma-joined: a path may legitimately contain a comma,
+  // and argparse's append is unambiguous.
+  if (supports('--exclude')) for (const pattern of req.excludes) args.push('--exclude', pattern);
 
   args.push(...s.extraArgs);
   return args;

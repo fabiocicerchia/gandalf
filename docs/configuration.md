@@ -34,12 +34,32 @@ wins over built-in defaults. All keys are optional.
 only        = ["ruff", "gitleaks"]   # allowlist: run ONLY these gates
 skip        = ["atheris"]            # denylist: never run these
 concurrency = 8                       # max gates running at once (<=0 = unbounded)
+exclude     = ["src/generated", "*.min.js"]  # paths no gate should read
 ```
 
 `concurrency` bounds how many gates run simultaneously — important because
 ~35 gates may each spawn a `docker run`, which can swamp a laptop or CI runner
 if they all launch at once. Precedence: `--concurrency N` → `GANDALF_CONCURRENCY`
 → config → CPU count.
+
+### Excluding paths
+
+`exclude` adds to the repo's `.gandalfignore` and the built-in defaults
+(`reports`, `node_modules`, `llama.cpp`, `.venv`, `.git`); `--exclude <glob>`
+adds to it again, repeatably, without touching a file. All three feed one list,
+matched the same way:
+
+| Pattern | Matches |
+|---|---|
+| `node_modules` | that directory wherever it appears, and everything under it |
+| `src/generated` | that path from the repository root, and everything under it |
+| `*.min.js` | any path or filename the glob matches |
+| `.env` | that filename in any directory |
+
+The list narrows what **every** gate reads, not only the tree-scanning ones that
+translate it into their own tool's exclude flag. It also decides what the
+`--cache` hash covers, so editing an excluded file doesn't invalidate results
+no gate would have re-derived.
 
 ### Per-gate timeouts
 

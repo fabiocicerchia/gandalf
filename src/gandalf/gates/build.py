@@ -7,7 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.plugins import tracked_files
+from gandalf.plugins import ignore_patterns, is_ignored, scannable_files
 
 
 class BuildGate:
@@ -16,12 +16,18 @@ class BuildGate:
     langs = frozenset({"python"})
 
     async def run(self, ctx: GateContext) -> GateResult:
-        py_files = [f for f in ctx.changed_files if f.endswith(".py")]
+        pats = ignore_patterns(ctx.workdir)
+        py_files = [
+            f
+            for f in ctx.changed_files
+            if f.endswith(".py") and not is_ignored(f, pats)
+        ]
         if not py_files:
-            # Whole-tree scope has no changed_files → compile every tracked .py.
+            # Whole-tree scope has no changed_files → compile every scannable .py.
             # Tracked-only skips untracked/vendored trees (.venv, node_modules,
-            # a vendored llama.cpp) without hardcoding their names.
-            py_files = [f for f in tracked_files(ctx.workdir) if f.endswith(".py")]
+            # a vendored llama.cpp) without hardcoding their names, and the
+            # ignore patterns drop what the repo or the caller excluded.
+            py_files = [f for f in scannable_files(ctx.workdir) if f.endswith(".py")]
         if not py_files:
             return GateResult(self.name, GateOutcome.PASS, 1.0, "no Python files")
 

@@ -140,6 +140,24 @@ finding has to match both. Clearing an entire axis means "all of it" rather than
 view header says `filtered`, and an empty pane tells you how many rows are hidden
 rather than claiming everything is green.
 
+## Excluding what the editor already excludes
+
+Whatever `files.exclude` and `search.exclude` hide from you — `node_modules`,
+build output, vendored trees — gandalf skips too. Those settings are already the
+list of things you don't want to look at, so the extension reads them rather
+than asking you to maintain a second copy. Turn it off with
+`gandalf.useEditorExcludes`, and add your own with `gandalf.exclude`.
+
+The two glob dialects differ, so patterns are translated on the way through: a
+leading or trailing `**` is dropped (a bare name already means "at any depth" to
+gandalf), `{a,b}` alternation is expanded, and `when` clauses are skipped since
+they ask a question about the workspace rather than naming a path. Everything is
+passed as `gandalf --exclude`, alongside whatever the repository's
+`.gandalfignore` already says.
+
+Saving a file that is itself excluded doesn't start a scan at all — no process,
+no gates.
+
 ## While a scan runs
 
 The status bar shows live progress — `$(sync~spin) Gandalf 12/37` — with the

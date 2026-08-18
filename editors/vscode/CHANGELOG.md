@@ -37,6 +37,10 @@ First release.
   reachable; one retry brings that to 3.3s.
 - Autofix (`--fix`) and baseline (`--write-baseline`) commands, both confirmed
   before they touch anything.
+- The folders the editor hides (`files.exclude`, `search.exclude`) are excluded
+  from scans too, translated into gandalf's `--exclude`; `gandalf.exclude` adds
+  more, and `gandalf.useEditorExcludes` turns the automatic part off. Saving an
+  excluded file starts no scan at all.
 - Measured on a 10k-finding tree: one shared path cache per run (10,000
   synchronous filesystem calls down to 2,000), the merged board memoized against
   a revision counter (269 ms of repaint work per streamed scan down to ~0),

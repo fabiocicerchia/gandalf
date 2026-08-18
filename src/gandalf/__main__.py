@@ -448,6 +448,15 @@ def _build_parser() -> argparse.ArgumentParser:
         "--config", metavar="PATH", help="path to a .gandalf.toml (default: repo root)"
     )
     ap.add_argument(
+        "--exclude",
+        action="append",
+        metavar="GLOB",
+        help="skip paths matching GLOB, for every gate. Repeatable. Same matching "
+        "as .gandalfignore: a bare name skips that directory anywhere "
+        "(node_modules), a path anchors at the repo root (src/generated), and "
+        "globs work (*.min.js). Adds to .gandalfignore rather than replacing it",
+    )
+    ap.add_argument(
         "--fail-on",
         choices=("fail", "warn"),
         help="lowest outcome that fails the run (default: fail)",
@@ -501,6 +510,16 @@ def main(argv: list[str] | None = None) -> int:
 
     cfg = gconfig.load(scope.repo_root(), args.config)
     debug.log(f"config: {cfg.path or '(defaults)'}")
+
+    # Before any gate resolves its file list, so every gate sees the same scope.
+    excludes = list(args.exclude or []) + [
+        str(x) for x in (cfg.data.get("exclude") or [])
+    ]
+    # Always set, even when empty: this is process state, and a second run in
+    # the same process must not inherit the first one's exclusions.
+    plugins.set_extra_ignores(excludes)
+    if excludes:
+        debug.log(f"excluding {len(excludes)} extra pattern(s): {', '.join(excludes)}")
 
     gates = discover_gates()
     if not gates:

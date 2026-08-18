@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 
 import { readSettings, Settings } from './config';
 import { DiagnosticGroup, DiagnosticPublisher } from './diagnostics';
+import { enabledGlobs, excludePatterns, isExcluded } from './exclude';
 import { buildToolsImage, runDoctor } from './doctor';
 import { FindingsView } from './findingsView';
 import { disposeLog, log } from './log';
@@ -67,6 +68,19 @@ export function activate(context: vscode.ExtensionContext): void {
       .folders()
       .map((f) => ({ findings: store.findings(f), settings: settingsFor(f) }));
     diagnostics.publish(groups);
+  };
+
+  /**
+   * What this folder should not scan: the extension's own setting, plus
+   * whatever the editor already hides. Read per run rather than cached — these
+   * are three config lookups, and a stale exclusion list would scan a tree the
+   * user thought they had excluded.
+   */
+  const excludesFor = (folder: vscode.WorkspaceFolder, s: Settings): string[] => {
+    if (!s.useEditorExcludes) return excludePatterns(s.exclude);
+    const files = vscode.workspace.getConfiguration('files', folder.uri).get('exclude');
+    const search = vscode.workspace.getConfiguration('search', folder.uri).get('exclude');
+    return excludePatterns(s.exclude, enabledGlobs(files), enabledGlobs(search));
   };
 
   /** Artifacts live in the extension's own storage, never in the user's tree. */
@@ -175,6 +189,7 @@ export function activate(context: vscode.ExtensionContext): void {
     };
     try {
       const outDir = outDirFor(job.folder, s);
+      const excludes = excludesFor(job.folder, s);
       const result = await runGandalf(
         {
           folder: job.folder,
@@ -185,6 +200,7 @@ export function activate(context: vscode.ExtensionContext): void {
           fix: job.fix,
           writeBaseline: job.writeBaseline,
           outDir,
+          excludes,
           reason: job.reason,
           onProgress,
           onStart: () => store.beginStream(job.folder),
@@ -457,6 +473,12 @@ export function activate(context: vscode.ExtensionContext): void {
     // Never let gandalf's own output re-trigger gandalf.
     if (relPath.startsWith('..') || /^(reports|\.git)[/\\]/.test(relPath)) return;
     if (/^\.gandalf-(cache|trend|baseline)/.test(path.basename(relPath))) return;
+    // An excluded file has nothing to scan, and a file-scoped run that resolves
+    // to nothing falls back to the whole tree — the opposite of what was asked.
+    if (isExcluded(relPath, excludesFor(folder, s))) {
+      log().debug(`excluded, not scanning: ${relPath}`);
+      return;
+    }
 
     const job: Job = {
       folder,

@@ -276,6 +276,49 @@ def test_stream_applies_baseline_suppression(tmp_path, monkeypatch, capsys):
     assert streamed[0]["outcome"] == "pass"
 
 
+def test_exclude_narrows_the_scan_end_to_end(tmp_path, monkeypatch, capsys):
+    repo = _mkrepo(tmp_path)
+    (repo / "src" / "generated").mkdir()
+    (repo / "src" / "generated" / "broken.py").write_text("def oops(:\n")
+    _git(repo, "add", "-A")
+    monkeypatch.chdir(repo)
+    out = tmp_path / "artifacts"
+    args = ["--no-llm", "--no-trend", "--no-html", "--stream", "--out-dir", str(out)]
+
+    # The generated file does not compile, so the build gate fails on it.
+    assert main([*args]) == 1
+    gate = [
+        json.loads(line)
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith('{"event": "gate"')
+    ][0]
+    assert [f["path"] for f in gate["findings"]] == ["src/generated/broken.py"]
+
+    # Excluded, the gate never reads it — and the run goes green.
+    assert main([*args, "--exclude", "src/generated"]) == 0
+    gate = [
+        json.loads(line)
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith('{"event": "gate"')
+    ][0]
+    assert gate["findings"] == []
+
+
+def test_exclude_can_come_from_the_config_file(tmp_path, monkeypatch, capsys):
+    repo = _mkrepo(tmp_path)
+    (repo / "vendor").mkdir()
+    (repo / "vendor" / "broken.py").write_text("def oops(:\n")
+    (repo / ".gandalf.toml").write_text(
+        '[gandalf]\nonly = ["build"]\nexclude = ["vendor"]\n'
+    )
+    _git(repo, "add", "-A")
+    monkeypatch.chdir(repo)
+
+    args = ["--no-llm", "--no-trend", "--no-html", "--out-dir", str(tmp_path / "a")]
+    assert main(args) == 0
+    capsys.readouterr()
+
+
 def test_payload_gates_carry_their_category(tmp_path, monkeypatch):
     repo = _mkrepo(tmp_path)
     monkeypatch.chdir(repo)
