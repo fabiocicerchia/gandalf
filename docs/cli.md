@@ -11,7 +11,10 @@
 | `--debug` | Verbose stderr log: per-gate timing and every external command run (also via `GANDALF_DEBUG=1`). Steps the progress bar aside. Gate durations are always recorded under `duration` in the JSON. |
 | `--fix` | Apply gate autofixes (`ruff --fix`, `ruff format`, `eslint --fix`) to the working tree before scoring, so the scorecard reflects the fixed state. Ignored for `--commit` (throwaway worktree). |
 | `--no-html` | Skip the HTML report (JSON is always written). |
+| `--out-dir <dir>` | Write reports to `<dir>` instead of `<repo>/reports` (created if missing). Lets an editor integration or CI job keep its artifacts out of the working tree. |
+| `--no-trend` | Don't append this run to `.gandalf-trend.jsonl`. The score delta is still read from an existing log — useful when a tool re-runs gandalf often and shouldn't pollute the history. |
 | `--json` | Also dump the JSON payload to stdout. |
+| `--stream` | Emit one NDJSON line per gate to stdout as it finishes, before the scorecard: `{"event":"start","scope":…,"gates":N}` then one `{"event":"gate","index":i,"total":N,"name":…,"outcome":…,"findings":[…],"category":…,"duration":…}` per gate, in completion order. Lets a consumer show results during the run instead of waiting for the report. Cache hits are reported too. Findings are baseline-suppressed, but the score is pre-severity-weighting and there is no verdict — those are properties of the whole run, so the final report remains the record. |
 | `--target <url>` | Live URL for the dynamic gates (nikto/sqlmap/dalfox). Without it they skip. |
 | `--allow-remote` | Permit dynamic scans against a non-localhost `--target`. |
 | `--title` / `--body` | Request title / acceptance criteria for the `compliance` gate. Without them it skips. |
@@ -21,4 +24,5 @@
 | `--baseline <path>` | Suppress findings listed in a baseline file (default `.gandalf-baseline.json` if present). |
 | `--write-baseline [PATH]` | Snapshot current findings to a baseline file (default `.gandalf-baseline.json`). |
 | `--config <path>` | Path to a `.gandalf.toml` (default: repo root). |
+| `--exclude <glob>` | Skip paths matching the glob, for **every** gate. Repeatable. A bare name skips that directory anywhere (`node_modules`), a path anchors at the repository root (`src/generated`), and globs work (`*.min.js`). Adds to `.gandalfignore` and the built-in defaults rather than replacing them; `[gandalf] exclude = [...]` in `.gandalf.toml` does the same. |
 | `--cache [PATH]` | Reuse a gate's prior result when the scanned files are unchanged (default `.gandalf-cache.json`). Ignored with `--target`/`--title`/`--body`. |

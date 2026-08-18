@@ -4,6 +4,8 @@ Run: pytest gandalf/test_run.py"""
 from __future__ import annotations
 
 import asyncio
+import json
+import subprocess
 
 from gandalf import plugins
 from gandalf.__main__ import (
@@ -11,6 +13,7 @@ from gandalf.__main__ import (
     _resolve_concurrency,
     _run_fixers,
     _run_gates,
+    main,
 )
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.config import Config
@@ -145,3 +148,183 @@ if __name__ == "__main__":
     test_per_gate_timeout_visible_in_run()
     assert _resolve_concurrency(5, Config()) == 5
     print("ok")
+
+
+# --- report destinations: --out-dir / --no-trend --------------------------------
+# End-to-end through main() in a throwaway git repo, with `only = ["build"]` so
+# the run stays stdlib-fast (the build gate just compiles the Python in scope).
+
+
+def _git(repo, *args):
+    subprocess.run(
+        ["git", "-c", "user.email=t@example.com", "-c", "user.name=test", *args],
+        cwd=repo,
+        check=True,
+    )
+
+
+def _mkrepo(tmp_path):
+    repo = tmp_path / "repo"
+    (repo / "src").mkdir(parents=True)
+    (repo / "src" / "ok.py").write_text("VALUE = 1\n")
+    (repo / ".gandalf.toml").write_text('[gandalf]\nonly = ["build"]\n')
+    _git(repo, "init", "-q", ".")
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "commit.gpgsign=false", "commit", "-qm", "init")
+    return repo
+
+
+def test_out_dir_and_no_trend_keep_the_worktree_clean(tmp_path, monkeypatch, capsys):
+    repo = _mkrepo(tmp_path)
+    monkeypatch.chdir(repo)
+    out = tmp_path / "artifacts" / "nested"  # missing parents must be created
+
+    assert main(["--no-llm", "--no-trend", "--out-dir", str(out)]) == 0
+
+    assert len(list(out.glob("gandalf-*.json"))) == 1
+    assert len(list(out.glob("gandalf-*.html"))) == 1
+    assert not (repo / "reports").exists()
+    assert not (repo / ".gandalf-trend.jsonl").exists()
+    assert str(out) in capsys.readouterr().out
+
+
+def test_reports_default_to_the_repo_and_record_a_trend(tmp_path, monkeypatch):
+    repo = _mkrepo(tmp_path)
+    monkeypatch.chdir(repo)
+
+    assert main(["--no-llm"]) == 0
+
+    assert len(list((repo / "reports").glob("gandalf-*.json"))) == 1
+    trend = json.loads((repo / ".gandalf-trend.jsonl").read_text().splitlines()[0])
+    assert trend["score"] == 100
+
+
+def test_stream_emits_one_ndjson_line_per_gate(tmp_path, monkeypatch, capsys):
+    repo = _mkrepo(tmp_path)
+    monkeypatch.chdir(repo)
+    out = tmp_path / "artifacts"
+
+    args = ["--no-llm", "--no-trend", "--no-html", "--stream", "--out-dir", str(out)]
+    assert main(args) == 0
+
+    events = [
+        json.loads(line)
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith('{"event"')
+    ]
+    assert events[0] == {"event": "start", "scope": "working-tree", "gates": 1}
+    (gate,) = events[1:]
+    assert gate["event"] == "gate"
+    assert (gate["index"], gate["total"]) == (1, 1)
+    assert gate["name"] == "build"
+    assert gate["outcome"] == "pass"
+    assert gate["category"] == "Build & tests"
+    assert gate["findings"] == []
+    assert isinstance(gate["duration"], float)
+
+
+def test_stream_reports_cache_hits_too(tmp_path, monkeypatch, capsys):
+    """A cached gate never runs, so nothing would report it — but a consumer's
+    pane must still fill on a warm cache."""
+    repo = _mkrepo(tmp_path)
+    monkeypatch.chdir(repo)
+    out = tmp_path / "artifacts"
+    args = ["--no-llm", "--no-trend", "--no-html", "--cache", "--out-dir", str(out)]
+
+    assert main(args) == 0  # cold: populates .gandalf-cache.json
+    capsys.readouterr()
+    assert main([*args, "--stream"]) == 0
+
+    events = [
+        json.loads(line)
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith('{"event"')
+    ]
+    assert [e["event"] for e in events] == ["start", "gate"]
+    assert events[1]["name"] == "build"
+
+
+def test_stream_applies_baseline_suppression(tmp_path, monkeypatch, capsys):
+    """A baselined finding must not flash up in a consumer's pane and then
+    vanish when the report lands."""
+    repo = _mkrepo(tmp_path)
+    (repo / "src" / "broken.py").write_text("def oops(:\n")
+    _git(repo, "add", "-A")  # tree scans cover tracked files, so it must be staged
+    monkeypatch.chdir(repo)
+    out = tmp_path / "artifacts"
+    common = ["--no-llm", "--no-trend", "--no-html", "--out-dir", str(out)]
+
+    # Red, and the finding streams through.
+    assert main([*common, "--stream"]) == 1
+    streamed = [
+        json.loads(line)
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith('{"event": "gate"')
+    ]
+    assert len(streamed[0]["findings"]) == 1
+
+    # Accept it, then re-run: the gate now streams clean.
+    assert main([*common, "--write-baseline"]) == 0
+    capsys.readouterr()
+    assert main([*common, "--stream"]) == 0
+    streamed = [
+        json.loads(line)
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith('{"event": "gate"')
+    ]
+    assert streamed[0]["findings"] == []
+    assert streamed[0]["outcome"] == "pass"
+
+
+def test_exclude_narrows_the_scan_end_to_end(tmp_path, monkeypatch, capsys):
+    repo = _mkrepo(tmp_path)
+    (repo / "src" / "generated").mkdir()
+    (repo / "src" / "generated" / "broken.py").write_text("def oops(:\n")
+    _git(repo, "add", "-A")
+    monkeypatch.chdir(repo)
+    out = tmp_path / "artifacts"
+    args = ["--no-llm", "--no-trend", "--no-html", "--stream", "--out-dir", str(out)]
+
+    # The generated file does not compile, so the build gate fails on it.
+    assert main([*args]) == 1
+    gate = next(
+        json.loads(line)
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith('{"event": "gate"')
+    )
+    assert [f["path"] for f in gate["findings"]] == ["src/generated/broken.py"]
+
+    # Excluded, the gate never reads it — and the run goes green.
+    assert main([*args, "--exclude", "src/generated"]) == 0
+    gate = next(
+        json.loads(line)
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith('{"event": "gate"')
+    )
+    assert gate["findings"] == []
+
+
+def test_exclude_can_come_from_the_config_file(tmp_path, monkeypatch, capsys):
+    repo = _mkrepo(tmp_path)
+    (repo / "vendor").mkdir()
+    (repo / "vendor" / "broken.py").write_text("def oops(:\n")
+    (repo / ".gandalf.toml").write_text(
+        '[gandalf]\nonly = ["build"]\nexclude = ["vendor"]\n'
+    )
+    _git(repo, "add", "-A")
+    monkeypatch.chdir(repo)
+
+    args = ["--no-llm", "--no-trend", "--no-html", "--out-dir", str(tmp_path / "a")]
+    assert main(args) == 0
+    capsys.readouterr()
+
+
+def test_payload_gates_carry_their_category(tmp_path, monkeypatch):
+    repo = _mkrepo(tmp_path)
+    monkeypatch.chdir(repo)
+    out = tmp_path / "artifacts"
+
+    assert main(["--no-llm", "--no-trend", "--no-html", "--out-dir", str(out)]) == 0
+
+    payload = json.loads(next(out.glob("gandalf-*.json")).read_text())
+    assert [g["category"] for g in payload["gates"]] == ["Build & tests"]

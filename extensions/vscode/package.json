@@ -1,0 +1,361 @@
+{
+  "name": "gandalf-quality-gates",
+  "displayName": "Gandalf — Quality Gates",
+  "description": "Run Gandalf's quality gates while you code: inline diagnostics, a findings panel, and the full HTML scorecard inside VS Code.",
+  "version": "0.2.4",
+  "publisher": "fabiocicerchia",
+  "license": "Apache-2.0",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#171A20",
+    "theme": "dark"
+  },
+  "qna": "https://github.com/fabiocicerchia/gandalf/issues",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Testing",
+    "Other"
+  ],
+  "keywords": [
+    "gandalf",
+    "quality gate",
+    "static analysis",
+    "security",
+    "sarif"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fabiocicerchia/gandalf.git",
+    "directory": "extensions/vscode"
+  },
+  "homepage": "https://github.com/fabiocicerchia/gandalf/tree/main/extensions/vscode",
+  "bugs": {
+    "url": "https://github.com/fabiocicerchia/gandalf/issues"
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "gandalf",
+          "title": "Gandalf",
+          "icon": "media/gandalf.svg"
+        }
+      ]
+    },
+    "views": {
+      "gandalf": [
+        {
+          "id": "gandalf.findings",
+          "name": "Findings",
+          "contextualTitle": "Gandalf",
+          "icon": "media/gandalf.svg"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "gandalf.scanWorkspace",
+        "title": "Scan Workspace",
+        "category": "Gandalf",
+        "icon": "$(search)"
+      },
+      {
+        "command": "gandalf.scanCurrentFile",
+        "title": "Scan Current File",
+        "category": "Gandalf",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "gandalf.showReport",
+        "title": "Open Report",
+        "category": "Gandalf",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "gandalf.showReportWithLlm",
+        "title": "Open Report (regenerate with LLM summary)",
+        "category": "Gandalf"
+      },
+      {
+        "command": "gandalf.checkEnvironment",
+        "title": "Check Environment (Doctor)",
+        "category": "Gandalf",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "gandalf.buildToolsImage",
+        "title": "Build Scanner Tools Image",
+        "category": "Gandalf"
+      },
+      {
+        "command": "gandalf.cancel",
+        "title": "Cancel Running Scan",
+        "category": "Gandalf"
+      },
+      {
+        "command": "gandalf.showLog",
+        "title": "Show Log",
+        "category": "Gandalf",
+        "icon": "$(output)"
+      },
+      {
+        "command": "gandalf.filterCurrentFile",
+        "title": "Show Findings in the Current File",
+        "category": "Gandalf",
+        "icon": "$(file)"
+      },
+      {
+        "command": "gandalf.filterProject",
+        "title": "Show Findings in the Whole Project",
+        "category": "Gandalf",
+        "icon": "$(files)"
+      },
+      {
+        "command": "gandalf.showTimings",
+        "title": "Show Gate Timings",
+        "category": "Gandalf",
+        "icon": "$(watch)"
+      },
+      {
+        "command": "gandalf.filterFindings",
+        "title": "Filter Findings",
+        "category": "Gandalf",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "gandalf.expandAll",
+        "title": "Expand All",
+        "category": "Gandalf",
+        "icon": "$(expand-all)"
+      },
+      {
+        "command": "gandalf.showHistory",
+        "title": "Show Score History",
+        "category": "Gandalf",
+        "icon": "$(graph-line)"
+      },
+      {
+        "command": "gandalf.exportReport",
+        "title": "Export Report…",
+        "category": "Gandalf",
+        "icon": "$(save-as)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "gandalf.filterCurrentFile",
+          "when": "view == gandalf.findings && gandalf.scope == project",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gandalf.filterProject",
+          "when": "view == gandalf.findings && gandalf.scope == file",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gandalf.filterFindings",
+          "when": "view == gandalf.findings",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gandalf.expandAll",
+          "when": "view == gandalf.findings && gandalf.scope == project",
+          "group": "navigation@9"
+        },
+        {
+          "command": "gandalf.scanWorkspace",
+          "when": "view == gandalf.findings",
+          "group": "navigation@4"
+        },
+        {
+          "command": "gandalf.showReport",
+          "when": "view == gandalf.findings",
+          "group": "navigation@5"
+        },
+        {
+          "command": "gandalf.scanCurrentFile",
+          "when": "view == gandalf.findings",
+          "group": "1_scan@1"
+        },
+        {
+          "command": "gandalf.checkEnvironment",
+          "when": "view == gandalf.findings",
+          "group": "2_env@1"
+        },
+        {
+          "command": "gandalf.showTimings",
+          "when": "view == gandalf.findings",
+          "group": "2_env@2"
+        },
+        {
+          "command": "gandalf.showLog",
+          "when": "view == gandalf.findings",
+          "group": "3_misc@2"
+        },
+        {
+          "command": "gandalf.showHistory",
+          "when": "view == gandalf.findings",
+          "group": "2_env@3"
+        },
+        {
+          "command": "gandalf.exportReport",
+          "when": "view == gandalf.findings",
+          "group": "1_scan@3"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "gandalf.filterCurrentFile",
+          "when": "false"
+        },
+        {
+          "command": "gandalf.filterProject",
+          "when": "false"
+        },
+        {
+          "command": "gandalf.expandAll",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Gandalf",
+      "properties": {
+        "gandalf.path": {
+          "type": "string",
+          "default": "",
+          "scope": "machine-overridable",
+          "markdownDescription": "Where gandalf is: the `gandalf` wrapper `make install` writes, or a source checkout (the directory holding `src/gandalf`). Empty auto-detects — the open workspace if it is a checkout, then `gandalf` on `PATH`, then `~/.local/share/gandalf`."
+        },
+        "gandalf.configPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to a `.gandalf.toml` passed as `--config`. Point this at an editor-specific config to run a narrower gate set while you type (gate `only`/`skip` selection lives in the config file, not on the CLI)."
+        },
+        "gandalf.diagnostics.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Publish findings as editor diagnostics (squiggles + hover)."
+        },
+        "gandalf.diagnostics.minSeverity": {
+          "type": "string",
+          "enum": [
+            "error",
+            "warning",
+            "info"
+          ],
+          "default": "info",
+          "description": "Lowest finding severity published as a diagnostic."
+        },
+        "gandalf.exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Paths no gate should read, as `--exclude` globs. A bare name skips that directory anywhere (`node_modules`), a path anchors at the repository root (`src/generated`), and globs work (`*.min.js`). Adds to the repository's `.gandalfignore` and to `#gandalf.useEditorExcludes#` rather than replacing them."
+        },
+        "gandalf.extraArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Extra command-line arguments appended to every gandalf invocation."
+        },
+        "gandalf.pythonPath": {
+          "type": "string",
+          "default": "python3",
+          "scope": "machine-overridable",
+          "description": "Python interpreter used when running gandalf from a source checkout."
+        },
+        "gandalf.scan.concurrency": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "markdownDescription": "Max gates running at once (`--concurrency`). `0` leaves gandalf's default (CPU count). Lower it to keep the machine responsive — gates spawn `docker run`."
+        },
+        "gandalf.scan.debounceMs": {
+          "type": "number",
+          "default": 1500,
+          "minimum": 250,
+          "description": "Quiet period after the triggering event before a scan starts. Later events restart the timer."
+        },
+        "gandalf.scan.intervalMinutes": {
+          "type": "number",
+          "default": 15,
+          "minimum": 5,
+          "description": "Period of the full-workspace sweep for the interval triggers."
+        },
+        "gandalf.scan.llm": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Include the LLM summary in background scans (`--no-llm` is passed when off). The report can always be regenerated with the summary on demand."
+        },
+        "gandalf.scan.onStartup": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run one full-workspace scan when the window opens, so the panel is populated."
+        },
+        "gandalf.scan.timeoutSeconds": {
+          "type": "number",
+          "default": 600,
+          "minimum": 10,
+          "description": "Kill a gandalf run that exceeds this wall-clock budget."
+        },
+        "gandalf.scan.trigger": {
+          "type": "string",
+          "enum": [
+            "onSave",
+            "onSaveAndInterval",
+            "interval",
+            "manual"
+          ],
+          "enumDescriptions": [
+            "Scan after a file is saved (debounced).",
+            "Scan on save, plus a periodic full-workspace sweep.",
+            "Only sweep the workspace periodically.",
+            "Only scan when a Gandalf command is invoked."
+          ],
+          "default": "onSave",
+          "description": "When scans run. Gandalf never scans on keystroke — gates spawn real tools."
+        },
+        "gandalf.scan.useCache": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Pass `--cache` on workspace/staged scans so unchanged gates are reused. File-scoped scans skip the cache on purpose — they would overwrite the workspace entries with a one-file hash."
+        },
+        "gandalf.useEditorExcludes": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Also skip whatever `#files.exclude#` and `#search.exclude#` hide from the editor. These are usually already the vendored, generated and build directories you don't want scanned, so gandalf reads them rather than asking for the same list twice. VS Code globs are translated: a leading or trailing `**` is dropped (a bare name already means \"at any depth\" to gandalf) and `{a,b}` alternation is expanded. `when` clauses are skipped, since they ask about the workspace rather than naming a path."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node esbuild.mjs --tests && node --test \"out/**/*.test.js\"",
+    "copy-legal": "node scripts/copy-package-files.mjs",
+    "vscode:prepublish": "npm run typecheck && npm test && node esbuild.mjs --production && npm run copy-legal",
+    "package": "npx --yes @vscode/vsce@3.9.2 package --no-dependencies",
+    "publish": "npx --yes @vscode/vsce@3.9.2 publish --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.0"
+  }
+}

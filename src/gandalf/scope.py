@@ -127,15 +127,26 @@ class Scope:
 
 
 def _narrow_to_path(sc: Scope, path: str) -> Scope:
-    """Restrict a Scope to git-tracked files under `path`. On a whole-tree scope
-    (empty changed_files) this becomes the folder's tracked files; on a
-    staged/commit scope it intersects the changed set with the folder."""
+    """Restrict a Scope to git-tracked, non-excluded files under `path`. On a
+    whole-tree scope (empty changed_files) this becomes the folder's files; on a
+    staged/commit scope it intersects the changed set with the folder.
+
+    Excluded paths are dropped here rather than later because an empty scope has
+    to fail loudly: `changed_files` empty means "whole tree" everywhere
+    downstream, so silently narrowing to nothing would scan everything — the
+    opposite of what --path asked for."""
+    from .plugins import ignore_patterns, is_ignored  # local: avoids a cycle
+
     rel = path.strip().strip("/")
     under = [
         f for f in _git(["ls-files", "-z", "--", rel], sc.workdir).split("\0") if f
     ]
     if not under:
         raise SystemExit(f"--path {path!r}: no git-tracked files under this folder")
+    pats = ignore_patterns(sc.workdir)
+    under = [f for f in under if not is_ignored(f, pats)]
+    if not under:
+        raise SystemExit(f"--path {path!r}: every path under it is excluded")
     if sc.changed_files:
         keep = set(under)
         sc.changed_files = [f for f in sc.changed_files if f in keep]

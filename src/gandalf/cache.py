@@ -20,19 +20,25 @@ from dataclasses import asdict
 from pathlib import Path
 
 from .base import GateOutcome, GateResult
-from .plugins import tracked_files
+from .plugins import ignore_patterns, is_ignored, scannable_files
 
 DEFAULT_CACHE = ".gandalf-cache.json"
 
 
 def target_files(workdir: str, changed_files: list[str]) -> list[str]:
     """Same file-set logic as plugins._scan_targets: the change's own files,
-    falling back to the whole tracked tree."""
+    falling back to the whole tracked tree, minus anything excluded.
+
+    Excluded files are left out on purpose — the hash decides whether a gate's
+    cached result still holds, and a file no gate reads cannot change it."""
     root = Path(workdir)
-    files = [f for f in changed_files if (root / f).is_file()]
+    pats = ignore_patterns(workdir)
+    files = [
+        f for f in changed_files if (root / f).is_file() and not is_ignored(f, pats)
+    ]
     if files:
         return files
-    return [f for f in tracked_files(workdir) if (root / f).is_file()]
+    return [f for f in scannable_files(workdir) if (root / f).is_file()]
 
 
 def content_hash(workdir: str, files: list[str]) -> str:

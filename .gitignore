@@ -35,4 +35,8 @@ reports/
 Thumbs.db
 .idea/
 .vscode/
+# ...except the VS Code extension's own launch config, which is how you run it
+# from source (F5). Negating the directory works only because the rule above
+# ends in a slash — git still descends into a re-included directory.
+!extensions/vscode/.vscode/
 *.swp

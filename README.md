@@ -44,13 +44,18 @@ Pure-stdlib, so the "install" is just a one-line wrapper that runs this checkout
 printf '#!/bin/sh\nexport PYTHONPATH="%s/src:$PYTHONPATH"\nexec python3 -m gandalf "$@"\n' "$PWD" > ~/.local/bin/gandalf && chmod +x ~/.local/bin/gandalf
 ```
 
-### `.gandalfignore` — skip paths in tree-scanning gates
+### `.gandalfignore` — paths no gate should read
 
-The container/dependency gates (`trivy`, `checkov`, `kics`) scan the whole tree.
 Add a `.gandalfignore` at the repo root (gitignore-style: one glob per line, `#`
-comments) to skip local secrets/state that aren't committed — e.g. a `.env` or a
-`data/` dir — so they aren't reported as false-positive leaks. Built-in defaults
-(`reports`, `node_modules`, `llama.cpp`, `.venv`, `.git`) always apply.
+comments) to keep vendored, generated and local-state paths out of every scan —
+a `.env`, a `data/` dir, `src/generated`. Built-in defaults (`reports`,
+`node_modules`, `llama.cpp`, `.venv`, `.git`) always apply.
+
+A bare name skips that directory wherever it appears (`node_modules`), a path
+anchors at the repository root (`src/generated`), and globs work (`*.min.js`).
+`--exclude <glob>` (repeatable) and `[gandalf] exclude = [...]` add to the same
+list without writing a file into the repository — which is how the VS Code
+extension passes on the folders you already excluded from the editor.
 
 ## Usage
 
@@ -62,6 +67,20 @@ PYTHONPATH=src python -m gandalf --path subdir/  # limit scanning to a folder
 ```
 
 More in [`docs/getting-started.md`](docs/getting-started.md).
+
+## Editor integration
+
+A VS Code extension lives in [`extensions/vscode/`](extensions/vscode/): findings as
+inline diagnostics, a bottom pane filtered to the current file or the whole
+project, and the same HTML scorecard in an editor tab. It scans the saved file
+on save and the whole tree on demand, so it stays off your CPU.
+
+```bash
+make ext-install                   # build the .vsix and install it into VS Code
+make ext-install CODE=cursor       # ...or into a fork
+```
+
+More in [docs/editors.md](docs/editors.md).
 
 ## Documentation
 

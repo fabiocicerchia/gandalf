@@ -17,13 +17,21 @@
   "skipped_gates": ["eslint", "go_build"],
   "gates": [
     {"name": "build", "outcome": "fail", "score": 0.0,
-     "summary": "1 file(s) fail to compile — …", "findings": [...], "blocking": true}
+     "summary": "1 file(s) fail to compile — …", "findings": [...],
+     "category": "Build & tests", "blocking": true, "duration": 0.42}
   ]
 }
 ```
 
 `commit` is the evaluated commit for `--commit`, else the latest commit (HEAD)
-even for `--staged` / working-tree scopes.
+even for `--staged` / working-tree scopes. `category` is the same grouping the
+scorecard uses ("Security", "Code quality", …), so a consumer doesn't have to
+re-derive it; `duration` is the gate's wall-clock time in seconds.
+
+`findings` are passed through from each underlying tool unchanged, so the same
+field goes by different names across gates (`path` / `filename` / `file`,
+`line` / `line_no` / `location.row`, …). `gandalf/report.py`, `gandalf/sarif.py`
+and `extensions/vscode/src/parse.ts` each reconcile the same key lists.
 
 ## Score badge
 

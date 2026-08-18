@@ -42,11 +42,12 @@ from .plugins import discover_gates
 from .progress import Progress
 
 
-async def _run_gates(gates, ctx, on_done=None, limit=0, timeouts=None):
+async def _run_gates(gates, ctx, on_done=None, limit=0, timeouts=None, on_result=None):
     """Run gates concurrently, but at most `limit` at once (<=0 = unbounded).
     Bounding matters because ~35 gates each may spawn a `docker run`, which can
     swamp a laptop/CI runner if all launch simultaneously. `timeouts` is the
-    [gandalf.timeouts] table; each gate's tool calls honour its own budget."""
+    [gandalf.timeouts] table; each gate's tool calls honour its own budget.
+    `on_result(res)` fires as each gate finishes, for --stream."""
     total = len(gates)
     done = 0
     sem = asyncio.Semaphore(limit) if limit and limit > 0 else None
@@ -73,6 +74,8 @@ async def _run_gates(gates, ctx, on_done=None, limit=0, timeouts=None):
         debug.log(f"gate {g.name}: {res.outcome.value} in {res._duration:.2f}s")
         if on_done:
             on_done(done, total, g.name)
+        if on_result:
+            on_result(res)
         return res
 
     return await asyncio.gather(*(one(g) for g in gates))
@@ -93,6 +96,56 @@ async def _run_fixers(gates, ctx):
             changed, msg = False, f"fix errored: {exc}"
         out.append((g.name, changed, msg))
     return out
+
+
+class _GateStream:
+    """One NDJSON line per gate on stdout, as it completes.
+
+    Without this a consumer learns nothing until the final report is written, so
+    an editor pane sits empty for the whole run. Lines are emitted in completion
+    order and the aggregate (verdict, composite score) still comes only from the
+    final report — a gate result on its own can't produce one.
+
+    Findings are passed through the suppressor first so a baselined finding
+    doesn't flash up and then vanish when the report lands. Severity weighting is
+    not applied, so a streamed `score` is preliminary; the report is the record.
+    """
+
+    def __init__(self, total: int, scope: str, sup):
+        self.total = total
+        self.n = 0
+        self.sup = sup
+        self._write({"event": "start", "scope": scope, "gates": total})
+
+    def gate(self, r) -> None:
+        self.n += 1
+        shown = self.sup.apply(r) if self.sup.active else r
+        self._write(
+            {
+                "event": "gate",
+                "index": self.n,
+                "total": self.total,
+                **dataclasses.asdict(shown),
+                "category": report.category_of(r),
+                "duration": getattr(r, "_duration", None),
+                "blocking": getattr(r, "_blocking", False),
+            }
+        )
+
+    @staticmethod
+    def _write(obj: dict) -> None:
+        # flush: the point is to be read while the process is still running.
+        print(json.dumps(obj, default=str), flush=True)
+
+
+def _baseline_path(explicit: str | None) -> str | None:
+    """The baseline file to suppress from: an explicit --baseline, else the repo
+    default when it exists. Shared so --stream suppresses exactly what the final
+    report will."""
+    if explicit:
+        return explicit
+    default = Path(scope.repo_root()) / suppress.DEFAULT_BASELINE
+    return str(default) if default.is_file() else None
 
 
 def _gate_timeout(name: str, timeouts: dict | None) -> int | None:
@@ -226,6 +279,7 @@ def _build_payload(
         "gates": [
             {
                 **dataclasses.asdict(r),
+                "category": report.category_of(r),
                 "blocking": getattr(r, "_blocking", False),
                 "duration": getattr(r, "_duration", None),
             }
@@ -305,6 +359,18 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     ap.add_argument("--no-html", action="store_true", help="skip the HTML report")
     ap.add_argument(
+        "--out-dir",
+        metavar="DIR",
+        help="write reports here instead of <repo>/reports (created if missing); "
+        "lets an editor/CI keep its artifacts out of the working tree",
+    )
+    ap.add_argument(
+        "--no-trend",
+        action="store_true",
+        help="don't append this run to .gandalf-trend.jsonl (the score delta is "
+        "still read from it)",
+    )
+    ap.add_argument(
         "--sarif",
         nargs="?",
         const="",
@@ -348,6 +414,13 @@ def _build_parser() -> argparse.ArgumentParser:
     ap.add_argument(
         "--json", action="store_true", help="also print machine-readable JSON"
     )
+    ap.add_argument(
+        "--stream",
+        action="store_true",
+        help="emit one NDJSON line per gate to stdout as it finishes (before the "
+        "scorecard), so a consumer can show results during the run instead of "
+        "waiting for the final report",
+    )
     ap.add_argument("--no-llm", action="store_true", help="skip the LLM summary")
     ap.add_argument(
         "--debug",
@@ -371,6 +444,15 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     ap.add_argument(
         "--config", metavar="PATH", help="path to a .gandalf.toml (default: repo root)"
+    )
+    ap.add_argument(
+        "--exclude",
+        action="append",
+        metavar="GLOB",
+        help="skip paths matching GLOB, for every gate. Repeatable. Same matching "
+        "as .gandalfignore: a bare name skips that directory anywhere "
+        "(node_modules), a path anchors at the repo root (src/generated), and "
+        "globs work (*.min.js). Adds to .gandalfignore rather than replacing it",
     )
     ap.add_argument(
         "--fail-on",
@@ -426,6 +508,16 @@ def main(argv: list[str] | None = None) -> int:
 
     cfg = gconfig.load(scope.repo_root(), args.config)
     debug.log(f"config: {cfg.path or '(defaults)'}")
+
+    # Before any gate resolves its file list, so every gate sees the same scope.
+    excludes = list(args.exclude or []) + [
+        str(x) for x in (cfg.data.get("exclude") or [])
+    ]
+    # Always set, even when empty: this is process state, and a second run in
+    # the same process must not inherit the first one's exclusions.
+    plugins.set_extra_ignores(excludes)
+    if excludes:
+        debug.log(f"excluding {len(excludes)} extra pattern(s): {', '.join(excludes)}")
 
     gates = discover_gates()
     if not gates:
@@ -490,6 +582,18 @@ def main(argv: list[str] | None = None) -> int:
         limit = _resolve_concurrency(args.concurrency, cfg)
         debug.log(f"running {len(to_run)} gate(s), concurrency={limit or 'unbounded'}")
         prog.stage(f"Running {len(to_run)} gates")
+        # A stream-only suppressor, read now so streamed findings match what the
+        # report will show. Built separately from the one below on purpose: that
+        # one runs after --write-baseline, and must keep loading what it wrote.
+        stream = (
+            _GateStream(
+                len(active),
+                sc.label,
+                suppress.build(cfg.section("suppress"), _baseline_path(args.baseline)),
+            )
+            if args.stream
+            else None
+        )
         fresh = asyncio.run(
             _run_gates(
                 to_run,
@@ -497,6 +601,7 @@ def main(argv: list[str] | None = None) -> int:
                 on_done=prog.bar,
                 limit=limit,
                 timeouts=cfg.section("timeouts"),
+                on_result=stream.gate if stream else None,
             )
         )
 
@@ -511,6 +616,9 @@ def main(argv: list[str] | None = None) -> int:
             ]
             by_name = {r.name: r for r in fresh + cached}
             results = [by_name[g.name] for g in active]
+            if stream:  # cache hits never ran, so nothing has reported them yet
+                for r in cached:
+                    stream.gate(r)
         else:
             results = fresh
 
@@ -532,12 +640,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Wrote baseline: {bpath} ({n} finding(s))")
 
         # Suppress accepted/baselined findings before scoring, so a legacy repo's
-        # known issues don't fail the gate — only new findings can.
-        default_bl = Path(scope.repo_root()) / suppress.DEFAULT_BASELINE
-        baseline_path = args.baseline or (
-            str(default_bl) if default_bl.is_file() else None
-        )
-        sup = suppress.build(cfg.section("suppress"), baseline_path)
+        # known issues don't fail the gate — only new findings can. Resolved again
+        # here rather than reused from the --stream suppressor above: this runs
+        # after --write-baseline, and must load what that just wrote.
+        sup = suppress.build(cfg.section("suppress"), _baseline_path(args.baseline))
         if sup.active:
             results = [sup.apply(r) for r in results]
 
@@ -562,7 +668,7 @@ def main(argv: list[str] | None = None) -> int:
         score_delta = gtrend.previous_score(trend_path, commit_short)
         if score_delta is not None:
             score_delta = verdict.score - score_delta
-        if commit_short:
+        if commit_short and not args.no_trend:
             gtrend.record(trend_path, commit_short, verdict.score, generated_at)
         meta_line = {
             "generated_at": generated_at,
@@ -585,8 +691,10 @@ def main(argv: list[str] | None = None) -> int:
             reason,
         )
 
-        out_dir = Path(scope.repo_root()) / "reports"
-        out_dir.mkdir(exist_ok=True)
+        out_dir = (
+            Path(args.out_dir) if args.out_dir else Path(scope.repo_root()) / "reports"
+        )
+        out_dir.mkdir(parents=True, exist_ok=True)
         ts = datetime.now(tz=timezone.utc).strftime("%Y%m%d-%H%M%S")
         stem = f"gandalf-{sc.label.replace('/', '_')}-{ts}"
         payload = _build_payload(
