@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0](https://github.com/fabiocicerchia/gandalf/compare/v0.2.4...v0.3.0) (2026-08-18)
+
+
+### Features
+
+* **editors:** add a VS Code extension driving the gates from the IDE ([#32](https://github.com/fabiocicerchia/gandalf/issues/32)) ([40832d0](https://github.com/fabiocicerchia/gandalf/commit/40832d0788109a650a9f241553eb998f2af9edc8))
+
 ## [0.2.4](https://github.com/fabiocicerchia/gandalf/compare/v0.2.3...v0.2.4) (2026-08-16)
 
 
