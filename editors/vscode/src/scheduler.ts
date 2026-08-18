@@ -28,6 +28,7 @@ export interface Job {
   kind: ScanKind;
   relPath?: string;
   absPath?: string;
+  commit?: string;
   llm?: boolean;
   reason: string;
   /** User-initiated: preempts an automatic run and ignores the idle gate. */
@@ -37,7 +38,9 @@ export interface Job {
 }
 
 export function jobLabel(job: Job): string {
-  return job.kind === 'file' ? (job.relPath ?? 'file') : job.folder.name;
+  if (job.kind === 'file') return job.relPath ?? 'file';
+  if (job.kind === 'commit') return `commit ${job.commit ?? ''}`.trim();
+  return job.folder.name;
 }
 
 /** Remembers what a file looked like when it was last scanned. */

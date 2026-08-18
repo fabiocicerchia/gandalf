@@ -128,6 +128,18 @@
         "title": "Expand All",
         "category": "Gandalf",
         "icon": "$(expand-all)"
+      },
+      {
+        "command": "gandalf.showHistory",
+        "title": "Show Score History",
+        "category": "Gandalf",
+        "icon": "$(graph-line)"
+      },
+      {
+        "command": "gandalf.exportReport",
+        "title": "Export Report\u2026",
+        "category": "Gandalf",
+        "icon": "$(save-as)"
       }
     ],
     "menus": {
@@ -181,6 +193,16 @@
           "command": "gandalf.showLog",
           "when": "view == gandalf.findings",
           "group": "3_misc@2"
+        },
+        {
+          "command": "gandalf.showHistory",
+          "when": "view == gandalf.findings",
+          "group": "2_env@3"
+        },
+        {
+          "command": "gandalf.exportReport",
+          "when": "view == gandalf.findings",
+          "group": "1_scan@3"
         }
       ],
       "commandPalette": [

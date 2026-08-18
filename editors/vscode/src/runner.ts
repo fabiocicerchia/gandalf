@@ -34,13 +34,15 @@ export interface Launcher {
   flags: Set<string>;
 }
 
-export type ScanKind = 'workspace' | 'file';
+export type ScanKind = 'workspace' | 'file' | 'commit';
 
 export interface RunRequest {
   folder: vscode.WorkspaceFolder;
   kind: ScanKind;
   /** Repo-relative path, for `kind === 'file'`. */
   relPath?: string;
+  /** Commit to evaluate, for `kind === 'commit'`. */
+  commit?: string;
   llm: boolean;
   html: boolean;
   outDir: string;
@@ -261,14 +263,16 @@ function buildArgs(req: RunRequest, s: Settings, l: Launcher): string[] {
   const supports = (flag: string) => l.flags.has(flag);
 
   if (req.kind === 'file' && req.relPath) args.push('--path', req.relPath.replace(/\\/g, '/'));
+  if (req.kind === 'commit' && req.commit) args.push('--commit', req.commit);
 
   if (!req.llm) args.push('--no-llm');
   if (!req.html) args.push('--no-html');
 
   if (supports('--out-dir')) args.push('--out-dir', req.outDir);
   // Editor scans never join the trend log: it is meant to be per-commit, and a
-  // scan on every save would swamp it.
-  if (supports('--no-trend')) args.push('--no-trend');
+  // scan on every save would swamp it. Scanning a named commit is the exception
+  // — that is exactly one entry for exactly one commit, which is what the log is.
+  if (req.kind !== 'commit' && supports('--no-trend')) args.push('--no-trend');
   if (s.configPath) args.push('--config', expand(s.configPath));
   if (s.concurrency > 0) args.push('--concurrency', String(s.concurrency));
 

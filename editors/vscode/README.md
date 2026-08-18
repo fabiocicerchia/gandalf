@@ -100,6 +100,8 @@ nothing at all.
 | `Gandalf: Filter Findings` | Native quick pick over both axes: reported level and editor severity. |
 | `Gandalf: Show Findings in the Current File` / `…in the Whole Project` | The pane's scope toggle, in its title bar. |
 | `Gandalf: Show Gate Timings` | Every gate by wall-clock cost, slowest first. Select gates to copy a `skip` list. |
+| `Gandalf: Show Score History` | The score across recent commits. Pick one to scan it and read its report. |
+| `Gandalf: Export Report…` | Save the HTML scorecard wherever you want it — to attach to a pull request. |
 
 ## Reading the pane
 
@@ -155,6 +157,29 @@ passed as `gandalf --exclude`, alongside whatever the repository's
 
 Saving a file that is itself excluded doesn't start a scan at all — no process,
 no gates.
+
+## Score history
+
+A single scorecard says where you are; `.gandalf-trend.jsonl` says whether it is
+getting better. Gandalf has always written that file — one line per CLI run,
+which is where the report's "(+5 vs prev)" comes from — and nothing has ever
+read it back.
+
+**`Gandalf: Show Score History`** joins it against `git log`: recent commits,
+newest first, each with its score and the change from the one before, and a
+sparkline of the whole series in the title. The scale is the observed range
+rather than 0–100, because a repository that lives in the eighties still has
+movement worth seeing.
+
+Commits nothing has scored yet are listed as such — "we have never measured
+this" is part of a history. Pick any commit and it is scanned (`--commit`) and
+its report opens; that scan *does* join the trend log, since one entry for one
+commit is exactly what the log is for. Editor scans still don't, for the reason
+they never did: a scan on every save would swamp it. CLI and CI runs fill it in
+the same way they always have.
+
+A commit's scan deliberately does not replace the findings pane. You asked what
+that commit looked like, not to be shown it instead of your working tree.
 
 ## While a scan runs
 

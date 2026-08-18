@@ -1,10 +1,12 @@
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 
 import { readSettings, Settings } from './config';
 import { DiagnosticGroup, DiagnosticPublisher } from './diagnostics';
 import { enabledGlobs, excludePatterns } from './exclude';
+import { Commit, delta, parseLog, parseTrend, sparkline, TrendEntry } from './history';
 import { buildToolsImage, runDoctor } from './doctor';
 import { FindingsView } from './findingsView';
 import { disposeLog, log } from './log';
@@ -13,6 +15,7 @@ import { describeProgress, ScanProgress } from './progress';
 import { ReportView } from './report';
 import {
   GandalfNotFoundError,
+  probe,
   resetLauncherCache,
   runGandalf,
   ScanKind,
@@ -184,6 +187,7 @@ export function activate(context: vscode.ExtensionContext): void {
           folder: job.folder,
           kind: job.kind,
           relPath: job.relPath,
+          commit: job.commit,
           llm: job.llm ?? s.llm,
           html: isProjectScope, // A one-file scorecard is not the report anyone wants.
           outDir,
@@ -212,7 +216,10 @@ export function activate(context: vscode.ExtensionContext): void {
         scope: result.payload.scope,
         at: Date.now(),
       };
-      if (job.kind === 'file' && job.absPath) {
+      if (job.kind === 'commit') {
+        // A different scope entirely: it produces a report, not a new board.
+        if (result.htmlPath) reportView.current = result.htmlPath;
+      } else if (job.kind === 'file' && job.absPath) {
         store.setFile(job.folder, job.absPath, snapshot, result.durationMs);
       } else {
         store.setProject(job.folder, snapshot, result.durationMs);
@@ -361,6 +368,8 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('gandalf.filterFindings', () => findingsView.pickFilters()),
     vscode.commands.registerCommand('gandalf.expandAll', () => findingsView.expandAll()),
     vscode.commands.registerCommand('gandalf.showTimings', () => showTimings()),
+    vscode.commands.registerCommand('gandalf.showHistory', () => showHistory()),
+    vscode.commands.registerCommand('gandalf.exportReport', () => exportReport()),
     vscode.commands.registerCommand('gandalf.checkEnvironment', async () => {
       const folder = primaryFolder();
       if (folder) await runDoctor(folder, settingsFor(folder));
@@ -388,6 +397,86 @@ export function activate(context: vscode.ExtensionContext): void {
    * so long". Selecting gates copies a ready-to-paste skip list, since trimming
    * the gate set is the only real lever on a slow scan.
    */
+  /**
+   * Save the scorecard somewhere the user chooses — gandalf writes it into the
+   * extension's storage, which is no use for attaching to a pull request.
+   */
+  async function exportReport(): Promise<void> {
+    if (!reportView.current || !fs.existsSync(reportView.current)) {
+      const ok = await run('workspace', { reason: 'export' });
+      if (!ok || !reportView.current) return;
+    }
+    const folder = primaryFolder();
+    const suggested = path.basename(reportView.current);
+    const target = await vscode.window.showSaveDialog({
+      defaultUri: vscode.Uri.file(path.join(folder?.uri.fsPath ?? os.homedir(), suggested)),
+      filters: { 'HTML report': ['html'] },
+      title: 'Export the Gandalf report',
+    });
+    if (!target) return;
+    await fs.promises.copyFile(reportView.current, target.fsPath);
+    const choice = await vscode.window.showInformationMessage(
+      `Gandalf: report exported to ${path.basename(target.fsPath)}.`,
+      'Open',
+    );
+    if (choice === 'Open') await vscode.env.openExternal(target);
+  }
+
+  /**
+   * Score over time. `.gandalf-trend.jsonl` holds what CLI and CI runs recorded;
+   * `git log` supplies the commits, including the ones nothing has scored yet,
+   * because "we have never measured this" is part of the history too.
+   */
+  async function showHistory(): Promise<void> {
+    const folder = primaryFolder();
+    if (!folder) return;
+    const root = folder.uri.fsPath;
+
+    let trend = new Map<string, TrendEntry>();
+    try {
+      trend = parseTrend(await fs.promises.readFile(path.join(root, '.gandalf-trend.jsonl'), 'utf8'));
+    } catch {
+      // No log yet — the picker still lists commits, all unscored.
+    }
+    const log = await probe('git', ['log', '-40', '--format=%h%x1f%s%x1f%cs'], root);
+    const commits: Commit[] = log.ok ? parseLog(log.output) : [];
+    if (commits.length === 0) {
+      void vscode.window.showInformationMessage('Gandalf: no commits to show a history for.');
+      return;
+    }
+
+    // Oldest first for the sparkline and the deltas; newest first in the list.
+    const scored = [...commits].reverse().filter((c) => trend.has(c.short));
+    const line = sparkline(scored.map((c) => trend.get(c.short)!.score));
+    const previous = new Map<string, number>();
+    scored.forEach((c, i) => {
+      if (i > 0) previous.set(c.short, trend.get(scored[i - 1].short)!.score);
+    });
+
+    const chosen = await vscode.window.showQuickPick(
+      commits.map((c) => {
+        const entry = trend.get(c.short);
+        const change = entry ? delta(entry.score, previous.get(c.short)) : '';
+        return {
+          label: entry ? `${entry.score}/100${change ? `  ${change}` : ''}` : '— not scanned',
+          description: `${c.short}  ${c.subject}`,
+          detail: c.date,
+          commit: c.short,
+        };
+      }),
+      {
+        title: scored.length
+          ? `Score history — ${line} over ${scored.length} scanned commit(s) of ${commits.length}`
+          : `Score history — nothing scanned yet of ${commits.length} commit(s)`,
+        placeHolder: 'Pick a commit to scan it and open its report',
+      },
+    );
+    if (chosen) {
+      const ok = await run('commit', { commit: chosen.commit, reason: `commit ${chosen.commit}` });
+      if (ok && reportView.current) await reportView.show(reportView.current, chosen.commit);
+    }
+  }
+
   async function showTimings(): Promise<void> {
     const folder = primaryFolder();
     const snapshot = folder ? store.project(folder) : undefined;

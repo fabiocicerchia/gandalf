@@ -28,6 +28,11 @@ First release.
   replaces the streamed results.
 - `Gandalf: Show Gate Timings` — every gate by wall-clock cost, with a
   copy-a-skip-list action; the slowest five are logged after each full scan.
+- `Gandalf: Show Score History` — the score across recent commits, read from the
+  `.gandalf-trend.jsonl` gandalf already writes and joined against `git log`,
+  with a sparkline and per-commit deltas. Picking a commit scans it and opens
+  its report; that scan records a trend entry, unlike scans on save.
+- `Gandalf: Export Report…` — save the HTML scorecard to a chosen location.
 - Environment check listing every scanner tool and where it comes from, plus a
   one-command build of the `gandalf-tools` image. It also checks the LLM endpoint
   and, when it is unreachable, offers to stop the judge gates retrying it.

@@ -54,7 +54,9 @@ cannot produce them.
 
 `Gandalf: Show Gate Timings` lists every gate by wall-clock cost so a slow scan
 can name its culprits, and copies a `skip` list for the ones you don't want
-while editing.
+while editing. `Gandalf: Show Score History` reads `.gandalf-trend.jsonl` back —
+the log gandalf has always written and nothing has ever read — and shows the
+score across recent commits, with any commit scannable from the list.
 
 ### Cost control
 
