@@ -42,9 +42,7 @@ from .plugins import discover_gates
 from .progress import Progress
 
 
-async def _run_gates(
-    gates, ctx, on_done=None, limit=0, timeouts=None, on_result=None
-):
+async def _run_gates(gates, ctx, on_done=None, limit=0, timeouts=None, on_result=None):
     """Run gates concurrently, but at most `limit` at once (<=0 = unbounded).
     Bounding matters because ~35 gates each may spawn a `docker run`, which can
     swamp a laptop/CI runner if all launch simultaneously. `timeouts` is the

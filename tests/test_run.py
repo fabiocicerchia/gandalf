@@ -287,20 +287,20 @@ def test_exclude_narrows_the_scan_end_to_end(tmp_path, monkeypatch, capsys):
 
     # The generated file does not compile, so the build gate fails on it.
     assert main([*args]) == 1
-    gate = [
+    gate = next(
         json.loads(line)
         for line in capsys.readouterr().out.splitlines()
         if line.startswith('{"event": "gate"')
-    ][0]
+    )
     assert [f["path"] for f in gate["findings"]] == ["src/generated/broken.py"]
 
     # Excluded, the gate never reads it — and the run goes green.
     assert main([*args, "--exclude", "src/generated"]) == 0
-    gate = [
+    gate = next(
         json.loads(line)
         for line in capsys.readouterr().out.splitlines()
         if line.startswith('{"event": "gate"')
-    ][0]
+    )
     assert gate["findings"] == []
 
 

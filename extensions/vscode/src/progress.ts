@@ -9,7 +9,7 @@
  * Two wrinkles the parser handles. Redraws are separated by `\r` with no
  * trailing newline, so a state is only read once the *next* redraw delimits it —
  * one update of lag, deliberately: parsing the unterminated tail instead would
- * mean a split read could surface a truncated line ("[2/3] Runn") whose
+ * mean a split read could surface a line cut mid-word ("[2/3] Run…") whose
  * percentage is lower than what was already shown, and progress that goes
  * backwards is worse than progress that arrives a moment late. Nothing is lost:
  * `finish()` writes the newline that delimits the final redraw. And real stderr

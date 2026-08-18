@@ -156,9 +156,11 @@ def test_path_scope_refuses_to_widen_when_everything_under_it_is_excluded(
     monkeypatch.chdir(repo)
     plugins.set_extra_ignores(["generated"])
 
-    with pytest.raises(SystemExit, match="every path under it is excluded"):
-        with scope.resolve(None, False, "generated"):
-            pass
+    with (
+        pytest.raises(SystemExit, match="every path under it is excluded"),
+        scope.resolve(None, False, "generated"),
+    ):
+        pass
 
     # The same folder without the exclusion narrows normally.
     plugins.set_extra_ignores([])
