@@ -1,9 +1,13 @@
 name: publish-extension
 
-# Publishes the VS Code extension when a GitHub Release is published — which is
-# what merging release-please's PR does. The version comes from the tag, so the
-# extension and gandalf ship as one version and there is no second number to
-# keep in step.
+# Publishes the VS Code extension to both marketplaces. Called by release.yml
+# when release-please cuts a release, so the extension ships with the tag and
+# there is no second version to keep in step.
+#
+# It is a reusable workflow rather than an `on: release` one on purpose: the
+# release release-please publishes carries GITHUB_TOKEN, and GitHub does not
+# start workflows from GITHUB_TOKEN events. Called in the same run, it just
+# works — no PAT to mint, rotate, or leak.
 #
 # Nothing happens without the tokens: each publish step is skipped when its
 # secret is missing, so this file is inert until VSCE_PAT (VS Marketplace) and
@@ -12,8 +16,12 @@ name: publish-extension
 # superseded — so the version check below is deliberately strict.
 
 on:
-  release:
-    types: [published]
+  workflow_call:
+    inputs:
+      tag:
+        description: "Release tag to publish, e.g. v0.2.5"
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       version:
@@ -32,7 +40,10 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # attach the VSIX to the release
+      contents: write  # attach the VSIX to the release
+    env:
+      EXT: editors/vscode
+      VSIX_NAME: gandalf-quality-gates
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
@@ -45,7 +56,7 @@ jobs:
       - name: Resolve the version
         id: version
         env:
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ inputs.tag }}
           INPUT: ${{ inputs.version }}
         run: |
           set -euo pipefail
@@ -57,26 +68,28 @@ jobs:
             exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "vsix=$VSIX_NAME-$VERSION.vsix" >> "$GITHUB_OUTPUT"
           # release-please already writes this version into the manifest (see
           # release-please-config.json), so this is normally a no-op. It stays
           # for workflow_dispatch, and so that a mismatch can never ship.
           node -e '
             const fs = require("node:fs")
-            const path = "editors/vscode/package.json"
+            const path = `${process.env.EXT}/package.json`
             const pkg = JSON.parse(fs.readFileSync(path, "utf8"))
             pkg.version = process.argv[1]
             fs.writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`)
           ' "$VERSION"
-          echo "publishing gandalf-quality-gates $VERSION"
+          echo "publishing $VSIX_NAME $VERSION"
 
       - name: Install
-        run: npm --prefix editors/vscode ci
+        run: |
+          npm --prefix "$EXT" ci
 
-      # `package` runs vscode:prepublish first — typecheck, then the tests — and
-      # copies in LICENSE, NOTICE and the generated CHANGELOG. A red test never
-      # reaches a registry.
+      # `package` runs vscode:prepublish first — typecheck, the tests, the
+      # production bundle, then the licence and changelog the VSIX has to carry.
+      # A red test never reaches a registry.
       - name: Package
-        run: npm --prefix editors/vscode run package
+        run: npm --prefix "$EXT" run package
 
       # `secrets` cannot be read from a job-level `if`, so which registries are
       # reachable is decided here and read back as step outputs.
@@ -93,28 +106,39 @@ jobs:
 
       - name: Publish to the VS Marketplace
         if: steps.tokens.outputs.marketplace == 'true'
-        working-directory: editors/vscode
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: npx --yes @vscode/vsce@3.9.2 publish --no-dependencies --packagePath "gandalf-quality-gates-${{ steps.version.outputs.version }}.vsix"
+          VSIX: ${{ steps.version.outputs.vsix }}
+        run: npx --yes @vscode/vsce@3.9.2 publish --no-dependencies --packagePath "$EXT/$VSIX"
 
       # Where VSCodium and Cursor look. A separate registry with its own
       # namespace and token, not a mirror of the Marketplace.
       - name: Publish to Open VSX
         if: steps.tokens.outputs.openvsx == 'true'
-        working-directory: editors/vscode
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
-        run: npx --yes ovsx@1.1.1 publish "gandalf-quality-gates-${{ steps.version.outputs.version }}.vsix" -p "$OVSX_PAT"
+          VSIX: ${{ steps.version.outputs.vsix }}
+        run: npx --yes ovsx@1.1.1 publish "$EXT/$VSIX" -p "$OVSX_PAT"
 
       - name: Attach the VSIX to the release
-        if: github.event_name == 'release'
+        if: inputs.tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" "editors/vscode/gandalf-quality-gates-${{ steps.version.outputs.version }}.vsix" --clobber
+          TAG: ${{ inputs.tag }}
+          VSIX: ${{ steps.version.outputs.vsix }}
+        run: gh release upload "$TAG" "$EXT/$VSIX" --clobber
 
+      # A run that publishes nowhere still has to say so, or "green" and
+      # "published" become the same colour.
       - name: Say what happened
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          MARKETPLACE: ${{ steps.tokens.outputs.marketplace }}
+          OPENVSX: ${{ steps.tokens.outputs.openvsx }}
         run: |
-          echo "### gandalf-quality-gates ${{ steps.version.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- VS Marketplace: ${{ steps.tokens.outputs.marketplace == 'true' && 'published' || 'skipped (no VSCE_PAT)' }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Open VSX: ${{ steps.tokens.outputs.openvsx == 'true' && 'published' || 'skipped (no OVSX_PAT)' }}" >> "$GITHUB_STEP_SUMMARY"
+          say() { [ "$1" = true ] && echo published || echo "skipped (no $2)"; }
+          {
+            echo "### $VSIX_NAME $VERSION"
+            echo "- VS Marketplace: $(say "$MARKETPLACE" VSCE_PAT)"
+            echo "- Open VSX: $(say "$OPENVSX" OVSX_PAT)"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -23,8 +23,10 @@ make test    # Run the test suite
 make analyze # Run gandalf against this repo
 make install # Drop a `gandalf` wrapper in BINDIR (default ~/.local/bin)
 make tools   # Build the scanner-tools image (zero host installs)
-make ext-package # Build the VS Code extension into a .vsix
+make ext-build   # Compile the VS Code extension
+make ext-package # ...and package it into a .vsix
 make ext-install # ...and install it (CODE=cursor for a fork)
+make ext-publish # ...and publish it to both marketplaces (normally CI's job)
 ```
 
 ## Tooling
@@ -47,7 +49,7 @@ make ext-install # ...and install it (CODE=cursor for a fork)
 - `editors/vscode/` is a separate TypeScript workspace (the VS Code extension).
   The stdlib-only rule is about gandalf itself — the extension has dev-only npm
   dependencies and ships no runtime ones. It drives gandalf purely through the
-  CLI and the JSON report, so don't couple it to internals. `npm run check &&
+  CLI and the JSON report, so don't couple it to internals. `npm run typecheck &&
   npm test` there before committing changes to it.
 - Update docs/ and examples/ with behavior changes.
 - Never commit secrets; CI runs gitleaks. Keep `.env` out of git.

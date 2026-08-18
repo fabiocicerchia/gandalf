@@ -76,7 +76,7 @@
         "command": "gandalf.showReport",
         "title": "Open Report",
         "category": "Gandalf",
-        "icon": "$(book)"
+        "icon": "$(graph)"
       },
       {
         "command": "gandalf.showReportWithLlm",
@@ -127,7 +127,7 @@
         "command": "gandalf.filterFindings",
         "title": "Filter Findings",
         "category": "Gandalf",
-        "icon": "$(list-filter)"
+        "icon": "$(filter)"
       },
       {
         "command": "gandalf.expandAll",
@@ -168,7 +168,7 @@
         {
           "command": "gandalf.expandAll",
           "when": "view == gandalf.findings && gandalf.scope == project",
-          "group": "navigation@3"
+          "group": "navigation@9"
         },
         {
           "command": "gandalf.scanWorkspace",
@@ -344,11 +344,12 @@
   "scripts": {
     "build": "node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",
-    "check": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "test": "node esbuild.mjs --tests && node --test \"out/**/*.test.js\"",
-    "vscode:prepublish": "npm run check && npm test && node esbuild.mjs --production",
-    "package": "node scripts/copy-package-files.mjs && vsce package --no-dependencies",
-    "publish": "node scripts/copy-package-files.mjs && vsce publish --no-dependencies"
+    "copy-legal": "node scripts/copy-package-files.mjs",
+    "vscode:prepublish": "npm run typecheck && npm test && node esbuild.mjs --production && npm run copy-legal",
+    "package": "npx --yes @vscode/vsce@3.9.2 package --no-dependencies",
+    "publish": "npx --yes @vscode/vsce@3.9.2 publish --no-dependencies"
   },
   "devDependencies": {
     "@types/node": "^20.11.30",

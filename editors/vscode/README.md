@@ -403,7 +403,7 @@ different gate set while you work.
 
 ```sh
 npm install
-npm run check     # tsc --noEmit
+npm run typecheck # tsc --noEmit
 npm test          # normalizer unit tests (node --test, no framework)
 npm run build     # bundle to dist/ with esbuild
 npm run watch     # rebuild on change; F5 in VS Code launches an Extension Host
@@ -423,10 +423,13 @@ The extension has no version of its own. `release-please-config.json` lists
 that bumps `version.txt` bumps the extension in the same commit, and the tag
 means one thing for both surfaces.
 
-Merging that PR publishes a GitHub Release, and `publish-extension.yml` takes it
-from there: version from the tag, `npm ci`, typecheck, tests, bundle,
-`vsce package`, then publish to the VS Marketplace and to Open VSX, attach the
-`.vsix` to the release. It re-stamps the version from the tag before packaging —
+Merging that PR tags the release, and `release.yml` calls
+`publish-extension.yml` in the same run: version from the tag, `npm ci`,
+`npm run package` (typecheck, tests, bundle, legal files, `vsce package`), then
+publish to the VS Marketplace and to Open VSX, attach the `.vsix` to the
+release. Calling it rather than hanging it off `on: release` is deliberate: the
+release release-please publishes carries GITHUB_TOKEN, and GitHub does not start
+workflows from GITHUB_TOKEN events. It re-stamps the version from the tag before packaging —
 normally a no-op, but `workflow_dispatch` takes a version too, and a manifest
 that disagrees with the tag must never ship.
 

@@ -501,6 +501,9 @@ ul.findings li{ font-size:.8rem; color:var(--muted); word-break:break-word; marg
   font-weight:600; }
 .filter-btn:hover{ color:var(--fg); }
 .filter-btn.active{ background:var(--fg); color:var(--bg); border-color:var(--fg); }
+footer{ margin-top:1.8rem; padding-top:.9rem; border-top:1px solid var(--border);
+  color:var(--muted); font-size:.8rem; }
+footer a{ color:inherit; }
 """
 
 _JS = """
@@ -713,5 +716,7 @@ def render_html(
         + section(
             "improvement", "Improvement — raise the bar further", "accent-improvement"
         )
+        + '<footer><a href="https://github.com/fabiocicerchia/gandalf">'
+        + "github.com/fabiocicerchia/gandalf</a> &middot; &copy; 2026 Fabio Cicerchia</footer>"
         + f"</div><script>{_JS}</script></body></html>"
     )
