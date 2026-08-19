@@ -19,14 +19,22 @@ What you get:
 
 ### Install
 
-Not on the Marketplace yet — build the `.vsix` and install it locally (Node 18+
-for the build only). From the repository root:
+From the Marketplace — **Extensions** view, search *Gandalf — Quality Gates*, or:
 
 ```sh
-make ext-install                  # build + install
-make ext-install CODE=cursor      # ...into a fork's CLI
-make ext-package                  # just build the .vsix, install it by hand
+code --install-extension fabiocicerchia.gandalf-quality-gates
 ```
+
+It is published to the
+[VS Marketplace](https://marketplace.visualstudio.com/items?itemName=fabiocicerchia.gandalf-quality-gates)
+for VS Code and to
+[Open VSX](https://open-vsx.org/extension/fabiocicerchia/gandalf-quality-gates)
+for the forks (Cursor, Windsurf, VSCodium), from the same release.
+
+To build it from a checkout instead — an unreleased change, or no Marketplace —
+`make ext-install` from the repository root (`CODE=cursor` for a fork,
+`make ext-package` to build the `.vsix` and install it by hand; Node 18+ for the
+build only).
 
 Reload the window afterwards; a **Gandalf** tab appears in the bottom panel.
 For development, `npm run watch` and <kbd>F5</kbd> from `extensions/vscode/` launch

@@ -3,6 +3,16 @@
 Run [Gandalf](https://github.com/fabiocicerchia/gandalf)'s quality gates while
 you write the code, instead of finding out in CI.
 
+Gandalf is not another linter — it is an aggregator. One scan runs ~50 gates
+over your repository (`ruff`, `mypy`, `bandit`, `semgrep`, `gitleaks`, `trivy`,
+`checkov`, `kics`, `codeql`, `osv`, `eslint`, `tsc`, `clippy`, `govulncheck`,
+`shellcheck`, `hadolint`, the test and build runners, and a set of LLM judges)
+and folds what every one of them said into a single picture: one severity
+ladder, one findings pane, one Red/Amber/Green scorecard. Each tool keeps its
+own output format, its own severity words and its own idea of a rule id;
+gandalf normalizes all of it, so the extension shows you one board to read
+instead of a dozen terminals to reconcile.
+
 - **Inline diagnostics** — every finding that has a file and a line becomes a
   squiggle. The hover explains the problem, which gate found it, its severity
   and the rule id (linked to the tool's docs when there is one).
@@ -21,32 +31,27 @@ you write the code, instead of finding out in CI.
 
 ## Install
 
-Not on the Marketplace yet — build the `.vsix` and install it locally. From the
-repository root:
+From the Marketplace: open the **Extensions** view, search for *Gandalf —
+Quality Gates*, press **Install**. Or, from a terminal:
 
 ```sh
-make ext-install
+code --install-extension fabiocicerchia.gandalf-quality-gates
 ```
 
-That installs npm's dev dependencies if needed, typechecks, runs the tests,
-builds the `.vsix` and installs it. Node 18+ is needed for the build; nothing of
-it is needed afterwards. Then reload the window (**Developer: Reload Window**) —
-a **Gandalf** tab appears in the bottom panel alongside Problems and Terminal.
+- [**VS Marketplace**](https://marketplace.visualstudio.com/items?itemName=fabiocicerchia.gandalf-quality-gates)
+  — VS Code and VS Code Insiders.
+- [**Open VSX**](https://open-vsx.org/extension/fabiocicerchia/gandalf-quality-gates)
+  — Cursor, Windsurf, VSCodium and the other forks, which don't reach the VS
+  Marketplace. Same extension, published by the same release.
 
-Using a fork of VS Code? Pass its CLI:
+Then reload the window (**Developer: Reload Window**) — a **Gandalf** tab
+appears in the bottom panel alongside Problems and Terminal. Gandalf itself is a
+separate thing and has to be reachable; see [Requirements](#requirements).
 
-```sh
-make ext-install CODE=cursor      # or windsurf, codium, code-insiders
-```
-
-No `code` command at all? `make ext-package` builds the `.vsix` and stops, so
-you can install it by hand: **Extensions** view → `...` menu →
-**Install from VSIX…**. (Or run **Shell Command: Install 'code' command in
-PATH** from the Command Palette and use `make ext-install`.)
-
-To hack on it instead of installing it: `npm run watch`, open
-`extensions/vscode/` as the workspace folder, press <kbd>F5</kbd>. That launches an
-Extension Development Host with the extension loaded from source.
+Building it from a checkout instead — for an unreleased change, or when the
+Marketplace is not an option — is `make ext-install` from the repository root
+(add `CODE=cursor` for a fork, or use `make ext-package` and install the `.vsix`
+by hand; Node 18+ is needed for the build and for nothing afterwards).
 
 To remove it: **Extensions** view → Gandalf → Uninstall, or
 `code --uninstall-extension fabiocicerchia.gandalf-quality-gates`.

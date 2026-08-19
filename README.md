@@ -75,9 +75,15 @@ inline diagnostics, a bottom pane filtered to the current file or the whole
 project, and the same HTML scorecard in an editor tab. It scans the saved file
 on save and the whole tree on demand, so it stays off your CPU.
 
+Install it from the
+[VS Marketplace](https://marketplace.visualstudio.com/items?itemName=fabiocicerchia.gandalf-quality-gates)
+or from [Open VSX](https://open-vsx.org/extension/fabiocicerchia/gandalf-quality-gates)
+for the forks:
+
 ```bash
-make ext-install                   # build the .vsix and install it into VS Code
-make ext-install CODE=cursor       # ...or into a fork
+code --install-extension fabiocicerchia.gandalf-quality-gates
+make ext-install                   # ...or build the .vsix from this checkout
+make ext-install CODE=cursor       # ...into a fork
 ```
 
 More in [docs/editors.md](docs/editors.md).
