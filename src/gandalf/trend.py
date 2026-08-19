@@ -31,6 +31,11 @@ def previous_score(path: str, current_commit: str) -> int | None:
 
 
 def record(path: str, commit: str, score: int, generated_at: str) -> None:
+    """Append one run to the trend log.
+
+    Append-only JSONL: a corrupt or half-written line costs one data point, and
+    previous_score() already skips lines it cannot parse.
+    """
     with Path(path).open("a") as f:
         f.write(
             json.dumps({"commit": commit, "score": score, "generated_at": generated_at})

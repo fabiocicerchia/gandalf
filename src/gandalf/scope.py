@@ -19,12 +19,18 @@ if TYPE_CHECKING:
 
 
 def _git(args: list[str], cwd: str = ".") -> str:
+    """Run one git command and return its stdout.
+
+    Fixed argv and no shell — every caller builds the argument list itself, so
+    a branch or path with a space in it cannot become two arguments.
+    """
     return subprocess.run(  # nosec B603 B607 - fixed git argv, no shell
         ["git", *args], cwd=cwd, capture_output=True, text=True, check=True
     ).stdout
 
 
 def repo_root() -> str:
+    """The top level of the repository the working directory sits in."""
     return _git(["rev-parse", "--show-toplevel"]).strip()
 
 
@@ -61,6 +67,12 @@ _MARKER_LANG = {
 
 
 def _classify(paths: list[str]) -> set[str]:
+    """The language tags present in a file list.
+
+    Drives gate selection: a gate declaring `langs` only runs when one of its
+    tags is in scope, which is what keeps a Python-only change from waiting on
+    the Go toolchain.
+    """
     langs: set[str] = set()
     for p in paths:
         base = p.rsplit("/", 1)[-1]
@@ -104,6 +116,13 @@ def commit_info(ref: str, workdir: str = ".") -> dict:
 
 @dataclass
 class Scope:
+    """What a run is evaluating, and where.
+
+    A context manager because `--commit` checks the revision out into a
+    throwaway worktree: exiting removes it, so an interrupted run cannot leave
+    a detached worktree behind in the user's repository.
+    """
+
     label: str  # "working-tree" | "staged" | commit sha
     workdir: str
     changed_files: list[str] = field(default_factory=list)
@@ -157,6 +176,12 @@ def _narrow_to_path(sc: Scope, path: str) -> Scope:
 
 
 def resolve(commit: str | None, staged: bool, path: str | None = None) -> Scope:
+    """Build the Scope for a run: a commit, the staged changes, or the tree.
+
+    The three modes differ in what counts as "the change" — a commit against
+    its parent, the index against HEAD, the working tree as it stands — and
+    everything downstream reads only the Scope, not the flags that produced it.
+    """
     root = repo_root()
     if commit:
         sha = _git(["rev-parse", commit], root).strip()
