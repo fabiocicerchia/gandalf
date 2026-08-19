@@ -17,6 +17,12 @@ from .report import fmt_finding
 
 
 def to_junit(results: list[GateResult], meta: dict | None = None) -> str:
+    """Render the results as a JUnit XML suite — one test case per gate.
+
+    Not because these are tests, but because every CI system already knows how
+    to display that file: a gate failure lands in the same panel as a failing
+    test, with no plugin to install.
+    """
     meta = meta or {}
     failures = sum(1 for r in results if r.outcome == GateOutcome.FAIL)
     lines = [
