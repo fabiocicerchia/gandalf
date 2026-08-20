@@ -1,0 +1,54 @@
+// Jenkins — run the gates on every change.
+// Copy into a Jenkinsfile at the repo root (Multibranch Pipeline picks it up).
+pipeline {
+  // The scanner image as the build container: every gate finds its binary on
+  // PATH and nothing shells out to Docker. `-u root` because the image's own
+  // uid cannot write into a workspace the agent created.
+  agent {
+    docker {
+      image 'ghcr.io/fabiocicerchia/gandalf-tools:latest'
+      args '-u root'
+    }
+  }
+
+  environment {
+    // No LLM endpoint in CI: skip the summary, and don't spend 7s per judge
+    // gate retrying a connection that will not come up.
+    GANDALF_LLM_RETRIES = '0'
+  }
+
+  stages {
+    stage('Fetch gandalf') {
+      steps {
+        sh '''
+          set -eu
+          git config --global --add safe.directory "*"
+          git clone --quiet --depth 1 --branch v0.4.0 \
+            https://github.com/fabiocicerchia/gandalf /opt/gandalf
+        '''
+      }
+    }
+
+    stage('Gates') {
+      steps {
+        // Exit code is 1 when the verdict is red, 0 otherwise.
+        sh '''
+          set -eu
+          PYTHONPATH=/opt/gandalf/src python3 -m gandalf \
+            --no-llm --no-html --no-trend \
+            --out-dir reports \
+            --junit reports/gandalf.junit.xml
+        '''
+      }
+    }
+  }
+
+  post {
+    always {
+      // Each gate is a test case, so a red gate shows up in the build's test
+      // trend rather than only in the console log.
+      junit testResults: 'reports/gandalf.junit.xml', allowEmptyResults: true
+      archiveArtifacts artifacts: 'reports/**', allowEmptyArchive: true
+    }
+  }
+}

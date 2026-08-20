@@ -1,0 +1,39 @@
+# AWS CodePipeline / CodeBuild — run the gates as a stage.
+# Copy into buildspec.yml (or point the CodeBuild project at this path).
+#
+# CodeBuild can run the whole build inside an image, which is the path that
+# needs no Docker at all: every gate finds its binary on PATH. Set the
+# project's image to ghcr.io/fabiocicerchia/gandalf-tools:latest (privileged
+# mode OFF) and this buildspec is all that's left.
+version: 0.2
+
+env:
+  variables:
+    # No LLM endpoint in CI: don't spend 7s per judge gate retrying.
+    GANDALF_LLM_RETRIES: "0"
+
+phases:
+  install:
+    commands:
+      - git config --global --add safe.directory "*"
+      - git clone --quiet --depth 1 --branch v0.4.0
+        https://github.com/fabiocicerchia/gandalf /opt/gandalf
+  build:
+    commands:
+      # Exit code is 1 when the verdict is red, 0 otherwise — which fails the
+      # build action, the stage, and the pipeline.
+      - PYTHONPATH=/opt/gandalf/src python3 -m gandalf
+        --no-llm --no-html --no-trend
+        --out-dir reports
+        --junit reports/gandalf.junit.xml
+
+# Each gate becomes a test case in the CodeBuild report group.
+reports:
+  gandalf:
+    files:
+      - reports/gandalf.junit.xml
+    file-format: JUNITXML
+
+artifacts:
+  files:
+    - reports/**/*

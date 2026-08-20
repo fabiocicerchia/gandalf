@@ -83,3 +83,35 @@ annotations. It needs only the built-in `GITHUB_TOKEN`. gandalf reviews its own
 PRs the same way via `.github/workflows/gandalf-pr.yml` (`uses: ./`). See
 [`examples/github-actions/`](../examples/github-actions/README.md) for the full
 drop-in workflow, inputs, code scanning, and the advisory-vs-blocking toggle.
+
+### Other CI systems
+
+The Action is GitHub-specific; gandalf is not. Anything that can run a
+container and a git checkout can run the gates — the exit code is the verdict
+(`1` red, `0` otherwise):
+
+```sh
+git clone --depth 1 --branch v0.4.0 https://github.com/fabiocicerchia/gandalf /opt/gandalf
+PYTHONPATH=/opt/gandalf/src python3 -m gandalf --no-llm --no-html --no-trend \
+  --out-dir reports --junit reports/gandalf.junit.xml
+```
+
+The decision that matters off GitHub Actions is **run the job inside
+`ghcr.io/fabiocicerchia/gandalf-tools`** rather than letting gandalf shell out
+to Docker per tool. Inside the image every scanner is already on `PATH`, so no
+Docker daemon is involved — which is not just tidier, it is the only thing that
+works where the CI's Docker cannot bind-mount the job's filesystem (CircleCI's
+`setup_remote_docker`, GitLab with a dind service) or where mounting a socket
+into the pod would be a much bigger ask (Tekton, Argo).
+
+Two things bite everywhere: `git config --global --add safe.directory "*"`
+(the checkout is owned by a different uid, and git otherwise refuses to read
+it), and `--out-dir` pointed somewhere writable when the platform cannot run
+the container as root.
+
+Drop-in files for GitLab CI, CircleCI, Travis, Azure DevOps, AWS CodePipeline,
+Devtron, Northflank, Spacelift, Jenkins, Bitbucket Pipelines, Google Cloud
+Build, Tekton, Argo Workflows, Harness, Buildkite and Drone/Woodpecker are in
+[`examples/ci-platforms/`](../examples/ci-platforms/README.md), along with which
+platform ingests `--junit` where, and how to adopt on a repo that isn't green
+yet (`--min-score`, `--write-baseline`).

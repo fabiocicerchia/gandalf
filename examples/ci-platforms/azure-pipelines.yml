@@ -1,0 +1,54 @@
+# Azure Pipelines — run the gates on every pull request.
+# Copy into azure-pipelines.yml.
+#
+# `container:` runs every step inside gandalf's scanner image, so each gate
+# finds its binary on PATH and nothing shells out to Docker.
+trigger: none
+pr:
+  branches:
+    include: [main]
+
+pool:
+  vmImage: ubuntu-latest
+
+container:
+  image: ghcr.io/fabiocicerchia/gandalf-tools:latest
+  options: --user 0:0 # the image's own uid cannot write into the workspace
+
+variables:
+  # No LLM endpoint in CI: don't spend 7s per judge gate retrying.
+  GANDALF_LLM_RETRIES: "0"
+
+steps:
+  - checkout: self
+    fetchDepth: 0 # the diff scopes need real history
+
+  - script: |
+      set -euo pipefail
+      git config --global --add safe.directory "*"
+      git clone --quiet --depth 1 --branch v0.4.0 \
+        https://github.com/fabiocicerchia/gandalf /opt/gandalf
+    displayName: Fetch gandalf
+
+  - script: |
+      set -euo pipefail
+      PYTHONPATH=/opt/gandalf/src python3 -m gandalf \
+        --no-llm --no-html --no-trend \
+        --out-dir "$(Build.ArtifactStagingDirectory)/reports" \
+        --junit "$(Build.ArtifactStagingDirectory)/reports/gandalf.junit.xml"
+    displayName: Gates
+
+  # Each gate is a test case, so a red gate shows up in the Tests tab with its
+  # findings rather than only in the log.
+  - task: PublishTestResults@2
+    condition: always()
+    inputs:
+      testResultsFormat: JUnit
+      testResultsFiles: "**/gandalf.junit.xml"
+      testRunTitle: gandalf
+
+  - task: PublishPipelineArtifact@1
+    condition: always()
+    inputs:
+      targetPath: $(Build.ArtifactStagingDirectory)/reports
+      artifact: gandalf
