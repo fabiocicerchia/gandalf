@@ -1,0 +1,58 @@
+# Harness — run the gates as a Run step in a CI stage.
+# Paste into the pipeline's YAML editor (Pipeline Studio -> YAML), or commit it
+# if the pipeline is stored in Git.
+pipeline:
+  name: gandalf
+  identifier: gandalf
+  projectIdentifier: YOUR_PROJECT_ID
+  orgIdentifier: default
+  tags: {}
+  stages:
+    - stage:
+        name: Quality gates
+        identifier: Quality_gates
+        type: CI
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: gandalf
+                  identifier: gandalf
+                  spec:
+                    shell: Sh
+                    # gandalf's scanner image: every gate finds its binary on
+                    # PATH, so nothing needs a Docker socket.
+                    image: ghcr.io/fabiocicerchia/gandalf-tools:latest
+                    envVariables:
+                      # No LLM endpoint in CI: don't spend 7s per judge gate
+                      # retrying a connection that will not come up.
+                      GANDALF_LLM_RETRIES: "0"
+                    command: |-
+                      set -eu
+                      git config --global --add safe.directory "*"
+                      git clone --quiet --depth 1 --branch v0.4.0 \
+                        https://github.com/fabiocicerchia/gandalf /opt/gandalf
+                      # Exit code is 1 when the verdict is red, 0 otherwise.
+                      PYTHONPATH=/opt/gandalf/src python3 -m gandalf \
+                        --no-llm --no-html --no-trend \
+                        --out-dir reports \
+                        --junit reports/gandalf.junit.xml
+                    reports:
+                      type: JUnit
+                      spec:
+                        paths:
+                          - reports/gandalf.junit.xml
+  properties:
+    ci:
+      codebase:
+        connectorRef: YOUR_CODE_REPO_CONNECTOR_ID
+        repoName: YOUR_REPO_NAME
+        build: <+input>

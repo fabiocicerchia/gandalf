@@ -1,0 +1,42 @@
+# Google Cloud Build — run the gates on every push or pull request.
+# Copy into cloudbuild.yaml at the repo root.
+#
+# The step image is gandalf's scanner image, so every gate finds its binary on
+# PATH. Cloud Build steps run as root and share /workspace, so nothing needs a
+# volume or a Docker socket.
+steps:
+  - id: gandalf
+    name: ghcr.io/fabiocicerchia/gandalf-tools:latest
+    entrypoint: bash
+    env:
+      # No LLM endpoint in CI: don't spend 7s per judge gate retrying.
+      - GANDALF_LLM_RETRIES=0
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        git config --global --add safe.directory "*"
+        git clone --quiet --depth 1 --branch v0.4.0 \
+          https://github.com/fabiocicerchia/gandalf /opt/gandalf
+        # Exit code is 1 when the verdict is red, 0 otherwise — which fails
+        # the build.
+        PYTHONPATH=/opt/gandalf/src python3 -m gandalf \
+          --no-llm --no-html --no-trend \
+          --out-dir /workspace/reports \
+          --junit /workspace/reports/gandalf.junit.xml
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  # The scanners are the slow part; give them room.
+  machineType: E2_HIGHCPU_8
+
+timeout: 1800s
+
+artifacts:
+  objects:
+    location: gs://${_ARTIFACT_BUCKET}/gandalf/${SHORT_SHA}/
+    paths:
+      - /workspace/reports/*
+
+substitutions:
+  _ARTIFACT_BUCKET: my-build-artifacts

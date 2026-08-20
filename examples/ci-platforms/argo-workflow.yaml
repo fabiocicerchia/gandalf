@@ -1,0 +1,77 @@
+# Argo Workflows — run the gates as a workflow step.
+# argo submit argo-workflow.yaml, or keep it as a WorkflowTemplate and call it
+# from a build workflow with `templateRef`. The DAG is the gate: `build`
+# depends on `gandalf`, so a red verdict leaves it unrun.
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: gandalf-
+spec:
+  entrypoint: pipeline
+  arguments:
+    parameters:
+      - name: repo-url
+        value: https://github.com/OWNER/REPO
+      - name: revision
+        value: main
+      - name: gandalf-version
+        value: v0.4.0
+  volumeClaimTemplates:
+    - metadata:
+        name: work
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 2Gi
+  templates:
+    - name: pipeline
+      dag:
+        tasks:
+          - name: gandalf
+            template: gandalf
+          - name: build
+            template: build
+            dependencies: [gandalf] # only runs if the verdict was not red
+
+    - name: gandalf
+      container:
+        image: ghcr.io/fabiocicerchia/gandalf-tools:latest
+        command: [bash, -c]
+        args:
+          - |
+            set -euo pipefail
+            git config --global --add safe.directory "*"
+            git clone --quiet "{{workflow.parameters.repo-url}}" /work/src
+            git -C /work/src checkout --quiet "{{workflow.parameters.revision}}"
+            git clone --quiet --depth 1 --branch "{{workflow.parameters.gandalf-version}}" \
+              https://github.com/fabiocicerchia/gandalf /work/gandalf
+            cd /work/src
+            PYTHONPATH=/work/gandalf/src python3 -m gandalf \
+              --no-llm --no-html --no-trend \
+              --out-dir /work/reports \
+              --junit /work/reports/gandalf.junit.xml
+        env:
+          # No LLM endpoint in-cluster: don't spend 7s per judge gate retrying.
+          - {name: GANDALF_LLM_RETRIES, value: "0"}
+          - {name: HOME, value: /tmp}
+        volumeMounts:
+          - {name: work, mountPath: /work}
+        resources:
+          # The scanners are the expensive part, not gandalf.
+          requests: {cpu: "1", memory: 2Gi}
+          limits: {cpu: "2", memory: 4Gi}
+      outputs:
+        artifacts:
+          - name: reports
+            path: /work/reports
+            optional: true
+
+    - name: build
+      container:
+        image: bitnami/kubectl:1.31
+        command: [sh, -c]
+        args: ["echo 'the build goes here'"]
+        resources:
+          requests: {cpu: 100m, memory: 128Mi}
+          limits: {cpu: 200m, memory: 256Mi}

@@ -1,0 +1,35 @@
+# Bitbucket Pipelines — run the gates on every pull request.
+# Copy into bitbucket-pipelines.yml at the repo root.
+image:
+  name: ghcr.io/fabiocicerchia/gandalf-tools:latest
+  # The image runs as uid 1000; Bitbucket's clone is not owned by it.
+  run-as-user: 0
+
+definitions:
+  steps:
+    - step: &gandalf
+        name: gandalf
+        clone:
+          depth: full # the diff scopes need real history
+        script:
+          - git config --global --add safe.directory "*"
+          - git clone --quiet --depth 1 --branch v0.4.0 https://github.com/fabiocicerchia/gandalf /opt/gandalf
+          # Exit code is 1 when the verdict is red, 0 otherwise.
+          - >-
+            PYTHONPATH=/opt/gandalf/src python3 -m gandalf
+            --no-llm --no-html --no-trend
+            --out-dir test-results --junit test-results/gandalf.junit.xml
+        artifacts:
+          - test-results/**
+
+pipelines:
+  pull-requests:
+    "**":
+      - step: *gandalf
+
+# Bitbucket picks up JUnit XML from test-results/ automatically, so each gate
+# lands in the build's Tests tab.
+#
+# No LLM endpoint in CI: set GANDALF_LLM_RETRIES=0 as a repository variable so
+# the judge gates don't spend 7s each retrying a connection that will not come
+# up. Point GANDALF_LLM_URL at an OpenAI-compatible endpoint to get them back.

@@ -1,0 +1,37 @@
+# Travis CI — run the gates on every push and pull request.
+# Copy into .travis.yml.
+#
+# Travis runs the job on the VM rather than in an image of your choosing, so
+# this one uses the other supported path: gandalf shells out to the scanner
+# image per tool, which needs the Docker daemon Travis already provides.
+language: python
+python: "3.13"
+os: linux
+dist: jammy
+
+# The scalar form, not a list: `services:` with a list of names is what a
+# docker-compose file looks like to a linter.
+services: docker
+
+git:
+  depth: false # the diff scopes need real history
+
+env:
+  global:
+    - GANDALF_TOOLS_IMAGE=ghcr.io/fabiocicerchia/gandalf-tools:latest
+    # No LLM endpoint in CI: don't spend 7s per judge gate retrying.
+    - GANDALF_LLM_RETRIES=0
+
+install:
+  - git clone --quiet --depth 1 --branch v0.4.0 https://github.com/fabiocicerchia/gandalf "$HOME/gandalf"
+  # gandalf resolves each tool as: host binary on PATH, else this image, else
+  # the gate degrades to a yellow WARN. It inspects the image locally and never
+  # pulls, so the pull has to happen here.
+  - docker pull "$GANDALF_TOOLS_IMAGE"
+
+script:
+  # Exit code is 1 when the verdict is red, 0 otherwise.
+  - PYTHONPATH="$HOME/gandalf/src" python3 -m gandalf
+    --no-llm --no-html --no-trend
+    --out-dir reports
+    --junit reports/gandalf.junit.xml

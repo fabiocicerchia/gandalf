@@ -1,0 +1,24 @@
+{
+  "name": "gandalf",
+  "description": "Runs gandalf's quality gates and fails the workflow on a red verdict",
+  "billing": {
+    "deploymentPlan": "nf-compute-200"
+  },
+  "deployment": {
+    "external": {
+      "imagePath": "ghcr.io/fabiocicerchia/gandalf-tools:latest"
+    },
+    "docker": {
+      "configType": "customCommand",
+      "customCommand": "sh -c 'git config --global --add safe.directory \"*\" && git clone --quiet --depth 1 --branch v0.4.0 https://github.com/fabiocicerchia/gandalf /tmp/gandalf && git clone --quiet $REPO_URL /tmp/src && cd /tmp/src && PYTHONPATH=/tmp/gandalf/src python3 -m gandalf --no-llm --no-html --no-trend --out-dir /tmp/reports'"
+    }
+  },
+  "settings": {
+    "backoffLimit": 0,
+    "activeDeadlineSeconds": 1800
+  },
+  "runtimeEnvironment": {
+    "REPO_URL": "https://github.com/OWNER/REPO",
+    "GANDALF_LLM_RETRIES": "0"
+  }
+}
