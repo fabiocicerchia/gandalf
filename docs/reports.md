@@ -30,8 +30,35 @@ re-derive it; `duration` is the gate's wall-clock time in seconds.
 
 `findings` are passed through from each underlying tool unchanged, so the same
 field goes by different names across gates (`path` / `filename` / `file`,
-`line` / `line_no` / `location.row`, …). `gandalf/report.py`, `gandalf/sarif.py`
-and `extensions/vscode/src/parse.ts` each reconcile the same key lists.
+`line` / `line_no` / `location.row`, …). Every finding additionally carries a
+`_gandalf` block with those keys already reconciled, so a consumer doesn't have
+to know which tool produced it:
+
+```json
+{
+  "filename": "src/app.py", "line_number": 42, "test_id": "B105",
+  "issue_text": "Possible hardcoded password", "issue_severity": "HIGH",
+  "_gandalf": {
+    "path": "src/app.py", "line": 42, "column": 0,
+    "rule": "B105", "message": "Possible hardcoded password", "severity": "high"
+  }
+}
+```
+
+`path` is repo-relative (container mounts are rebased); `line` and `column` are
+1-based with `0` meaning unknown; `severity` is one of `critical`, `high`,
+`medium`, `low`, `info`, `unknown`, or `""` when the tool published none — which
+is not the same as `unknown`, where it published one and declined to rate it.
+Where a gate hands back a bare tool line (`{"error": "src/a.py:552: …"}`), the
+location is scraped from the text and only trusted when it names a file that
+exists.
+
+`gandalf/findings.py` is the one place those keys are read; `report.py`,
+`sarif.py`, `suppress.py`, `severity.py` and `pr_comments.py` all go through it.
+Suppression fingerprints are the deliberate exception and keep a frozen
+vocabulary — a baseline file is a list of hashes in someone's repository, so
+widening the lists would silently un-accept every finding they had agreed to
+live with.
 
 ## Score badge
 

@@ -24,61 +24,29 @@ import json
 from fnmatch import fnmatch
 from pathlib import Path
 
+from . import findings
 from .base import GateOutcome, GateResult
 
 DEFAULT_BASELINE = ".gandalf-baseline.json"
 
 
-def finding_path(f: dict) -> str:
-    if not isinstance(f, dict):
-        return ""
-    return (
-        f.get("path") or f.get("filename") or f.get("file") or f.get("file_path") or ""
-    )
-
-
-def finding_rule(f: dict) -> str:
-    """The rule / check / code id, however the tool spells it."""
-    if not isinstance(f, dict):
-        return ""
-    return str(
-        f.get("rule_id")
-        or f.get("check_id")
-        or f.get("RuleID")
-        # bandit before the generic keys: its `code` is the offending source
-        # snippet, not an identifier, so `code` would win and every bandit
-        # finding would get a multi-line rule id.
-        or f.get("test_id")
-        or f.get("code")
-        or f.get("check_name")
-        or f.get("QueryName")
-        or f.get("VulnerabilityID")
-        or f.get("id")
-        or f.get("rule")
-        or ""
-    )
-
-
-def _message(f: dict) -> str:
-    if not isinstance(f, dict):
-        return str(f)
-    return str(
-        f.get("message")
-        or f.get("issue_text")
-        or f.get("description")
-        or f.get("Description")
-        or f.get("finding")
-        or f.get("typo")
-        or f.get("missing")
-        or ""
-    )
+# Reading a finding is findings.py's job — these names stay as the vocabulary
+# the rest of the codebase already imports from here.
+finding_path = findings.path
+finding_rule = findings.rule
 
 
 def fingerprint(gate: str, f: dict) -> str:
     """Stable id for a finding, line-insensitive so it survives edits above it.
-    gate + path + rule + a short message hash."""
-    msg = _message(f)[:200]
-    key = f"{gate}|{finding_path(f)}|{finding_rule(f)}|{msg}"
+    gate + path + rule + a short message hash.
+
+    Reads through `findings.fingerprint_keys`, which is frozen: a baseline file
+    is a list of these hashes sitting in someone's repository, so widening the
+    vocabulary would silently un-accept every finding they had agreed to live
+    with. See the comment on it.
+    """
+    fp_path, fp_rule, fp_message = findings.fingerprint_keys(f)
+    key = f"{gate}|{fp_path}|{fp_rule}|{fp_message[:200]}"
     # nosemgrep: insecure-hash-algorithm-sha1 — content-dedup key, not security
     return hashlib.sha1(
         key.encode("utf-8", "replace"), usedforsecurity=False
@@ -95,9 +63,9 @@ class _Rule:
     def matches(self, gate: str, f: dict) -> bool:
         if self.gate and self.gate != gate:
             return False
-        if self.rule and self.rule != finding_rule(f):
+        if self.rule and self.rule != findings.rule(f):
             return False
-        return not (self.path and not fnmatch(finding_path(f), self.path))
+        return not (self.path and not fnmatch(findings.path(f), self.path))
 
 
 class Suppressor:

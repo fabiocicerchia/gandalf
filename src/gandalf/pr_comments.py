@@ -26,8 +26,7 @@ from datetime import datetime, timezone
 
 from .base import GateOutcome, GateResult
 from .report import fmt_finding
-from .sarif import _finding_line, _relpath
-from .suppress import finding_path, finding_rule
+from . import findings
 
 # Hidden in the rendered comment; how a re-run finds what it posted last time.
 _MARKER = "<!-- gandalf-pr-review -->"
@@ -49,7 +48,7 @@ def _brand() -> tuple[str, str]:
 
 
 def _comment_body(gate: str, f: dict) -> str:
-    rule = finding_rule(f)
+    rule = findings.rule(f)
     tag = f"`{gate}`" + (f" · `{rule}`" if rule else "")
     return f"{_MARKER}\n**{_brand()[1]}** {tag}\n\n{fmt_finding(f)}"
 
@@ -111,11 +110,11 @@ def build(
                 continue
             # Scanners run in the container against /src; GitHub wants the path
             # repo-relative, same rebase the SARIF writer does.
-            path, line = _relpath(finding_path(f), workdir), _finding_line(f)
+            path, line = findings.relpath(findings.path(f), workdir), findings.line(f)
             if not path or not line:
                 text_path, text_line = _text_location(f)
                 if text_path and text_line:
-                    path, line = _relpath(text_path, workdir), text_line
+                    path, line = findings.relpath(text_path, workdir), text_line
             body = _comment_body(r.name, f)
             if added:
                 anchorable = line in added.get(path, ())

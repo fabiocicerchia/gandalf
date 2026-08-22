@@ -13,25 +13,9 @@ RAG outcome is never changed — only the 0..1 score that feeds the composite.
 
 from __future__ import annotations
 
+from . import findings as findings_mod
 from .base import GateResult
 
-# raw tool words → normalized severity
-_NORMAL = {
-    "critical": "critical",
-    "crit": "critical",
-    "high": "high",
-    "error": "high",
-    "medium": "medium",
-    "moderate": "medium",
-    "warning": "medium",
-    "warn": "medium",
-    "low": "low",
-    "minor": "low",
-    "note": "low",
-    "info": "info",
-    "informational": "info",
-    "unknown": "unknown",
-}
 _WEIGHT = {
     "critical": 2.0,
     "high": 1.0,
@@ -43,23 +27,9 @@ _WEIGHT = {
 # total weight at which the score floors to 0 (≈ two-and-a-half critical findings).
 _FLOOR_AT = 5.0
 
-_FIELDS = ("severity", "Severity", "issue_severity", "level", "Level")
-
-
 def of(f) -> str:
     """Normalized severity of a finding, or '' if it reports none."""
-    if not isinstance(f, dict):
-        return ""
-    raw = ""
-    for k in _FIELDS:
-        if f.get(k):
-            raw = str(f[k])
-            break
-    if not raw:
-        extra = f.get("extra")  # semgrep nests it here
-        if isinstance(extra, dict) and extra.get("severity"):
-            raw = str(extra["severity"])
-    return _NORMAL.get(raw.strip().lower(), "") if raw else ""
+    return findings_mod.severity(f)
 
 
 def score(findings: list) -> float | None:
