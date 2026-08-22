@@ -90,6 +90,11 @@ MESSAGE_KEYS: tuple[str, ...] = (
     "QueryName",
 )
 
+# Rule documentation, where the tool ships one. Not used by any gandalf output
+# today; it is here because every editor integration wants it and would
+# otherwise grow a seventh key list of its own.
+URL_KEYS: tuple[str, ...] = ("url", "URL", "PrimaryURL", "help_uri")
+
 SEVERITY_KEYS: tuple[str, ...] = (
     "severity",
     "Severity",
@@ -140,6 +145,13 @@ _TEXT_LOCATION = re.compile(
 # A bare path with no line — the format gate's "Would reformat: src/x.py". Needs
 # a separator to match, so an ordinary word with a dot in it is not a candidate.
 _TEXT_PATH = re.compile(r"[\w.@+-]+(?:[/\\][\w.@+-]+)+\.\w{1,12}")
+
+
+# A leading `[HIGH]` — how the kics and licenses gates report severity, folding
+# it into the message rather than into a key. Only a bracket whose content is a
+# known severity word counts, so bandit's `[B603]` and mypy's trailing
+# `[attr-defined]` are left alone.
+_MESSAGE_LEVEL = re.compile(r"^\[([A-Za-z]+)\]\s*")
 
 
 def _is_mapping(f: object) -> bool:
@@ -240,6 +252,23 @@ def severity(f: object) -> str:
     return _NORMAL.get(raw.strip().lower(), "") if raw else ""
 
 
+def message_level(text: str) -> tuple[str, str]:
+    """Split a leading `[HIGH]` off a message → `(severity, rest)`.
+
+    `('', text)` when the prefix is absent or is not a severity word.
+    """
+    hit = _MESSAGE_LEVEL.match(text or "")
+    if not hit:
+        return "", text
+    word = _NORMAL.get(hit[1].lower(), "")
+    return (word, text[hit.end() :]) if word else ("", text)
+
+
+def url(f: object) -> str:
+    """Rule documentation, when the tool ships one."""
+    return first_str(f, URL_KEYS)
+
+
 def text_location(text: str) -> tuple[str, int, int]:
     """`(path, line, column)` scraped from a message, for the gates that carry
     their location only in prose. `('', 0, 0)` when there is nothing to scrape.
@@ -291,6 +320,11 @@ def normalise(f: object, root: str = "") -> dict:
     """
     p, ln, col = path(f), line(f), column(f)
     text = message(f)
+    sev = severity(f)
+
+    # kics and the licenses gate put the severity in front of the message.
+    if not sev:
+        sev, text = message_level(text)
 
     # Some gates carry the whole finding in a location key — the format gate's
     # `{"file": "Would reformat: src/x.py"}`. That sentence is the message; the
@@ -333,7 +367,8 @@ def normalise(f: object, root: str = "") -> dict:
         "column": col,
         "rule": rule(f),
         "message": text,
-        "severity": severity(f),
+        "severity": sev,
+        "url": url(f),
     }
 
 

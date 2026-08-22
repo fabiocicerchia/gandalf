@@ -40,7 +40,8 @@ to know which tool produced it:
   "issue_text": "Possible hardcoded password", "issue_severity": "HIGH",
   "_gandalf": {
     "path": "src/app.py", "line": 42, "column": 0,
-    "rule": "B105", "message": "Possible hardcoded password", "severity": "high"
+    "rule": "B105", "message": "Possible hardcoded password",
+    "severity": "high", "url": ""
   }
 }
 ```
@@ -51,7 +52,8 @@ to know which tool produced it:
 is not the same as `unknown`, where it published one and declined to rate it.
 Where a gate hands back a bare tool line (`{"error": "src/a.py:552: …"}`), the
 location is scraped from the text and only trusted when it names a file that
-exists.
+exists. A severity written into the message instead of a key (`[HIGH] …`, as
+kics and the licenses gate do) is lifted out of it the same way.
 
 `gandalf/findings.py` is the one place those keys are read; `report.py`,
 `sarif.py`, `suppress.py`, `severity.py` and `pr_comments.py` all go through it.

@@ -96,7 +96,31 @@ def test_normalise_shape():
         "rule": "B105",
         "message": "Possible hardcoded password",
         "severity": "high",
+        "url": "",
     }
+
+
+def test_severity_folded_into_the_message():
+    """kics and the licenses gate write `[HIGH] ...` rather than a severity key."""
+    n = findings.normalise({"finding": "[HIGH] world-readable secret"})
+    assert (n["severity"], n["message"]) == ("high", "world-readable secret")
+
+
+def test_bracket_that_is_not_a_severity_is_left_alone():
+    for text in ("[B603] subprocess call", "x has no attribute [attr-defined]"):
+        n = findings.normalise({"finding": text})
+        assert (n["severity"], n["message"]) == ("", text)
+
+
+def test_rule_documentation_url():
+    assert (
+        findings.normalise({"finding": "x", "url": "https://d/r"})["url"]
+        == "https://d/r"
+    )
+    assert (
+        findings.normalise({"finding": "x", "PrimaryURL": "https://d/c"})["url"]
+        == "https://d/c"
+    )
 
 
 def test_location_scraped_from_prose_and_trimmed(tmp_path):
