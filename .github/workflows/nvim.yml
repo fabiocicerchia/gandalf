@@ -1,0 +1,64 @@
+name: nvim
+
+on:
+  push:
+    branches: [main, master]
+    paths: ["extensions/nvim/**", "src/gandalf/**", ".github/workflows/nvim.yml"]
+  pull_request:
+    paths: ["extensions/nvim/**", "src/gandalf/**", ".github/workflows/nvim.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nvim-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # stable is what people run; nightly is where a deprecation shows up first,
+  # and this plugin is deliberately on the 0.11 API surface (vim.system,
+  # vim.fs.relpath, vim.validate's callable form).
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        neovim: [stable, nightly]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - uses: rhysd/action-setup-vim@6ba49e35ceb7ba2426d1f4849e0d9723c4f21d3f  # v1.4.2
+        with:
+          neovim: true
+          version: ${{ matrix.neovim }}
+
+      - name: Version
+        run: nvim --version
+
+      - name: Test
+        working-directory: extensions/nvim
+        run: make test
+
+  # The plugin reads gandalf's --stream framing, its progress line and the
+  # `_gandalf` block on every finding. All three are contracts with the Python,
+  # and only running them together checks them.
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - uses: rhysd/action-setup-vim@6ba49e35ceb7ba2426d1f4849e0d9723c4f21d3f  # v1.4.2
+        with:
+          neovim: true
+          version: stable
+
+      - name: Drive it against a real repository
+        working-directory: extensions/nvim
+        env:
+          GANDALF_CMD: python3 -m gandalf
+        run: nvim --headless --clean -u tests/smoke.lua

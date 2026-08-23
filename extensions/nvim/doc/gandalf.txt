@@ -1,0 +1,223 @@
+*gandalf.txt*  Run Gandalf's quality gates from Neovim
+
+==============================================================================
+CONTENTS                                                     *gandalf-contents*
+
+  1. Introduction ............................ |gandalf-introduction|
+  2. Requirements ............................ |gandalf-requirements|
+  3. Setup ................................... |gandalf-setup|
+  4. Configuration ........................... |gandalf-configuration|
+  5. Commands ................................ |gandalf-commands|
+  6. API ..................................... |gandalf-api|
+  7. Statusline .............................. |gandalf-statusline|
+  8. Health .................................. |gandalf-health|
+  9. Differences from the VS Code extension .. |gandalf-differences|
+
+==============================================================================
+1. INTRODUCTION                                          *gandalf-introduction*
+
+Gandalf runs about thirty pluggable gates over a repository -- ruff, semgrep,
+bandit, codeql, kics, trivy, licences, lizard, several LLM-judge gates -- and
+produces a Red/Amber/Green scorecard with a 0-100 composite score.
+
+This plugin drives that CLI. It does not reimplement any gate, and it does not
+reconcile finding shapes: gandalf normalises its own findings and publishes the
+result on every finding, so what you see here is what the scorecard says.
+
+A scan is a real thing -- thirty processes, several of them `docker run` -- so
+it happens on write, on a slow timer, or when you ask. Never on a keystroke.
+
+==============================================================================
+2. REQUIREMENTS                                          *gandalf-requirements*
+
+  - Neovim 0.11 or newer
+  - the `gandalf` CLI, or a checkout run as `python3 -m gandalf`
+  - git; the scope gandalf scans comes from it
+  - docker, for the gates that fall back to the scanner-tools image (optional)
+  - plenary.nvim, for running the test suite only
+
+|:checkhealth| gandalf reports on all of it.
+
+==============================================================================
+3. SETUP                                                        *gandalf-setup*
+
+setup() is optional -- every command works on the defaults. >lua
+
+    require('gandalf').setup({
+      scan = { trigger = 'on_save_and_interval' },
+    })
+<
+Against a source checkout rather than an installed wrapper: >lua
+
+    require('gandalf').setup({
+      cmd = { 'python3', '-m', 'gandalf' },
+      env = { PYTHONPATH = '/path/to/gandalf/src' },
+    })
+<
+With lazy.nvim: >lua
+
+    {
+      'fabiocicerchia/gandalf',
+      rtp = 'extensions/nvim',
+      cmd = { 'GandalfScan', 'GandalfReport' },
+      opts = {},
+    }
+<
+==============================================================================
+4. CONFIGURATION                                        *gandalf-configuration*
+
+Defaults, deep-merged with whatever you pass: >lua
+
+    {
+      enabled = true,
+      cmd = { 'gandalf' },
+      env = {},                 -- merged over the inherited environment
+      config_path = '',         -- a .gandalf.toml passed as --config
+      exclude = {},             -- --exclude globs
+      extra_args = {},
+      scan = {
+        trigger = 'on_save',    -- on_save | on_save_and_interval
+                                -- interval | manual
+        debounce_ms = 1500,
+        interval_minutes = 15,
+        on_startup = true,
+        timeout_ms = 600000,
+        concurrency = 0,        -- 0 leaves gandalf's default
+        use_cache = true,
+        llm = false,
+        stream = true,
+      },
+      diagnostics = {
+        enabled = true,
+        min_level = 'info',
+        severity = {
+          critical = vim.diagnostic.severity.ERROR,
+          high     = vim.diagnostic.severity.ERROR,
+          medium   = vim.diagnostic.severity.WARN,
+          low      = vim.diagnostic.severity.INFO,
+          info     = vim.diagnostic.severity.INFO,
+          unrated  = vim.diagnostic.severity.HINT,
+        },
+        max_per_file = 500,
+      },
+    }
+<
+`config_path` is how you run a narrower gate set while you work: gate
+`only`/`skip` selection lives in the config file, not on the command line.
+|:GandalfTimings| will write you one.
+
+==============================================================================
+5. COMMANDS                                                  *gandalf-commands*
+
+                                                                *:GandalfScan*
+:GandalfScan            Scan the workspace.
+
+                                                            *:GandalfScanFile*
+:GandalfScanFile        Scan the current file only.
+
+                                                              *:GandalfReport*
+:GandalfReport          The scorecard, in a float: verdict, score, gates by
+                        category, and what could not run.
+
+                                                           *:GandalfReportLlm*
+:GandalfReportLlm       Rescan with the LLM summary, then open the scorecard.
+
+                                                                *:GandalfList*
+:GandalfList            Every finding, in the quickfix list.
+
+                                                              *:GandalfFilter*
+:GandalfFilter          Findings at one reported level, in the quickfix list.
+
+                                                             *:GandalfTimings*
+:GandalfTimings         Per-gate wall clock, slowest first. Picking one copies
+                        a ready-to-paste `.gandalf.toml` skip list -- trimming
+                        the gate set is the only real lever on a slow scan.
+
+                                                             *:GandalfHistory*
+:GandalfHistory         Score over time, from `.gandalf-trend.jsonl` joined
+                        against `git log`. Picking a commit scans it.
+
+                                                              *:GandalfCancel*
+:GandalfCancel          Stop the running scan.
+
+                                                                 *:GandalfLog*
+:GandalfLog             What was run, and what came back.
+
+==============================================================================
+6. API                                                            *gandalf-api*
+
+>lua
+    setup(opts)
+    scan(opts)          -- { kind = 'workspace'|'file'|'commit', ... }
+    cancel()
+    snapshot()          -- the last completed run
+    findings()          -- its findings, plus anything streaming superseded
+    is_scanning()
+    statusline()        -- see |gandalf-statusline|
+    root()
+<
+==============================================================================
+7. STATUSLINE                                              *gandalf-statusline*
+
+>lua
+    require('lualine').setup({
+      sections = { lualine_x = { { require('gandalf').statusline } } },
+    })
+<
+Reads "gandalf AMBER 93/100" when idle, and "gandalf gates 12/37 · semgrep"
+during a scan -- gandalf reports its own progress on stderr, and that is what
+this shows.
+
+==============================================================================
+8. HEALTH                                                      *gandalf-health*
+
+>vim
+    :checkhealth gandalf
+<
+Checks gandalf itself, whether the build supports `--stream`, git, the
+scanner-tools image, and the endpoint the judge gates call. Deliberately not a
+tool-by-tool inventory: gandalf answers that per gate on every scan, and a copy
+of its tool list here would only drift.
+
+==============================================================================
+9. DIFFERENCES FROM THE VS CODE EXTENSION                 *gandalf-differences*
+
+Both drive the same CLI, so the findings are the same findings. What differs is
+the surface.
+
+Dropped, with reasons:
+
+  `useEditorExcludes`   VS Code merges `files.exclude` and `search.exclude`
+                        into gandalf's `--exclude`. Neovim has no equivalent
+                        setting to read, so `exclude` is the whole list.
+
+  `path`, `pythonPath`  One `cmd` list replaces both: `{ 'gandalf' }`, or
+                        `{ 'python3', '-m', 'gandalf' }` with `env.PYTHONPATH`.
+                        Nothing has to guess whether a path is a wrapper or a
+                        checkout.
+
+  `buildToolsImage`     It is `docker build -f tools.Dockerfile -t
+                        gandalf-tools .` in a gandalf checkout, and running it
+                        somewhere you can watch it is better than a spinner.
+                        |:checkhealth| says so when the image is missing.
+
+  `exportReport`        gandalf writes the HTML report itself; `--out-dir` says
+                        where. There is nothing for an editor to add.
+
+  scope toggles,        Belong to the tree view, which is a float and the
+  expand/collapse       quickfix list here.
+
+Different:
+
+  Findings pane         |:GandalfList| and |:GandalfFilter| put findings in the
+                        quickfix list, where a list of places to go belongs in
+                        this editor.
+
+  Report                A text float. gandalf's HTML report is a real document
+                        -- open it in a browser from `--out-dir` when you want
+                        it; rendering HTML in a buffer would be a worse copy.
+
+  Doctor                |:checkhealth| gandalf, which is where Neovim users
+                        already look.
+
+vim:tw=78:ts=8:noet:ft=help:norl:
