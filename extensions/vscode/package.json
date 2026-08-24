@@ -2,7 +2,7 @@
   "name": "gandalf-quality-gates",
   "displayName": "Gandalf",
   "description": "Run Gandalf's quality gates while you code: inline diagnostics, a findings panel, and the full HTML scorecard inside VS Code.",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "publisher": "fabiocicerchia",
   "license": "Apache-2.0",
   "pricing": "Free",
