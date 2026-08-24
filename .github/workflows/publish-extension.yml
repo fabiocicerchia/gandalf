@@ -14,6 +14,13 @@ name: publish-extension
 # OVSX_PAT (Open VSX) are set in the repository's secrets. Marketplace versions
 # are immutable — a version published once can never be replaced, only
 # superseded — so the version check below is deliberately strict.
+#
+# DEADLINE: Azure DevOps retires global PATs on 2026-12-01, and VSCE_PAT is one.
+# After that the Marketplace step has to authenticate through Microsoft Entra ID
+# (`vsce publish --azure-credential`, fed by a federated credential rather than a
+# stored secret). Open VSX is unaffected. Doing it needs an Azure app
+# registration first, so it is a change to make deliberately, not on the day.
+# https://code.visualstudio.com/api/working-with-extensions/publishing-extension
 
 on:
   workflow_call:

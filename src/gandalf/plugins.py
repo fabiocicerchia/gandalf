@@ -9,7 +9,9 @@ extension mechanism.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import contextvars
+import itertools
 import importlib.util
 import inspect
 import os
@@ -95,17 +97,22 @@ def tool_missing(binary: str) -> bool:
     return not shutil.which(binary) and not _via_image(binary)
 
 
-def _dockerize(cmd: list[str], workdir: str) -> list[str]:
+def _dockerize(cmd: list[str], workdir: str, name: str = "") -> list[str]:
     """Prefer the host binary; else, if the image provides this tool, run it in a
     throwaway container mounting the worktree at /src. A named cache volume keeps
     tool DBs (trivy, semgrep rules) off the host and warm across runs. --network
-    host so tools can fetch rule/vuln DBs and reach local targets."""
+    host so tools can fetch rule/vuln DBs and reach local targets.
+
+    `name` is what makes the container killable on timeout — without it there is
+    no handle to stop, only the client process, and stopping that stops nothing.
+    """
     if shutil.which(cmd[0]) or not _via_image(cmd[0]):
         return cmd
     return [
         "docker",
         "run",
         "--rm",
+        *(["--name", name] if name else []),
         "--network",
         "host",
         "-v",
@@ -280,6 +287,60 @@ def _scan_targets(ctx: GateContext, *, py_only: bool = False) -> list[str]:
     return list(tracked) or ["."]
 
 
+_CONTAINER_SEQ = itertools.count()
+
+
+async def _reap(proc: asyncio.subprocess.Process, cmd: list[str], name: str) -> None:
+    """Stop a timed-out/cancelled tool, including the container it may be inside.
+
+    `proc.kill()` on a `docker run` kills the *client*: the container keeps
+    running, keeps its CPU, and `--rm` never fires, because that only removes a
+    container that exited on its own. semgrep and trivy are the ones you notice
+    — a scan that "timed out" ten minutes ago is still pegging a core, and the
+    next run starts a second one beside it.
+    """
+    with contextlib.suppress(ProcessLookupError):
+        proc.kill()
+    await proc.wait()
+    if cmd[0] != "docker" or not name:
+        return
+    try:
+        killer = await asyncio.create_subprocess_exec(
+            "docker",
+            "kill",
+            name,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await asyncio.wait_for(killer.communicate(), timeout=15)
+    except (OSError, asyncio.TimeoutError) as exc:  # best effort; already degrading
+        debug.log(f"could not kill container {name}: {exc}")
+
+
+async def communicate(
+    proc: asyncio.subprocess.Process,
+    timeout: float,
+    cmd: list[str] | None = None,
+    container: str = "",
+) -> tuple[bytes, bytes] | None:
+    """`proc.communicate()` with the child actually killed on timeout, or None.
+
+    `asyncio.wait_for` cancels the *await*, not the process. Without the kill a
+    timed-out gate reports its timeout and leaves the tool running: a fuzzer
+    burning a core for the rest of the session, an `act` run still spawning
+    containers. Gates that build their own Process (different stream wiring than
+    run_tool's) must reap it through here.
+
+    Pass `cmd`/`container` when the process is a `docker run` — killing that
+    client does not stop the container behind it.
+    """
+    try:
+        return await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except asyncio.TimeoutError:
+        await _reap(proc, cmd or [""], container)
+        return None
+
+
 async def run_tool(
     cmd: list[str], cwd: str, timeout: int | None = None
 ) -> tuple[int, str, str]:
@@ -289,7 +350,8 @@ async def run_tool(
     global default."""
     if timeout is None:
         timeout = GATE_TIMEOUT.get() or SUBPROCESS_TIMEOUT_SECONDS
-    cmd = _dockerize(cmd, cwd)
+    container = f"gandalf-{os.getpid()}-{next(_CONTAINER_SEQ)}"
+    cmd = _dockerize(cmd, cwd, container)
     debug.log(f"run (timeout={timeout}s): {' '.join(cmd)}")
     t0 = time.monotonic()
     proc = await asyncio.create_subprocess_exec(
@@ -301,10 +363,13 @@ async def run_tool(
     try:
         out, err = await asyncio.wait_for(proc.communicate(), timeout=timeout)
     except asyncio.TimeoutError:
-        proc.kill()
-        await proc.wait()
+        await _reap(proc, cmd, container)
         debug.log(f"timeout after {timeout}s: {cmd[0]}")
         return _TIMEOUT_RC, "", f"timed out after {timeout}s"
+    except asyncio.CancelledError:
+        # Ctrl-C, or the editor's cancel button: same leak, same cleanup.
+        await _reap(proc, cmd, container)
+        raise
     rc = proc.returncode if proc.returncode is not None else _TIMEOUT_RC
     debug.log(f"done rc={rc} in {time.monotonic() - t0:.2f}s: {cmd[0]}")
     errs = err.decode(errors="replace")

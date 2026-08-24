@@ -13,6 +13,18 @@ own output format, its own severity words and its own idea of a rule id;
 gandalf normalizes all of it, so the extension shows you one board to read
 instead of a dozen terminals to reconcile.
 
+<!-- Absolute, not relative: vsce rewrites a relative README link to
+     <repo>/raw/HEAD/<path>, dropping the `repository.directory` prefix — so
+     `media/…` resolves to the repository root and renders broken on the
+     Marketplace. Verified by unpacking the .vsix, not assumed. -->
+![The Gandalf pane in the bottom panel: findings grouped by file, each with the level the tool reported, the gate that found it and the line, plus the score in the status bar](https://raw.githubusercontent.com/fabiocicerchia/gandalf/main/extensions/vscode/media/screenshots/findings-pane.png)
+
+*The pane, next to Problems and Terminal. Gates that could not run are named in the message line at the top rather than counted as findings.*
+
+![The Gandalf report open in an editor tab: an AMBER 82/100 verdict banner with the delta against the previous run, scores by category, and the per-gate table](https://raw.githubusercontent.com/fabiocicerchia/gandalf/main/extensions/vscode/media/screenshots/report.png)
+
+*The report — the same `reports/*.html` the CLI writes, opened in a tab.*
+
 - **Inline diagnostics** — every finding that has a file and a line becomes a
   squiggle. The hover explains the problem, which gate found it, its severity
   and the rule id (linked to the tool's docs when there is one).
@@ -48,10 +60,26 @@ Then reload the window (**Developer: Reload Window**) — a **Gandalf** tab
 appears in the bottom panel alongside Problems and Terminal. Gandalf itself is a
 separate thing and has to be reachable; see [Requirements](#requirements).
 
-Building it from a checkout instead — for an unreleased change, or when the
-Marketplace is not an option — is `make ext-install` from the repository root
-(add `CODE=cursor` for a fork, or use `make ext-package` and install the `.vsix`
-by hand; Node 18+ is needed for the build and for nothing afterwards).
+### From source
+
+To install the unreleased build instead, from the repository root:
+
+```sh
+make ext-install                  # or CODE=cursor, windsurf, codium, code-insiders
+```
+
+That installs npm's dev dependencies if needed, typechecks, runs the tests,
+builds the `.vsix` and installs it. Node 18+ is needed for the build; nothing of
+it is needed afterwards. Then reload the window (**Developer: Reload Window**).
+
+No `code` command at all? `make ext-package` builds the `.vsix` and stops, so
+you can install it by hand: **Extensions** view → `...` menu →
+**Install from VSIX…**. (Or run **Shell Command: Install 'code' command in
+PATH** from the Command Palette and use `make ext-install`.)
+
+To hack on it instead of installing it: `npm run watch`, open
+`extensions/vscode/` as the workspace folder, press <kbd>F5</kbd>. That launches an
+Extension Development Host with the extension loaded from source.
 
 To remove it: **Extensions** view → Gandalf → Uninstall, or
 `code --uninstall-extension fabiocicerchia.gandalf-quality-gates`.

@@ -22,6 +22,35 @@ export class GandalfNotFoundError extends Error {}
 /** Raised when a scan cannot apply, but nothing is wrong (e.g. untracked file). */
 export class ScanSkippedError extends Error {}
 
+/** The one-liner from the README — kept here so the notification can run it. */
+export const INSTALL_COMMAND =
+  'curl -fsSL https://raw.githubusercontent.com/fabiocicerchia/gandalf/main/install.sh | bash';
+
+/**
+ * "gandalf is missing" told once, the same way, wherever it is noticed — with
+ * the command that fixes it rather than a pointer to a document that has it.
+ */
+export async function promptInstall(message: string): Promise<void> {
+  const choice = await vscode.window.showErrorMessage(
+    `Gandalf: ${message}`,
+    'Install Gandalf',
+    'Copy command',
+    'Open settings',
+  );
+  if (choice === 'Install Gandalf') {
+    const terminal = vscode.window.createTerminal('gandalf: install');
+    terminal.show(true);
+    terminal.sendText(INSTALL_COMMAND);
+    // The clone and the wrapper take a moment; the next scan should look again
+    // rather than trust the "not found" we just cached.
+    resetLauncherCache();
+  } else if (choice === 'Copy command') {
+    await vscode.env.clipboard.writeText(INSTALL_COMMAND);
+  } else if (choice === 'Open settings') {
+    await vscode.commands.executeCommand('workbench.action.openSettings', 'gandalf');
+  }
+}
+
 export interface Launcher {
   command: string;
   args: string[];
@@ -248,7 +277,8 @@ export async function resolveLauncher(folder: vscode.WorkspaceFolder, s: Setting
   const options = candidates(folder, s);
   if (options.length === 0) {
     throw new GandalfNotFoundError(
-      'Gandalf was not found. Install the wrapper with `make install`, or set `gandalf.checkoutPath` to a gandalf checkout.',
+      `the gandalf CLI is not installed. Install it now?  It runs:  ${INSTALL_COMMAND}` +
+        `  — or point "gandalf.path" at an existing wrapper or checkout.`,
     );
   }
   const chosen = options[0];

@@ -8,9 +8,11 @@ from __future__ import annotations
 import json
 import os
 import re
+import socket
 import subprocess
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -28,6 +30,34 @@ RETRIES = int(
 BACKOFF = float(os.environ.get("GANDALF_LLM_BACKOFF", "1.0"))  # base seconds
 # Retry only on transient HTTP statuses; 4xx (bad request/auth) won't fix on retry.
 _RETRY_STATUS = frozenset({429, 500, 502, 503, 504})
+# How long the endpoint gets to accept a TCP connection. Generation itself is
+# unbounded by this — see _check_connectable.
+CONNECT_TIMEOUT = float(os.environ.get("GANDALF_LLM_CONNECT_TIMEOUT", "10"))
+
+
+class LLMUnreachable(OSError):
+    """Nothing accepted a connection at the endpoint within CONNECT_TIMEOUT."""
+
+
+def _check_connectable(url: str) -> None:
+    """Fail fast when nothing is listening, before committing to the full budget.
+
+    urllib has one `timeout`, and it covers the connect *and* every subsequent
+    read — so it cannot express "10s to answer the door, then as long as you
+    need to generate". A dead endpoint would otherwise cost the whole
+    generation budget, on every attempt, on every judge gate. Asking the TCP
+    question separately is the cheap half of that, and the half that has a
+    right answer in 10 seconds.
+    """
+    parts = urllib.parse.urlsplit(url)
+    port = parts.port or (443 if parts.scheme == "https" else 80)
+    try:
+        with socket.create_connection((parts.hostname or "", port), CONNECT_TIMEOUT):
+            pass
+    except OSError as exc:
+        raise LLMUnreachable(
+            f"no connection to {parts.hostname}:{port} within {CONNECT_TIMEOUT:g}s ({exc})"
+        ) from exc
 
 
 def _retryable(exc: Exception) -> bool:
@@ -37,6 +67,10 @@ def _retryable(exc: Exception) -> bool:
     in that set is a bad request, and retrying it just spends the same tokens
     on the same rejection.
     """
+    # Checked before OSError below, which it subclasses: nothing is listening, so
+    # a retry buys another CONNECT_TIMEOUT of waiting and the same answer.
+    if isinstance(exc, LLMUnreachable):
+        return False
     if isinstance(exc, urllib.error.HTTPError):  # subclass of URLError — check first
         return exc.code in _RETRY_STATUS
     return isinstance(exc, (urllib.error.URLError, TimeoutError, OSError))
@@ -119,8 +153,12 @@ def chat(messages: list[dict], *, temperature: float = 0.2, timeout: int = 120) 
             "max_tokens": MAX_TOKENS,
         }
     ).encode()
+    url = f"{LLM_URL.rstrip('/')}/chat/completions"
+    # Once this returns, the endpoint is up and `timeout` is the generation
+    # budget it gets — a slow model is fine, an absent one is not.
+    _check_connectable(url)
     req = urllib.request.Request(
-        f"{LLM_URL.rstrip('/')}/chat/completions",
+        url,
         data=body,
         headers={
             "Content-Type": "application/json",
