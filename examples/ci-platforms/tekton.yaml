@@ -1,0 +1,64 @@
+# Tekton — run the gates as a Task.
+# kubectl apply -f tekton.yaml, then reference the Task from a Pipeline. A
+# failed TaskRun fails the PipelineRun, so a red verdict stops the build.
+#
+# The step image is gandalf's scanner image: every gate finds its binary on
+# PATH, which is the only workable arrangement on Kubernetes — the alternative
+# is handing the pod a Docker socket.
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: gandalf
+spec:
+  description: >-
+    Runs pluggable quality gates over a repository and reports a Red/Amber/Green
+    scorecard. Exit code is 1 when the verdict is red.
+  params:
+    - name: scope
+      description: >-
+        Extra scoping flags, e.g. "--path src" or "--commit <sha>". Empty scans
+        the whole working tree.
+      type: string
+      default: ""
+    - name: min-score
+      description: Fail below this composite score (0-100). Empty disables it.
+      type: string
+      default: ""
+    - name: gandalf-version
+      type: string
+      default: v0.4.0
+  workspaces:
+    - name: source
+      description: The checkout to scan (a git-clone Task's output)
+    - name: reports
+      description: Where the JSON/JUnit reports are written
+  steps:
+    - name: gates
+      image: ghcr.io/fabiocicerchia/gandalf-tools:latest
+      workingDir: $(workspaces.source.path)
+      env:
+        # No LLM endpoint in-cluster: don't spend 7s per judge gate retrying.
+        # Point GANDALF_LLM_URL at an OpenAI-compatible endpoint to get the
+        # summary and the judge gates back.
+        - name: GANDALF_LLM_RETRIES
+          value: "0"
+        - name: HOME
+          value: /tmp
+        - name: MIN_SCORE
+          value: $(params.min-score)
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+        git config --global --add safe.directory "*"
+        git clone --quiet --depth 1 --branch "$(params.gandalf-version)" \
+          https://github.com/fabiocicerchia/gandalf /tmp/gandalf
+        PYTHONPATH=/tmp/gandalf/src python3 -m gandalf \
+          --no-llm --no-html --no-trend \
+          --out-dir "$(workspaces.reports.path)" \
+          --junit "$(workspaces.reports.path)/gandalf.junit.xml" \
+          ${MIN_SCORE:+--min-score "$MIN_SCORE"} \
+          $(params.scope)
+      computeResources:
+        # The scanners are the expensive part, not gandalf.
+        requests: {cpu: "1", memory: 2Gi}
+        limits: {cpu: "2", memory: 4Gi}

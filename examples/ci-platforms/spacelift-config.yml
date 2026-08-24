@@ -1,0 +1,24 @@
+# Spacelift — run the gates before the plan.
+# Copy into .spacelift/config.yml at the root of the stack's repository.
+#
+# before_plan, not before_apply: this is a review of the code in the repository,
+# so it should fail before Spacelift spends a plan on it. checkov, trivy,
+# gitleaks and hadolint are the gates that earn their keep on an IaC stack.
+version: "1"
+
+stack_defaults:
+  # gandalf's own scanner image: every gate finds its binary on PATH, and the
+  # runner needs no Docker of its own.
+  runner_image: ghcr.io/fabiocicerchia/gandalf-tools:latest
+  environment:
+    # No LLM endpoint here: don't spend 7s per judge gate retrying.
+    GANDALF_LLM_RETRIES: "0"
+
+stacks:
+  # Replace with your stack's ID (the slug in its Spacelift URL).
+  infrastructure:
+    before_plan:
+      - git config --global --add safe.directory "*"
+      - git clone --quiet --depth 1 --branch v0.4.0 https://github.com/fabiocicerchia/gandalf /tmp/gandalf
+      # Exit code is 1 when the verdict is red, which fails the run.
+      - PYTHONPATH=/tmp/gandalf/src python3 -m gandalf --no-llm --no-html --no-trend --out-dir /tmp/gandalf-reports

@@ -1,0 +1,45 @@
+# GitLab CI — run the gates on every merge request.
+# Copy into .gitlab-ci.yml (or `include:` it from one).
+#
+# The job image is gandalf's own scanner image, so every gate finds its binary
+# on PATH and nothing shells out to Docker. That matters more here than
+# anywhere: a `docker run -v $PWD:/src` inside a dind service mounts the *dind
+# daemon's* filesystem, not your checkout, and the scan silently sees nothing.
+stages:
+  - quality
+
+gandalf:
+  stage: quality
+  image:
+    name: ghcr.io/fabiocicerchia/gandalf-tools:latest
+    docker:
+      # The image runs as uid 1000; the runner clones as root. Without this the
+      # scan can read the checkout but cannot write reports into it. On an
+      # older runner, set `user = "root"` in its config.toml instead.
+      user: root
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  variables:
+    GIT_DEPTH: "0" # --commit and the diff scopes need real history
+    # No LLM endpoint in CI: skip the summary, and don't spend 7s per judge
+    # gate retrying a connection that will not come up.
+    GANDALF_LLM_RETRIES: "0"
+  before_script:
+    - git config --global --add safe.directory "*"
+    - git clone --quiet --depth 1 --branch v0.4.0
+      https://github.com/fabiocicerchia/gandalf /opt/gandalf
+  script:
+    # Exit code is 1 when the verdict is red, 0 otherwise.
+    - PYTHONPATH=/opt/gandalf/src python3 -m gandalf
+      --no-llm --no-html --no-trend
+      --out-dir reports
+      --junit reports/gandalf.junit.xml
+  artifacts:
+    when: always
+    paths:
+      - reports/
+    reports:
+      # Each gate becomes a test case, so findings land in the MR's test report
+      # widget rather than only in the job log.
+      junit: reports/gandalf.junit.xml
+    expire_in: 1 week

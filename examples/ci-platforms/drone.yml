@@ -1,0 +1,34 @@
+# Drone — run the gates on every push and pull request.
+# Copy into .drone.yml at the repo root.
+#
+# Woodpecker CI runs the same steps: drop the `kind`/`type`/`name` header, keep
+# `steps:` as-is, and save it as .woodpecker.yml.
+#
+# The step image is gandalf's scanner image, so every gate finds its binary on
+# PATH — no Docker socket, no privileged step.
+kind: pipeline
+type: docker
+name: default
+
+steps:
+  - name: gandalf
+    image: ghcr.io/fabiocicerchia/gandalf-tools:latest
+    environment:
+      # No LLM endpoint in CI: don't spend 7s per judge gate retrying.
+      GANDALF_LLM_RETRIES: "0"
+      # The image's uid does not own the workspace, so reports go to /tmp.
+      HOME: /tmp
+    commands:
+      - git config --global --add safe.directory "*"
+      - git clone --quiet --depth 1 --branch v0.4.0 https://github.com/fabiocicerchia/gandalf /tmp/gandalf
+      # Exit code is 1 when the verdict is red, 0 otherwise.
+      - >-
+        PYTHONPATH=/tmp/gandalf/src python3 -m gandalf
+        --no-llm --no-html --no-trend
+        --out-dir /tmp/reports --junit /tmp/reports/gandalf.junit.xml
+      - cat /tmp/reports/gandalf.junit.xml
+
+trigger:
+  event:
+    - push
+    - pull_request
