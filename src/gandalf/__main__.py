@@ -24,6 +24,7 @@ from pathlib import Path
 from . import (
     badge,
     debug,
+    findings as gfindings,
     junit,
     llm,
     plugins,
@@ -111,10 +112,11 @@ class _GateStream:
     not applied, so a streamed `score` is preliminary; the report is the record.
     """
 
-    def __init__(self, total: int, scope: str, sup):
+    def __init__(self, total: int, scope: str, sup, workdir: str = ""):
         self.total = total
         self.n = 0
         self.sup = sup
+        self.workdir = workdir
         self._write({"event": "start", "scope": scope, "gates": total})
 
     def gate(self, r) -> None:
@@ -126,6 +128,7 @@ class _GateStream:
                 "index": self.n,
                 "total": self.total,
                 **dataclasses.asdict(shown),
+                "findings": gfindings.annotate_all(shown.findings, self.workdir),
                 "category": report.category_of(r),
                 "duration": getattr(r, "_duration", None),
                 "blocking": getattr(r, "_blocking", False),
@@ -279,6 +282,11 @@ def _build_payload(
         "gates": [
             {
                 **dataclasses.asdict(r),
+                # Each finding keeps its tool's own keys and gains a `_gandalf`
+                # block with the reconciled path/line/rule/message/severity, so
+                # a consumer never has to know that ruff says `location.row` and
+                # trivy says `Target`. See gandalf/findings.py.
+                "findings": gfindings.annotate_all(r.findings, sc.workdir),
                 "category": report.category_of(r),
                 "blocking": getattr(r, "_blocking", False),
                 "duration": getattr(r, "_duration", None),
@@ -607,6 +615,7 @@ def main(argv: list[str] | None = None) -> int:
                 len(active),
                 sc.label,
                 suppress.build(cfg.section("suppress"), _baseline_path(args.baseline)),
+                sc.workdir,
             )
             if args.stream
             else None

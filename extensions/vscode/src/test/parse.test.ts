@@ -76,17 +76,41 @@ describe('path resolution', () => {
   });
 });
 
+/**
+ * A finding as gandalf now delivers it: the tool's own keys untouched, plus the
+ * `_gandalf` block that `gandalf/findings.py` computed from them. The blocks
+ * below are the real output of that module for these exact fixtures — the
+ * Python side pins the same cases in `tests/test_findings.py`, so if the two
+ * ever disagree, one of them fails.
+ */
+function norm(raw: RawFinding, block: Record<string, unknown>): RawFinding {
+  return {
+    ...raw,
+    _gandalf: { path: '', line: 0, column: 0, rule: '', message: '', severity: '', url: '', ...block },
+  };
+}
+
 describe('finding normalization', () => {
-  it('reads ruff: filename + nested location.row/column + code + url', () => {
+  it('reads ruff: nested location.row/column, code and rule url', () => {
     const [f] = one(
       gate('ruff', [
-        {
-          filename: path.join(root, 'app.py'),
-          code: 'E501',
-          message: 'Line too long (100 > 88)',
-          location: { row: 12, column: 89 },
-          url: 'https://docs.astral.sh/ruff/rules/line-too-long',
-        },
+        norm(
+          {
+            filename: 'app.py',
+            code: 'E501',
+            message: 'Line too long (100 > 88)',
+            location: { row: 12, column: 89 },
+            url: 'https://docs.astral.sh/ruff/rules/line-too-long',
+          },
+          {
+            path: 'app.py',
+            line: 12,
+            column: 89,
+            rule: 'E501',
+            message: 'Line too long (100 > 88)',
+            url: 'https://docs.astral.sh/ruff/rules/line-too-long',
+          },
+        ),
       ]),
     );
     assert.equal(f.rule, 'E501');
@@ -94,202 +118,240 @@ describe('finding normalization', () => {
     assert.equal(f.column, 89);
     assert.equal(f.resolvedPath, path.join(root, 'app.py'));
     assert.equal(f.url, 'https://docs.astral.sh/ruff/rules/line-too-long');
-    assert.equal(f.severity, 'warning', 'no severity word → inherits the gate outcome');
+    assert.equal(f.severity, 'warning', 'no severity → inherits the gate outcome');
+    assert.equal(f.level, 'unrated');
   });
 
-  it('reads semgrep: path + line + check_id + severity word', () => {
+  it('reads semgrep, including the severity it nests under extra', () => {
     const [f] = one(
       gate(
         'semgrep',
-        [{ path: 'app.py', line: 3, check_id: 'python.lang.security.eval', message: 'eval() is dangerous', severity: 'ERROR' }],
+        [
+          norm(
+            { path: 'app.py', line: 3, check_id: 'python.lang.security.eval', message: 'eval() is dangerous', extra: { severity: 'ERROR' } },
+            { path: 'app.py', line: 3, rule: 'python.lang.security.eval', message: 'eval() is dangerous', severity: 'high' },
+          ),
+        ],
         { outcome: 'fail', category: 'Security' },
       ),
     );
     assert.equal(f.severity, 'error');
-    assert.equal(f.severityLabel, 'ERROR');
+    assert.equal(f.severityLabel, 'HIGH');
     assert.equal(f.rule, 'python.lang.security.eval');
     assert.equal(f.category, 'Security');
     assert.equal(f.line, 3);
   });
 
-  it('reads kics: file + line + a level folded into the message', () => {
-    const [f] = one(gate('kics', [{ file: 'Dockerfile', line: 1, message: '[HIGH] Missing user instruction' }]));
+  it('identifies a bandit finding by its test id, not its source snippet', () => {
+    // The regression that motivated moving this into gandalf: `code` is the
+    // offending source, and it used to win over `test_id` here.
+    const [f] = one(
+      gate('bandit', [
+        norm(
+          {
+            filename: 'app.py',
+            line_number: 42,
+            test_id: 'B105',
+            issue_text: 'Possible hardcoded password',
+            issue_severity: 'HIGH',
+            code: '41 def login():\n42     password = "hunter2"\n',
+          },
+          { path: 'app.py', line: 42, rule: 'B105', message: 'Possible hardcoded password', severity: 'high' },
+        ),
+      ]),
+    );
+    assert.equal(f.rule, 'B105');
+    assert.ok(!f.rule.includes('\n'), 'never a multi-line source snippet');
+    assert.equal(f.level, 'high');
+  });
+
+  it('reads kics: a level folded into the message comes back in its own column', () => {
+    const [f] = one(
+      gate('kics', [
+        norm(
+          { file: 'Dockerfile', line: 1, message: '[HIGH] Missing user instruction' },
+          { path: 'Dockerfile', line: 1, message: 'Missing user instruction', severity: 'high' },
+        ),
+      ]),
+    );
     assert.equal(f.resolvedPath, path.join(root, 'Dockerfile'));
     assert.equal(f.line, 1);
-    // kics and the licenses gate carry severity in the text, not a key.
     assert.equal(f.level, 'high');
     assert.equal(f.severityLabel, 'HIGH');
     assert.equal(f.severity, 'error');
-    assert.equal(f.message, 'Missing user instruction', 'the prefix moves to its own column');
-  });
-
-  it('reads a level folded into a licenses-gate message', () => {
-    const [f] = one(
-      gate('licenses', [{ file: 'app.py', message: '[CRITICAL] some-pkg: GPL-3.0' }], {
-        category: 'Licensing',
-      }),
-    );
-    assert.equal(f.level, 'critical');
-    assert.equal(f.message, 'some-pkg: GPL-3.0');
+    assert.equal(f.message, 'Missing user instruction');
   });
 
   it('leaves a bracketed prefix that is not a severity word alone', () => {
-    const [rule] = one(gate('bandit', [{ path: 'app.py', line: 1, message: '[B603] subprocess call' }]));
-    assert.equal(rule.level, 'unrated');
-    assert.equal(rule.message, '[B603] subprocess call');
-
-    // mypy's trailing [attr-defined] is a rule id, and not at the head anyway.
-    const [mypy] = one(gate('mypy', [{ error: 'app.py:1: error: bad  [attr-defined]' }]));
-    assert.equal(mypy.level, 'unrated');
-    assert.match(mypy.message, /\[attr-defined\]$/);
-  });
-
-  it('prefers an explicit severity key over a bracketed message prefix', () => {
-    const [f] = one(gate('kics', [{ file: 'app.py', severity: 'LOW', message: '[HIGH] mismatched' }]));
-    assert.equal(f.level, 'low');
-    assert.equal(f.message, '[HIGH] mismatched', 'nothing was consumed, so nothing is trimmed');
-  });
-
-  it('scrapes path:line out of a raw tool line (mypy)', () => {
     const [f] = one(
-      gate('mypy', [{ error: 'src/gandalf/__main__.py:465: error: "Gate" has no attribute "langs"  [attr-defined]' }]),
+      gate('bandit', [
+        norm({ path: 'app.py', line: 1, message: '[B603] subprocess call' }, { path: 'app.py', line: 1, message: '[B603] subprocess call' }),
+      ]),
+    );
+    assert.equal(f.level, 'unrated');
+    assert.equal(f.message, '[B603] subprocess call');
+  });
+
+  it('places a location that gandalf scraped out of a raw tool line (mypy)', () => {
+    const [f] = one(
+      gate('mypy', [
+        norm(
+          { error: 'src/gandalf/__main__.py:465: error: "Gate" has no attribute "langs"  [attr-defined]' },
+          { path: 'src/gandalf/__main__.py', line: 465, message: 'error: "Gate" has no attribute "langs"  [attr-defined]' },
+        ),
+      ]),
     );
     assert.equal(f.resolvedPath, path.join(root, 'src', 'gandalf', '__main__.py'));
     assert.equal(f.line, 465);
-    assert.equal(
-      f.message,
-      'error: "Gate" has no attribute "langs"  [attr-defined]',
-      'the location is shown in its own column, so it is trimmed off the message',
+    assert.equal(f.message, 'error: "Gate" has no attribute "langs"  [attr-defined]');
+  });
+
+  it('keeps prose whose path gandalf would not vouch for', () => {
+    const [f] = one(
+      gate('grill_me', [
+        norm(
+          { finding: 'See docs/adr.md:1 for the rationale — no decision recorded' },
+          { message: 'See docs/adr.md:1 for the rationale — no decision recorded' },
+        ),
+      ]),
     );
-  });
-
-  it('scrapes path:line:col out of a raw tool line (vulture)', () => {
-    const [f] = one(gate('vulture', [{ finding: "app.py:2: unused variable 'y' (60% confidence)" }]));
-    assert.equal(f.resolvedPath, path.join(root, 'app.py'));
-    assert.equal(f.line, 2);
-  });
-
-  it('leaves prose alone when the scraped path is not a real file', () => {
-    const [f] = one(gate('grill_me', [{ finding: 'See docs/adr.md:1 for the rationale — no decision recorded' }]));
-    assert.equal(f.resolvedPath, '', 'docs/adr.md does not exist in this workspace');
+    assert.equal(f.resolvedPath, '', 'docs/adr.md does not exist, so gandalf sent no path');
     assert.equal(f.line, 0);
-    assert.match(f.message, /^See docs/, 'the message is untouched');
+    assert.match(f.message, /^See docs/);
   });
 
   it('keeps a finding with no location at all (scorecard)', () => {
-    const [f] = one(gate('scorecard', [{ check: 'Branch-Protection', score: 3, reason: 'branch protection not enabled' }]));
+    const [f] = one(
+      gate('scorecard', [
+        norm(
+          { check: 'Branch-Protection', score: 3, reason: 'branch protection not enabled' },
+          { rule: 'Branch-Protection', message: 'branch protection not enabled' },
+        ),
+      ]),
+    );
     assert.equal(f.resolvedPath, '');
     assert.equal(f.rule, 'Branch-Protection');
     assert.equal(f.message, 'branch protection not enabled');
   });
 
-  it('maps trivy-style capitalized keys', () => {
-    const [f] = one(
-      gate('licenses', [{ file: 'app.py', Severity: 'CRITICAL', message: 'GPL-3.0: some-package' }], { category: 'Licensing' }),
-    );
-    assert.equal(f.severity, 'error');
-    assert.equal(f.severityLabel, 'CRITICAL');
-  });
-
   it('reads a gate whose whole finding is one sentence in a location key', () => {
-    // The format gate: [{"file": "Would reformat: src/gandalf/__main__.py"}]
-    const [f] = one(gate('format', [{ file: 'Would reformat: src/gandalf/__main__.py' }]));
-    assert.equal(f.message, 'Would reformat: src/gandalf/__main__.py', 'not a JSON dump');
-    assert.equal(
-      f.resolvedPath,
-      path.join(root, 'src', 'gandalf', '__main__.py'),
-      'the path inside the sentence still groups the row under its file',
+    const [f] = one(
+      gate('format', [
+        norm(
+          { file: 'Would reformat: src/gandalf/__main__.py' },
+          { path: 'src/gandalf/__main__.py', message: 'Would reformat: src/gandalf/__main__.py' },
+        ),
+      ]),
     );
+    assert.equal(f.message, 'Would reformat: src/gandalf/__main__.py', 'not a JSON dump');
+    assert.equal(f.resolvedPath, path.join(root, 'src', 'gandalf', '__main__.py'));
     assert.equal(f.line, 0, 'no line was reported, so it gets no squiggle');
   });
 
-  it('does not mistake prose for a path', () => {
-    const [f] = one(gate('grill_me', [{ finding: 'Consider splitting this up. It is too big.' }]));
-    assert.equal(f.resolvedPath, '');
-    assert.equal(f.message, 'Consider splitting this up. It is too big.');
-  });
-
-  it('falls back to the raw record when no key is recognizable', () => {
-    const [f] = one(gate('weird', [{ nothing_we_know: 'about' }]));
-    assert.equal(f.message, '{"nothing_we_know":"about"}');
+  it('falls back to the raw record when gandalf found nothing to say', () => {
+    const [f] = one(gate('weird', [norm({ nothing_we_know: 'about' }, {})]));
+    assert.match(f.message, /nothing_we_know/);
   });
 
   it('coerces a non-object finding', () => {
-    const [f] = one(gate('weird', ['just a string' as unknown as RawFinding]));
+    const [f] = one(gate('odd', ['just a string' as unknown as RawFinding]));
     assert.equal(f.message, 'just a string');
   });
 
   it('surfaces a failing gate that reported no findings', () => {
-    const findings = one(gate('build', [], { outcome: 'fail', score: 0, summary: '1 file(s) fail to compile' }));
-    assert.equal(findings.length, 1);
-    assert.equal(findings[0].message, '1 file(s) fail to compile');
-    assert.equal(findings[0].severity, 'error');
+    const [f] = one(gate('build', [], { outcome: 'fail', summary: 'build: 1 file(s) fail to compile' }));
+    assert.equal(f.message, 'build: 1 file(s) fail to compile');
+    assert.equal(f.severity, 'error');
   });
 
   it('says nothing about a passing gate with no findings', () => {
-    assert.equal(one(gate('ruff', [], { outcome: 'pass', score: 1, summary: 'ruff clean' })).length, 0);
+    assert.deepEqual(one(gate('ruff', [], { outcome: 'pass', summary: 'ruff clean' })), []);
   });
 
   it('gives each finding a stable id', () => {
-    const fixture = () => one(gate('ruff', [{ filename: 'app.py', code: 'E501', message: 'too long', line: 4 }]))[0].id;
-    assert.equal(fixture(), fixture());
+    const build = () => one(gate('ruff', [norm({ path: 'app.py', line: 1, message: 'x' }, { path: 'app.py', line: 1, message: 'x' })]))[0].id;
+    assert.equal(build(), build());
+  });
+});
+
+/**
+ * A gandalf older than `findings.py` sends no `_gandalf` block. The pane must
+ * still be usable; it just loses the reconciliation gandalf would have done.
+ */
+describe('a gandalf that predates the normalizer', () => {
+  it('still reads the classic keys', () => {
+    const [f] = one(gate('ruff', [{ filename: 'app.py', line: 3, code: 'E501', message: 'line too long' }]));
+    assert.equal(f.rule, 'E501');
+    assert.equal(f.line, 3);
+    assert.equal(f.resolvedPath, path.join(root, 'app.py'));
+  });
+
+  it('still identifies bandit by its test id', () => {
+    const [f] = one(gate('bandit', [{ filename: 'app.py', line_number: 1, test_id: 'B105', issue_text: 'pw', code: '1 x\n2 y' }]));
+    assert.equal(f.rule, 'B105');
+  });
+
+  it('degrades quietly where it cannot reconcile', () => {
+    // Nested positions, prose scraping and folded-in severities are gandalf's
+    // job now, so an old build simply reports the finding unplaced.
+    const [f] = one(gate('ruff', [{ filename: 'app.py', location: { row: 9 }, message: 'x' }]));
+    assert.equal(f.line, 0, 'listed in the pane, just without a squiggle');
+    assert.equal(f.resolvedPath, path.join(root, 'app.py'));
   });
 });
 
 describe('reported level', () => {
-  const levelOf = (severity: unknown, outcome: RawGate['outcome'] = 'warn') =>
-    one(gate('g', [{ path: 'app.py', line: 1, message: 'x', severity }], { outcome }))[0];
+  const levelOf = (severity: string, outcome: RawGate['outcome'] = 'warn') =>
+    one(
+      gate('g', [norm({ path: 'app.py', line: 1, message: 'x' }, { path: 'app.py', line: 1, message: 'x', severity })], {
+        outcome,
+      }),
+    )[0];
 
-  it('places each tool severity word on the ladder', () => {
+  it("places each of gandalf's severities on the ladder", () => {
+    // The vocabulary itself — which tool words map to which of these — is
+    // gandalf's, and is tested in tests/test_findings.py.
     const cases: [string, string][] = [
-      ['CRITICAL', 'critical'],
-      ['HIGH', 'high'],
-      ['ERROR', 'high'],
-      ['MEDIUM', 'medium'],
-      ['MODERATE', 'medium'],
-      ['WARNING', 'medium'],
-      ['LOW', 'low'],
-      ['INFO', 'info'],
-      ['NOTE', 'info'],
+      ['critical', 'critical'],
+      ['high', 'high'],
+      ['medium', 'medium'],
+      ['low', 'low'],
+      ['info', 'info'],
+      ['unknown', 'unrated'],
+      ['', 'unrated'],
     ];
-    for (const [word, level] of cases) {
-      assert.equal(levelOf(word).level, level, word);
-      assert.equal(levelOf(word.toLowerCase()).level, level, `${word} lowercase`);
-    }
+    for (const [word, level] of cases) assert.equal(levelOf(word).level, level, word || '(none)');
   });
 
   it('keeps critical distinct from high, though both squiggle as errors', () => {
-    assert.equal(levelOf('CRITICAL').severity, 'error');
-    assert.equal(levelOf('HIGH').severity, 'error');
-    assert.notEqual(levelOf('CRITICAL').level, levelOf('HIGH').level);
+    assert.equal(levelOf('critical').severity, 'error');
+    assert.equal(levelOf('high').severity, 'error');
+    assert.notEqual(levelOf('critical').level, levelOf('high').level);
   });
 
   it('calls a finding with no severity unrated, not a guess', () => {
-    const f = one(gate('mypy', [{ path: 'app.py', line: 1, message: 'x' }]))[0];
+    const f = levelOf('');
     assert.equal(f.level, 'unrated');
     assert.equal(f.severityLabel, '', 'nothing to show as a level');
     assert.equal(f.severity, 'warning', 'but it still inherits the gate outcome');
   });
 
-  it('treats a tool that says UNKNOWN as unrated', () => {
-    assert.equal(levelOf('UNKNOWN').level, 'unrated');
-    assert.equal(levelOf('nonsense-word').level, 'unrated');
-  });
-
   it('sorts an unrated finding by the outcome it inherited', () => {
     // A failing gate's unrated finding must outrank a tool's LOW.
-    assert.equal(sortLevel(levelOf(undefined, 'fail')), 'high');
-    assert.equal(sortLevel(levelOf(undefined, 'warn')), 'medium');
-    assert.equal(sortLevel(levelOf('LOW')), 'low', 'a rated one keeps its own level');
+    assert.equal(sortLevel(levelOf('', 'fail')), 'high');
+    assert.equal(sortLevel(levelOf('', 'warn')), 'medium');
+    assert.equal(sortLevel(levelOf('low')), 'low', 'a rated one keeps its own level');
   });
 
   it('orders the pane worst-first across levels', () => {
+    const at = (line: number, message: string, severity: string) =>
+      norm({ path: 'app.py', line, message }, { path: 'app.py', line, message, severity });
     const findings = one(
-      gate('a', [{ path: 'app.py', line: 1, message: 'low', severity: 'LOW' }]),
-      gate('b', [{ path: 'app.py', line: 2, message: 'critical', severity: 'CRITICAL' }]),
-      gate('c', [{ path: 'app.py', line: 3, message: 'unrated-error' }], { outcome: 'fail' }),
-      gate('d', [{ path: 'app.py', line: 4, message: 'medium', severity: 'MEDIUM' }]),
-      gate('e', [{ path: 'app.py', line: 5, message: 'high', severity: 'HIGH' }]),
+      gate('a', [at(1, 'low', 'low')]),
+      gate('b', [at(2, 'critical', 'critical')]),
+      gate('c', [at(3, 'unrated-error', '')], { outcome: 'fail' }),
+      gate('d', [at(4, 'medium', 'medium')]),
+      gate('e', [at(5, 'high', 'high')]),
     );
     assert.deepEqual(
       findings.map((f) => f.message),

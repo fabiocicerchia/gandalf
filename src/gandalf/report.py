@@ -8,49 +8,16 @@ import re
 from collections import defaultdict
 from dataclasses import dataclass
 
+from . import findings
 from .base import GateOutcome, GateResult
-
-# Finding dicts come from many tools, so the same field goes by different keys.
-# First truthy value wins (order = preference), mirroring the old or-chains.
-_LOC_KEYS = ("path", "filename", "file", "file_path")
-_LINE_KEYS = ("line", "line_number", "Line")
-_MSG_KEYS = (
-    "message",
-    "issue_text",
-    "description",
-    "Description",
-    "check_name",
-    "error",
-    "issue",
-    "finding",
-    "typo",
-    "missing",
-    "judge_summary",
-    "rule_id",
-    "VulnerabilityID",
-    "QueryName",
-)
-
-
-def _first(f: dict, keys: tuple[str, ...]):
-    """The first of `keys` present and truthy in a finding, else "".
-
-    Gates wrap third-party tools that each name the same field differently;
-    this is where that is absorbed instead of in every renderer.
-    """
-    for k in keys:
-        if f.get(k):
-            return f[k]
-    return ""
-
 
 def fmt_finding(f) -> str:
     """One-line, human-readable rendering of a heterogeneous gate finding."""
     if not isinstance(f, dict):
         return str(f)[:500]
-    loc = _first(f, _LOC_KEYS)
-    line = _first(f, _LINE_KEYS)
-    msg = _first(f, _MSG_KEYS)
+    loc = findings.path(f)
+    line = findings.line(f)
+    msg = findings.message(f)
     head = f"{loc}:{line}" if (loc and line) else str(loc)
     text = f"{head} — {msg}" if (head and msg) else (str(msg) or head)
     return (text or json.dumps(f, default=str))[:600]

@@ -12,49 +12,37 @@ import * as path from 'path';
 
 import { Finding, Level, Outcome, Payload, RawFinding, RawGate, Severity } from './types';
 
-const PATH_KEYS = [
-  'path',
-  'filename',
-  'file',
-  'file_path',
-  'filepath',
-  'File',
-  'FilePath',
-  'Path',
-  'Target',
-];
-const LINE_KEYS = ['line', 'line_number', 'line_no', 'Line', 'startLine', 'start_line', 'StartLine'];
-const COLUMN_KEYS = ['column', 'col', 'startColumn', 'start_column'];
-const RULE_KEYS = [
-  'rule_id',
-  'check_id',
-  'RuleID',
-  'code',
-  'check_name',
-  'check',
-  'QueryName',
-  'VulnerabilityID',
-  'id',
-  'rule',
-];
-const MESSAGE_KEYS = [
-  'message',
-  'issue_text',
-  'description',
-  'Description',
-  'error',
-  'issue',
-  'finding',
-  'typo',
-  'missing',
-  'judge_summary',
-  'reason',
-  'check_name',
-  'rule_id',
-  'VulnerabilityID',
-  'QueryName',
-];
-const SEVERITY_KEYS = ['severity', 'Severity', 'issue_severity', 'level', 'Level'];
+/**
+ * What gandalf says about a finding once it has reconciled it — the `_gandalf`
+ * block it puts on every finding in the JSON report and every `--stream` event.
+ * See `gandalf/findings.py`.
+ */
+interface Normalised {
+  /** Repo-relative, or '' when the finding names no file. */
+  path: string;
+  /** 1-based; 0 means unknown. */
+  line: number;
+  column: number;
+  rule: string;
+  message: string;
+  /** '' when the tool published none — not the same as 'unknown', where it published one and declined to rate. */
+  severity: string;
+  url: string;
+}
+
+/**
+ * A gandalf older than `findings.py` sends no `_gandalf` block, and pointing
+ * `gandalf.path` at an arbitrary checkout makes that a real case. Such a build
+ * still has to produce a usable pane, so these are the keys gandalf's own
+ * report has always read — deliberately not the full reconciliation, which is
+ * no longer this file's job to carry.
+ */
+const LEGACY_PATH_KEYS = ['path', 'filename', 'file', 'file_path'];
+const LEGACY_LINE_KEYS = ['line', 'line_number', 'Line'];
+const LEGACY_RULE_KEYS = ['rule_id', 'check_id', 'RuleID', 'test_id', 'code', 'id', 'rule'];
+const LEGACY_MESSAGE_KEYS = ['message', 'issue_text', 'description', 'Description', 'error', 'finding'];
+const LEGACY_SEVERITY_KEYS = ['severity', 'Severity', 'issue_severity', 'level', 'Level'];
+const URL_KEYS = ['url', 'URL', 'PrimaryURL', 'help_uri'];
 
 const OUTCOME_SEVERITY: Record<Outcome, Severity> = {
   fail: 'error',
@@ -69,17 +57,19 @@ const OUTCOME_SEVERITY: Record<Outcome, Severity> = {
  * from the level below rather than listed again — one table cannot disagree
  * with itself.
  */
-const LEVEL_WORDS: Record<string, Level> = {
-  CRITICAL: 'critical',
-  HIGH: 'high',
-  ERROR: 'high',
-  MEDIUM: 'medium',
-  MODERATE: 'medium',
-  WARNING: 'medium',
-  LOW: 'low',
-  INFO: 'info',
-  NOTE: 'info',
-  UNKNOWN: 'unrated', // The tool said so itself.
+/**
+ * gandalf's normalized severity → the ladder the pane shows. `unknown` is the
+ * tool saying it declined to rate the finding, which is exactly what `unrated`
+ * means here; `''` (no severity field at all) lands there too, and inherits the
+ * gate's outcome instead.
+ */
+const GANDALF_LEVEL: Record<string, Level> = {
+  critical: 'critical',
+  high: 'high',
+  medium: 'medium',
+  low: 'low',
+  info: 'info',
+  unknown: 'unrated',
 };
 
 /** Worst first — the pane's ordering and the filter's ordering. */
@@ -136,25 +126,6 @@ export function sortLevel(f: Finding): Level {
   return f.level === 'unrated' ? IMPLIED_LEVEL[f.severity] : f.level;
 }
 
-/**
- * `<path>:<line>[:<col>]` at the head of, or inside, a raw tool line — how
- * vulture, lizard and the other "one string per finding" gates report location.
- */
-const TEXT_LOCATION = /(?:^|[\s(["'])([\w.@+-]+(?:[/\\][\w.@+-]+)*\.\w{1,12}):(\d+)(?::(\d+))?/;
-/**
- * A bare path with no line number, for gates whose finding is a whole sentence:
- * the format gate reports `{file: "Would reformat: src/gandalf/__main__.py"}`.
- * At least one separator is required so ordinary prose doesn't match.
- */
-const TEXT_PATH = /[\w.@+-]+(?:[/\\][\w.@+-]+)+\.\w{1,12}/g;
-/**
- * A leading `[HIGH]` — how the kics and licenses gates report severity, since
- * they fold it into the message rather than a key of its own. Only a bracket
- * whose content is a known severity word counts, so `[B603]` and mypy's trailing
- * `[attr-defined]` are left alone.
- */
-const MESSAGE_LEVEL = /^\[([A-Za-z]+)\]\s*/;
-
 function firstString(f: RawFinding, keys: string[]): string {
   for (const k of keys) {
     const v = f[k];
@@ -173,20 +144,39 @@ function firstNumber(f: RawFinding, keys: string[]): number {
   return 0;
 }
 
-function nested(f: RawFinding, key: string): RawFinding | undefined {
-  const v = f[key];
-  return v && typeof v === 'object' && !Array.isArray(v) ? (v as RawFinding) : undefined;
+/** The `_gandalf` block, if this build of gandalf emits one. */
+function normalised(f: RawFinding): Normalised | undefined {
+  const raw = f._gandalf;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const o = raw as Record<string, unknown>;
+  const str = (k: string) => (typeof o[k] === 'string' ? (o[k] as string) : '');
+  const num = (k: string) => (typeof o[k] === 'number' && o[k] > 0 ? (o[k] as number) : 0);
+  return {
+    path: str('path'),
+    line: num('line'),
+    column: num('column'),
+    rule: str('rule'),
+    message: str('message'),
+    severity: str('severity'),
+    url: str('url'),
+  };
 }
 
-/** ruff nests `location.{row,column}`; semgrep nests `start.{line,col}`. */
-function nestedPosition(f: RawFinding): { line: number; column: number } {
-  for (const key of ['location', 'start', 'Location', 'Start', 'position']) {
-    const obj = nested(f, key);
-    if (!obj) continue;
-    const line = firstNumber(obj, ['row', 'line', 'Line', 'StartLine', ...LINE_KEYS]);
-    if (line) return { line, column: firstNumber(obj, ['col', ...COLUMN_KEYS]) };
-  }
-  return { line: 0, column: 0 };
+/** Best effort for a gandalf that predates `findings.py`. */
+function legacy(f: RawFinding): Normalised {
+  return {
+    path: firstString(f, LEGACY_PATH_KEYS),
+    line: firstNumber(f, LEGACY_LINE_KEYS),
+    column: 0,
+    rule: firstString(f, LEGACY_RULE_KEYS),
+    message: firstString(f, LEGACY_MESSAGE_KEYS),
+    severity: firstString(f, LEGACY_SEVERITY_KEYS).toLowerCase(),
+    url: firstString(f, URL_KEYS),
+  };
+}
+
+export function readFinding(f: RawFinding): Normalised {
+  return normalised(f) ?? legacy(f);
 }
 
 /**
@@ -229,102 +219,28 @@ export function resolvePath(raw: string, root: string, cache?: Map<string, strin
   return resolved;
 }
 
-function locate(
-  f: RawFinding,
-  message: string,
-  root: string,
-  cache: Map<string, string>,
-): { file: string; resolvedPath: string; line: number; column: number; trimmed: string } {
-  let file = firstString(f, PATH_KEYS);
-  let line = firstNumber(f, LINE_KEYS);
-  let column = firstNumber(f, COLUMN_KEYS);
-  if (!line || !column) {
-    const pos = nestedPosition(f);
-    line = line || pos.line;
-    column = column || pos.column;
-  }
-
-  let resolvedPath = resolvePath(file, root, cache);
-  let trimmed = message;
-
-  // Gates that hand back raw tool lines ({finding: "src/a.py:12: unused ..."})
-  // carry their location in the text. Only trust the scrape if it lands on a
-  // real file, so prose that merely looks like a path is left alone.
-  if (!resolvedPath || !line) {
-    const m = TEXT_LOCATION.exec(message);
-    if (m) {
-      const guess = resolvePath(m[1], root, cache);
-      if (guess) {
-        if (!resolvedPath) {
-          file = file || m[1];
-          resolvedPath = guess;
-        }
-        if (!line && guess === resolvedPath) {
-          line = Number(m[2]);
-          column = column || (m[3] ? Number(m[3]) : 0);
-        }
-        // The location is shown in its own column, so drop a leading duplicate.
-        if (message.startsWith(m[0].trimStart())) {
-          trimmed = message.slice(m[0].trimStart().length).replace(/^[\s:-]+/, '');
-        }
-      }
-    }
-  }
-
-  // Still unplaced: look for a bare path anywhere in the text. The message is
-  // left whole — for these gates the sentence *is* the finding.
-  if (!resolvedPath) {
-    for (const candidate of message.match(TEXT_PATH) ?? []) {
-      const guess = resolvePath(candidate, root, cache);
-      if (guess) {
-        file = file || candidate;
-        resolvedPath = guess;
-        break;
-      }
-    }
-  }
-  return { file, resolvedPath, line, column, trimmed: trimmed || message };
+/**
+ * gandalf reports a repo-relative path; the editor needs an absolute one that
+ * exists. A finding whose file cannot be found is still listed in the pane —
+ * it just gets no squiggle.
+ */
+function place(n: Normalised, root: string, cache: Map<string, string>) {
+  return { file: n.path, resolvedPath: n.path ? resolvePath(n.path, root, cache) : '' };
 }
 
-function severityOf(
-  f: RawFinding,
-  outcome: Outcome,
-  message: string,
-): { severity: Severity; label: string; level: Level; trimmed: string } {
-  let word = firstString(f, SEVERITY_KEYS).toUpperCase();
-  let trimmed = message;
-  if (!LEVEL_WORDS[word]) {
-    const prefix = MESSAGE_LEVEL.exec(message);
-    const candidate = prefix?.[1].toUpperCase() ?? '';
-    if (LEVEL_WORDS[candidate]) {
-      word = candidate;
-      // The level gets its own column, so drop the prefix from the text.
-      trimmed = message.slice(prefix![0].length);
-    }
-  }
-  const level = LEVEL_WORDS[word] ?? 'unrated';
+/**
+ * Editor severity for a finding. A tool that named no severity leaves the level
+ * unrated, and the finding inherits its gate's outcome — a red mypy error must
+ * not sink below a cosmetic advisory just because mypy names no severity.
+ */
+function rate(n: Normalised, outcome: Outcome): { severity: Severity; label: string; level: Level } {
+  const level = GANDALF_LEVEL[n.severity] ?? 'unrated';
   return {
     severity: level === 'unrated' ? OUTCOME_SEVERITY[outcome] : LEVEL_SEVERITY[level],
-    // A word we place on the ladder is worth showing; one we don't isn't.
-    label: level === 'unrated' ? '' : word,
+    // A level we place on the ladder is worth showing; one we don't isn't.
+    label: level === 'unrated' ? '' : n.severity.toUpperCase(),
     level,
-    trimmed: trimmed || message,
   };
-}
-
-function messageOf(f: RawFinding): string {
-  const msg = firstString(f, MESSAGE_KEYS);
-  if (msg) return msg;
-  // Some gates carry the whole finding in a location key — the format gate's
-  // `{file: "Would reformat: src/x.py"}`. That sentence beats a JSON dump.
-  const located = firstString(f, PATH_KEYS);
-  if (located) return located;
-  // Nothing recognizable at all: show the raw record rather than an empty row.
-  try {
-    return JSON.stringify(f);
-  } catch {
-    return String(f);
-  }
 }
 
 function fingerprint(parts: (string | number)[]): string {
@@ -378,25 +294,26 @@ export function normalizeGate(
 
   for (const raw of gate.findings ?? []) {
     const f: RawFinding = raw && typeof raw === 'object' ? raw : { finding: String(raw) };
-    const reported = messageOf(f);
-    const { severity, label, level, trimmed: message } = severityOf(f, gate.outcome, reported);
-    const loc = locate(f, message, root, cache);
-    const rule = firstString(f, RULE_KEYS);
+    const n = readFinding(f);
+    const { severity, label, level } = rate(n, gate.outcome);
+    const { file, resolvedPath } = place(n, root, cache);
+    // Nothing recognizable at all: show the raw record rather than an empty row.
+    const message = n.message || JSON.stringify(f);
     findings.push({
-      id: fingerprint([gate.name, loc.file, rule, loc.trimmed.slice(0, 200), loc.line]),
+      id: fingerprint([gate.name, file, n.rule, message.slice(0, 200), n.line]),
       gate: gate.name,
       category,
       outcome: gate.outcome,
       severity,
       severityLabel: label,
       level,
-      rule,
-      message: loc.trimmed.slice(0, 2000),
-      file: loc.file,
-      resolvedPath: loc.resolvedPath,
-      line: loc.line,
-      column: loc.column,
-      url: firstString(f, ['url', 'URL', 'PrimaryURL', 'help_uri']),
+      rule: n.rule,
+      message: message.slice(0, 2000),
+      file,
+      resolvedPath,
+      line: n.line,
+      column: n.column,
+      url: n.url,
     });
   }
 

@@ -15,8 +15,9 @@ from __future__ import annotations
 import hashlib
 
 from .base import GateOutcome, GateResult
+from . import findings
 from .report import fmt_finding
-from .suppress import finding_path, finding_rule, fingerprint
+from .suppress import fingerprint
 
 # Code Scanning rejects an upload whose rule id exceeds this, and it rejects
 # the whole file — one tool putting a message where an id belongs takes the
@@ -63,48 +64,10 @@ _SEV_SCORE = {
 _LEVEL_SCORE = {"error": "7.0", "warning": "4.0", "note": "1.0"}
 
 
-def _finding_severity(f: dict) -> str:
-    """The severity of a finding, whichever key the tool that produced it used.
-
-    Every scanner spells this differently, and gandalf normalises rather than
-    demanding they agree.
-    """
-    for k in ("severity", "Severity", "issue_severity", "level", "Level"):
-        v = f.get(k) if isinstance(f, dict) else None
-        if v:
-            return str(v).upper()
-    return ""
-
-
-def _finding_line(f: dict) -> int:
-    """The line a finding points at, or 0 when it points at nothing.
-
-    Same key-name spread as the severity, and 0 is meaningful here: SARIF wants
-    a region, and a finding without one is attached to the file instead.
-    """
-    if not isinstance(f, dict):
-        return 0
-    for k in ("line", "line_number", "Line", "startLine"):
-        v = f.get(k)
-        if isinstance(v, int) and v > 0:
-            return v
-        if isinstance(v, str) and v.isdigit():
-            return int(v)
-    loc = f.get("location")
-    if isinstance(loc, dict) and isinstance(loc.get("row"), int):
-        return loc["row"]
-    return 0
-
-
-def _relpath(path: str, root: str) -> str:
-    """Repo-relative, forward-slashed — GitHub code scanning rejects absolute
-    paths. Strips a leading workdir prefix (the container mounts the repo at
-    /src) and a leading './'."""
-    p = path.strip().replace("\\", "/")
-    root = (root or "").replace("\\", "/").rstrip("/")
-    if root and (p == root or p.startswith(root + "/")):
-        p = p[len(root) :]
-    return p.lstrip("/").removeprefix("./")
+# The shared readers, under the names this module already uses.
+_finding_severity = findings.severity_raw
+_finding_line = findings.line
+_relpath = findings.relpath
 
 
 def _location(path: str, line: int, root: str = "") -> list[dict]:
@@ -175,12 +138,12 @@ def to_sarif(results: list[GateResult], meta: dict | None = None) -> dict:
                 without_location += 1
             continue
         for f in r.findings:
-            rule_name = finding_rule(f) or r.name
+            rule_name = findings.rule(f) or r.name
             rule_id = _rule_id(r.name, rule_name)
             rule = rules.setdefault(rule_id, {"id": rule_id, "name": rule_name})
             sev = _finding_severity(f)
             level = _SEV_LEVEL.get(sev, gate_level)
-            locations = _location(finding_path(f), _finding_line(f), root)
+            locations = _location(findings.path(f), _finding_line(f), root)
             if not locations:
                 # Repo-level findings (no path) cannot be rendered as an alert
                 # against anything, and one of them invalidates the entire

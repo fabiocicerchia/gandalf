@@ -5,7 +5,10 @@
  * Gate findings are deliberately untyped on the gandalf side: every gate passes
  * through whatever its underlying tool emitted (ruff's `filename`/`location.row`,
  * semgrep's `path`/`start.line`, trivy's `PkgName`, a bare `{finding: "..."}`
- * line, …). `normalize()` in parse.ts is the single place that reconciles them.
+ * line, …). gandalf reconciles them itself — see `gandalf/findings.py` — and
+ * attaches the result to each finding under `_gandalf`, which is what
+ * `normalize()` in parse.ts reads. This file used to carry its own copy of
+ * those key lists, and it had drifted from the Python ones.
  */
 
 export type Outcome = 'pass' | 'warn' | 'fail';
