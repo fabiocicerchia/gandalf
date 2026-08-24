@@ -160,6 +160,36 @@ def test_language_detection():
     assert _classify(["README.md"]) == set()
 
 
+def test_repo_root_reports_git_failure_instead_of_raising(monkeypatch):
+    """Outside a repository, gandalf must say so — not dump a traceback."""
+    import subprocess
+
+    from gandalf import scope
+
+    def not_a_repo(args, cwd="."):
+        raise subprocess.CalledProcessError(
+            128, ["git", *args], stderr="fatal: not a git repository (or any parent)\n"
+        )
+
+    monkeypatch.setattr(scope, "_git", not_a_repo)
+    try:
+        scope.repo_root()
+        raise AssertionError("expected SystemExit")
+    except SystemExit as exc:
+        assert "not a git repository (or any parent)" in str(exc)
+        assert "fatal:" not in str(exc)
+
+    def no_git(args, cwd="."):
+        raise FileNotFoundError(2, "No such file or directory", "git")
+
+    monkeypatch.setattr(scope, "_git", no_git)
+    try:
+        scope.repo_root()
+        raise AssertionError("expected SystemExit")
+    except SystemExit as exc:
+        assert "git on PATH" in str(exc)
+
+
 def test_narrow_to_path(monkeypatch):
     from gandalf import scope
     from gandalf.scope import Scope, _narrow_to_path

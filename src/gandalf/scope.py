@@ -25,7 +25,22 @@ def _git(args: list[str], cwd: str = ".") -> str:
 
 
 def repo_root() -> str:
-    return _git(["rev-parse", "--show-toplevel"]).strip()
+    """The repository containing the current directory.
+
+    Everything else here assumes a repository, so this is where "there isn't
+    one" has to be caught. git exits 128 for several distinct reasons — no
+    repository, dubious ownership, an unreadable .git — and its stderr is the
+    only thing that tells them apart, so that is what gets reported instead of
+    a traceback out of subprocess.
+    """
+    try:
+        return _git(["rev-parse", "--show-toplevel"]).strip()
+    except FileNotFoundError:
+        raise SystemExit("gandalf needs git on PATH, and it is not there") from None
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or "").strip().splitlines()
+        reason = detail[0].removeprefix("fatal: ") if detail else "not a git repository"
+        raise SystemExit(f"gandalf needs a git repository: {reason}") from None
 
 
 # Map file extensions / marker filenames to a language tag. Gates tagged with a
