@@ -5,7 +5,9 @@ import { describeProgress, ScanProgress, shortProgress } from './progress';
 import { LastRun } from './store';
 
 export class StatusBar {
-  private readonly item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 40);
+  // Right, next to the other "state of the code" indicators (problems counts,
+  // language mode) rather than in the left group, which is git's.
+  private readonly item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
 
   constructor() {
     this.item.command = 'gandalf.showReport';
