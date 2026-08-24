@@ -39,6 +39,30 @@ def test_retryable_classification():
     assert llm._retryable(TimeoutError())
     assert not llm._retryable(urllib.error.HTTPError("u", 400, "m", {}, None))
     assert not llm._retryable(ValueError())
+    # An OSError subclass, so this only holds while it is checked first.
+    assert not llm._retryable(llm.LLMUnreachable("nothing listening"))
+
+
+def test_connect_check_fails_fast_on_a_dead_endpoint(monkeypatch):
+    """A port with nothing on it must cost the connect budget, not the
+    generation budget — and must not then be retried three more times."""
+    import time as _time
+
+    # Port 1 on loopback: refused immediately, so this asserts the fast path
+    # without waiting out CONNECT_TIMEOUT.
+    monkeypatch.setattr(llm, "LLM_URL", "http://127.0.0.1:1/v1")
+    monkeypatch.setattr(
+        llm.urllib.request,
+        "urlopen",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not be reached")),
+    )
+    t0 = _time.monotonic()
+    try:
+        llm.chat([{"role": "user", "content": "hi"}])
+        raise AssertionError("expected LLMUnreachable")
+    except llm.LLMUnreachable as exc:
+        assert "127.0.0.1:1" in str(exc)
+    assert _time.monotonic() - t0 < llm.CONNECT_TIMEOUT
 
 
 def _patch(monkeypatch, fn):
