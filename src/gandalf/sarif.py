@@ -64,6 +64,11 @@ _LEVEL_SCORE = {"error": "7.0", "warning": "4.0", "note": "1.0"}
 
 
 def _finding_severity(f: dict) -> str:
+    """The severity of a finding, whichever key the tool that produced it used.
+
+    Every scanner spells this differently, and gandalf normalises rather than
+    demanding they agree.
+    """
     for k in ("severity", "Severity", "issue_severity", "level", "Level"):
         v = f.get(k) if isinstance(f, dict) else None
         if v:
@@ -72,6 +77,11 @@ def _finding_severity(f: dict) -> str:
 
 
 def _finding_line(f: dict) -> int:
+    """The line a finding points at, or 0 when it points at nothing.
+
+    Same key-name spread as the severity, and 0 is meaningful here: SARIF wants
+    a region, and a finding without one is attached to the file instead.
+    """
     if not isinstance(f, dict):
         return 0
     for k in ("line", "line_number", "Line", "startLine"):
@@ -138,6 +148,13 @@ def _rule_id(gate: str, rule_name: str) -> str:
 
 
 def to_sarif(results: list[GateResult], meta: dict | None = None) -> dict:
+    """Render the results as a SARIF log.
+
+    SARIF is what GitHub code scanning ingests, so this is how findings become
+    annotations on a pull request instead of lines in a job log. Findings
+    without a resolvable location are counted rather than dropped — a total
+    that quietly omits some of them is not a total.
+    """
     meta = meta or {}
     root = meta.get("workdir", "")
     rules: dict[str, dict] = {}

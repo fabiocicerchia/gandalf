@@ -3,6 +3,16 @@
 Run [Gandalf](https://github.com/fabiocicerchia/gandalf)'s quality gates while
 you write the code, instead of finding out in CI.
 
+Gandalf is not another linter — it is an aggregator. One scan runs ~50 gates
+over your repository (`ruff`, `mypy`, `bandit`, `semgrep`, `gitleaks`, `trivy`,
+`checkov`, `kics`, `codeql`, `osv`, `eslint`, `tsc`, `clippy`, `govulncheck`,
+`shellcheck`, `hadolint`, the test and build runners, and a set of LLM judges)
+and folds what every one of them said into a single picture: one severity
+ladder, one findings pane, one Red/Amber/Green scorecard. Each tool keeps its
+own output format, its own severity words and its own idea of a rule id;
+gandalf normalizes all of it, so the extension shows you one board to read
+instead of a dozen terminals to reconcile.
+
 <!-- Absolute, not relative: vsce rewrites a relative README link to
      <repo>/raw/HEAD/<path>, dropping the `repository.directory` prefix — so
      `media/…` resolves to the repository root and renders broken on the
@@ -33,18 +43,22 @@ you write the code, instead of finding out in CI.
 
 ## Install
 
-Search **Gandalf** in the Extensions view, or:
+From the Marketplace: open the **Extensions** view, search for *Gandalf —
+Quality Gates*, press **Install**. Or, from a terminal:
 
 ```sh
 code --install-extension fabiocicerchia.gandalf-quality-gates
 ```
 
-It is on both registries — the
-[VS Marketplace](https://marketplace.visualstudio.com/items?itemName=fabiocicerchia.gandalf-quality-gates)
-for VS Code, and
-[Open VSX](https://open-vsx.org/extension/fabiocicerchia/gandalf-quality-gates)
-for the forks (`cursor`, `windsurf`, `codium` — same command, their CLI).
-A **Gandalf** tab appears in the bottom panel alongside Problems and Terminal.
+- [**VS Marketplace**](https://marketplace.visualstudio.com/items?itemName=fabiocicerchia.gandalf-quality-gates)
+  — VS Code and VS Code Insiders.
+- [**Open VSX**](https://open-vsx.org/extension/fabiocicerchia/gandalf-quality-gates)
+  — Cursor, Windsurf, VSCodium and the other forks, which don't reach the VS
+  Marketplace. Same extension, published by the same release.
+
+Then reload the window (**Developer: Reload Window**) — a **Gandalf** tab
+appears in the bottom panel alongside Problems and Terminal. Gandalf itself is a
+separate thing and has to be reachable; see [Requirements](#requirements).
 
 ### From source
 

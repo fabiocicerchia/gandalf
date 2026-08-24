@@ -49,6 +49,11 @@ def _brand() -> tuple[str, str]:
 
 
 def _comment_body(gate: str, f: dict) -> str:
+    """Render one finding as an inline review comment.
+
+    Every body opens with the marker, which is how a later run recognises its
+    own comments and updates them instead of posting the same finding twice.
+    """
     rule = finding_rule(f)
     tag = f"`{gate}`" + (f" · `{rule}`" if rule else "")
     return f"{_MARKER}\n**{_brand()[1]}** {tag}\n\n{fmt_finding(f)}"
@@ -145,6 +150,12 @@ def review_payload(
     diff: str = "",
     workdir: str = "",
 ) -> dict:
+    """Build the whole review: inline comments plus one summary body.
+
+    Findings that cannot be anchored to a line in the diff go into the summary
+    rather than being dropped, and the count is capped so a bad run comments a
+    pull request rather than burying it.
+    """
     comments, overflow = build(results, changed_files, diff, workdir)
     word = {
         GateOutcome.PASS: "GREEN",
@@ -189,6 +200,11 @@ def _ours(body: str | None) -> bool:
 def _api(
     method: str, url: str, token: str, data: dict | None = None, timeout: int = 30
 ) -> tuple[int, str]:
+    """One GitHub REST call, returning the status and the raw body.
+
+    The status is handed back rather than raised on: several callers treat a
+    404 or a 422 as an ordinary answer.
+    """
     req = urllib.request.Request(
         url,
         data=None if data is None else json.dumps(data).encode(),
@@ -205,6 +221,11 @@ def _api(
 
 
 def _list_all(url: str, token: str, timeout: int) -> list[dict]:
+    """Page through a GitHub list endpoint and return everything it gave.
+
+    Bounded — see the note below — because an unbounded paginator on a runaway
+    thread is how a review job stops finishing.
+    """
     # ponytail: stops at 1000 comments; paginate properly if a PR ever gets there.
     out: list[dict] = []
     for page in range(1, 11):
@@ -245,6 +266,11 @@ _RESOLVE = "mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{i
 
 
 def _graphql(query: str, variables: dict, token: str, timeout: int) -> dict:
+    """One GitHub GraphQL call.
+
+    Only for what REST cannot answer — resolving review threads, which has no
+    REST equivalent.
+    """
     _, raw = _api(
         "POST",
         "https://api.github.com/graphql",
