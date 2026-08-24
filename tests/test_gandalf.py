@@ -359,6 +359,71 @@ def test_skill_gate_warns_with_nothing_in_scope(monkeypatch):
     assert res.outcome is GateOutcome.WARN
 
 
+def test_communicate_kills_the_child_on_timeout():
+    """A timed-out gate must not leave its tool running.
+
+    asyncio.wait_for cancels the await, not the process — so this asserts on the
+    process being dead afterwards, which is the part that regressed, rather than
+    on the None return, which would pass even with the leak.
+    """
+    import sys
+
+    from gandalf.plugins import communicate
+
+    async def go():
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-c",
+            "import time; time.sleep(300)",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        assert await communicate(proc, 0.2) is None
+        return proc
+
+    proc = asyncio.run(go())
+    assert proc.returncode is not None, "child survived the timeout"
+
+
+def test_reap_kills_the_container_not_just_the_docker_client(monkeypatch):
+    """A timed-out image-backed tool (semgrep, trivy…) must have its container
+    stopped: killing `docker run` kills the client and leaves the tool running."""
+    from gandalf import plugins
+
+    monkeypatch.setattr(plugins, "_via_image", lambda b: b == "semgrep")
+    monkeypatch.setattr(plugins.shutil, "which", lambda b: None)
+    cmd = plugins._dockerize(["semgrep", "scan"], "/repo", "gandalf-1-0")
+    assert cmd[:2] == ["docker", "run"]
+    assert "--name" in cmd and cmd[cmd.index("--name") + 1] == "gandalf-1-0"
+
+    killed = []
+
+    class FakeProc:
+        returncode = -9
+
+        def kill(self):
+            pass
+
+        async def wait(self):
+            return -9
+
+        async def communicate(self):
+            return b"", b""
+
+    async def fake_exec(*argv, **kw):
+        killed.append(list(argv))
+        return FakeProc()
+
+    monkeypatch.setattr(plugins.asyncio, "create_subprocess_exec", fake_exec)
+    asyncio.run(plugins._reap(FakeProc(), cmd, "gandalf-1-0"))
+    assert killed == [["docker", "kill", "gandalf-1-0"]]
+
+    # A host-binary run has no container, so no docker call at all.
+    killed.clear()
+    asyncio.run(plugins._reap(FakeProc(), ["semgrep", "scan"], "gandalf-1-0"))
+    assert killed == []
+
+
 def test_atheris_gate_ignores_its_own_artifact_prefix_flag(monkeypatch, tmp_path):
     """A clean run must PASS even though the harness is invoked with
     -artifact_prefix=/tmp/atheris-crash-, which libFuzzer echoes back in its

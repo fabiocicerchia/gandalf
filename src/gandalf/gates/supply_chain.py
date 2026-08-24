@@ -14,6 +14,7 @@ from pathlib import Path
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.plugins import (
     _TIMEOUT_RC,
+    communicate,
     ignore_patterns,
     missing_result,
     run_tool,
@@ -309,18 +310,18 @@ class TestsGate:
             return GateResult(
                 self.name, GateOutcome.WARN, 0.8, "tests: no pytest found — skipped"
             )
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                *runner,
-                cwd=ctx.workdir,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
-            )
-            out_b, _ = await asyncio.wait_for(proc.communicate(), timeout=120)
-        except asyncio.TimeoutError:
+        proc = await asyncio.create_subprocess_exec(
+            *runner,
+            cwd=ctx.workdir,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        streams = await communicate(proc, 120)
+        if streams is None:
             return GateResult(
                 self.name, GateOutcome.FAIL, 0.0, "tests: timed out after 120s"
             )
+        out_b, _ = streams
         out = out_b.decode(errors="replace") if out_b else ""
         tail = "\n".join(out.strip().splitlines()[-5:])
         if proc.returncode == 0:

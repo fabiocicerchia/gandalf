@@ -10,10 +10,12 @@ from __future__ import annotations
 import asyncio
 import re
 import shutil
+import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
 from gandalf.base import GateContext, GateOutcome, GateResult
+from gandalf.plugins import communicate
 
 _DEFAULT_FUZZ_TIME = 60
 _DAST_TIMEOUT = 300
@@ -27,21 +29,21 @@ def _is_local(url: str) -> bool:
 async def _run(
     cmd: list[str], cwd: str, timeout: int = _DAST_TIMEOUT
 ) -> tuple[int, str, str]:
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            cwd=cwd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        out, err = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-        return (
-            proc.returncode if proc.returncode is not None else -1,
-            out.decode(errors="replace"),
-            err.decode(errors="replace"),
-        )
-    except asyncio.TimeoutError:
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        cwd=cwd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    streams = await communicate(proc, timeout)
+    if streams is None:
         return -1, "", f"timed out after {timeout}s"
+    out, err = streams
+    return (
+        proc.returncode if proc.returncode is not None else -1,
+        out.decode(errors="replace"),
+        err.decode(errors="replace"),
+    )
 
 
 def _guard(ctx: GateContext, name: str):
@@ -72,16 +74,11 @@ async def _atheris_installed(workdir: str) -> bool:
     installed on the machine running the suite. Inline, the probe made those
     tests pass only on a developer box that happened to have atheris.
     """
-    check = await asyncio.create_subprocess_exec(
-        "python",
-        "-c",
-        "import atheris",
-        stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.DEVNULL,
-        cwd=workdir,
-    )
-    await check.communicate()
-    return check.returncode == 0
+    # sys.executable, not "python": that name does not exist on a stock Ubuntu
+    # (only python3), and the probe has to use the same interpreter that will
+    # then run the harness — otherwise it answers about the wrong one.
+    rc, _, _ = await _run([sys.executable, "-c", "import atheris"], workdir, timeout=30)
+    return rc == 0
 
 
 class AtherisGate:
@@ -110,7 +107,7 @@ class AtherisGate:
         fuzz_time = int((ctx.meta or {}).get("fuzz_time", _DEFAULT_FUZZ_TIME))
         rc, out, err = await _run(
             [
-                "python",
+                sys.executable,
                 str(harness),
                 f"-max_total_time={fuzz_time}",
                 "-artifact_prefix=/tmp/atheris-crash-",
