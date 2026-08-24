@@ -18,6 +18,12 @@ _COLOR = {
 
 
 def to_badge(verdict: Verdict, label: str = "gandalf") -> dict:
+    """Render a verdict as the endpoint JSON shields.io draws from.
+
+    Score in the message, RAG outcome in the colour — the badge has to be
+    readable at a glance and precise on hover, and one number plus one colour
+    is the most either can carry.
+    """
     return {
         "schemaVersion": 1,
         "label": label,

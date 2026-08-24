@@ -71,6 +71,11 @@ IMAGE_TOOLS = frozenset(
 
 @lru_cache(maxsize=1)
 def _tools_image_available() -> bool:
+    """Whether the scanner-tools image is built and present locally.
+
+    Checked, never pulled: a quality gate must not reach the network on its own
+    initiative, and `make tools` is the explicit step that builds it.
+    """
     if not shutil.which("docker"):
         return False
     r = subprocess.run(  # nosec B603 B607 - fixed docker argv, no shell
@@ -80,6 +85,7 @@ def _tools_image_available() -> bool:
 
 
 def _via_image(binary: str) -> bool:
+    """Whether a tool would run out of the image rather than off the host PATH."""
     return binary in IMAGE_TOOLS and _tools_image_available()
 
 
@@ -346,6 +352,11 @@ def missing_result(
 
 
 def _gate_dirs() -> list[Path]:
+    """Every directory gates are discovered from.
+
+    The built-in directory first, then anything on GANDALF_GATES_PATH — which
+    is how a project adds its own gate without vendoring gandalf.
+    """
     dirs = [Path(__file__).parent / "gates"]
     for extra in filter(
         None, os.environ.get("GANDALF_GATES_PATH", "").split(os.pathsep)
@@ -355,6 +366,11 @@ def _gate_dirs() -> list[Path]:
 
 
 def _load_module(path: Path):
+    """Import one gate file by path, under a namespaced module name.
+
+    Namespaced so two gate directories can hold files with the same basename
+    without the second silently shadowing the first.
+    """
     spec = importlib.util.spec_from_file_location(f"gandalf_gate_{path.stem}", path)
     if spec is None or spec.loader is None:
         raise ImportError(f"cannot load gate module from {path}")

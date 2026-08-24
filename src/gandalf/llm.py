@@ -31,6 +31,12 @@ _RETRY_STATUS = frozenset({429, 500, 502, 503, 504})
 
 
 def _retryable(exc: Exception) -> bool:
+    """Whether a request failure is worth retrying.
+
+    Transport failures and the transient status codes only. A 4xx that is not
+    in that set is a bad request, and retrying it just spends the same tokens
+    on the same rejection.
+    """
     if isinstance(exc, urllib.error.HTTPError):  # subclass of URLError — check first
         return exc.code in _RETRY_STATUS
     return isinstance(exc, (urllib.error.URLError, TimeoutError, OSError))
@@ -55,6 +61,11 @@ def _request_with_retry(req: urllib.request.Request, timeout: int) -> dict:
 
 
 def _context(workdir: str, label: str, diff: str) -> str:
+    """Build the repo context sent alongside the findings.
+
+    Truncated hard: the summary is worth what the model can attend to, and a
+    whole README plus a whole diff is mostly tokens spent on neither.
+    """
     root = Path(workdir)
     readme = ""
     for name in ("README.md", "README", "readme.md"):
@@ -238,5 +249,11 @@ _STUB = re.compile(
 
 
 def _has_fix(body: str) -> bool:
+    """Whether a generated suggestion actually says anything.
+
+    A short body matching the stub patterns is the model declining politely.
+    Posting that on a pull request is worse than posting nothing, so it is
+    filtered here rather than left to the reader.
+    """
     b = body.strip()
     return bool(b) and not (len(b) < 160 and _STUB.search(b))
