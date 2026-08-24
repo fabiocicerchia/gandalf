@@ -8,3 +8,8 @@ tsconfig.json
 **/*.map
 **/*.ts
 .gitignore
+# README screenshots. They are referenced by absolute raw.githubusercontent URL
+# (vsce mangles relative ones from a monorepo subdirectory), so the Marketplace
+# fetches them from GitHub — shipping a second copy would quadruple the .vsix
+# for bytes nothing reads.
+media/screenshots/**
