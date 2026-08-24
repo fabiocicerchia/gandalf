@@ -16,7 +16,7 @@ import * as vscode from 'vscode';
 
 import { Settings } from './config';
 import { log } from './log';
-import { findOnPath, GandalfNotFoundError, probe, resolveLauncher } from './runner';
+import { findOnPath, GandalfNotFoundError, probe, promptInstall, resolveLauncher } from './runner';
 
 /** Same default gandalf uses, overridable the same way. */
 const toolsImage = (): string => process.env.GANDALF_TOOLS_IMAGE || 'gandalf-tools';
@@ -44,11 +44,13 @@ export async function runDoctor(folder: vscode.WorkspaceFolder, s: Settings): Pr
   const image = toolsImage();
   const checks: Check[] = [];
 
+  let missing: GandalfNotFoundError | undefined;
   try {
     const launcher = await resolveLauncher(folder, s);
     const ran = await probe(launcher.command, [...launcher.args, '--help'], folder.uri.fsPath);
     checks.push({ ok: ran.ok, text: `gandalf: ${launcher.label}` });
   } catch (err) {
+    if (err instanceof GandalfNotFoundError) missing = err;
     checks.push({ ok: false, text: `gandalf: ${err instanceof Error ? err.message : String(err)}` });
   }
 
@@ -82,16 +84,32 @@ export async function runDoctor(folder: vscode.WorkspaceFolder, s: Settings): Pr
 
   out.info('— Gandalf environment —\n' + checks.map((c) => `  ${c.ok ? '✔' : '✖'} ${c.text}`).join('\n'));
 
+  // Nothing else on the list matters if gandalf itself is absent — offer the
+  // command that fixes that instead of a summary of everything it can't reach.
+  if (missing) return promptInstall(missing.message);
+
   const failed = checks.filter((c) => !c.ok);
   const headline = failed.length
     ? failed.map((c) => c.text.split(':')[0]).join(', ') + ' — see the log'
     : 'Everything gandalf needs is available.';
-  const actions = ['Show log'];
+  // Something to *do* about each missing dependency, most actionable first —
+  // "see the log" is not an answer to "docker is not installed". git and docker
+  // have no one command that is right on every platform, so those open the
+  // official instructions rather than guessing at a package manager.
+  const actions: string[] = [];
   if (docker && !hasImage) actions.push('Build tools image');
+  if (!git) actions.push('Install git');
+  if (!docker) actions.push('Install docker');
+  actions.push('Show log');
+
   const choice = await (failed.length
     ? vscode.window.showWarningMessage(`Gandalf: ${headline}`, ...actions)
     : vscode.window.showInformationMessage(`Gandalf: ${headline}`, ...actions));
   if (choice === 'Build tools image') await vscode.commands.executeCommand('gandalf.buildToolsImage');
+  if (choice === 'Install git') await vscode.env.openExternal(vscode.Uri.parse('https://git-scm.com/downloads'));
+  if (choice === 'Install docker') {
+    await vscode.env.openExternal(vscode.Uri.parse('https://docs.docker.com/get-started/get-docker/'));
+  }
   if (choice === 'Show log') out.show(true);
 }
 
@@ -106,7 +124,7 @@ export async function buildToolsImage(folder: vscode.WorkspaceFolder, s: Setting
     checkout = (await resolveLauncher(folder, s)).checkout;
   } catch (err) {
     if (err instanceof GandalfNotFoundError) {
-      void vscode.window.showErrorMessage(err.message);
+      void promptInstall(err.message);
       return;
     }
     throw err;
