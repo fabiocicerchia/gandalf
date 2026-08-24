@@ -353,7 +353,19 @@ def _write_outputs(
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(prog="gandalf", description=__doc__)
+    """The CLI surface, in one place.
+
+    Kept separate from main() so the flag table can be read — and tested —
+    without running anything.
+    """
+    # RawDescriptionHelpFormatter, like the sibling CLIs: the module docstring
+    # is a worked list of invocations, and reflowing it runs four commands
+    # together into one paragraph.
+    ap = argparse.ArgumentParser(
+        prog="gandalf",
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     grp = ap.add_mutually_exclusive_group()
     grp.add_argument("--commit", metavar="SHA", help="evaluate a specific commit")
     grp.add_argument(
@@ -509,6 +521,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run gandalf and return the process exit status.
+
+    Returns rather than exits, so the same entry point serves the console
+    script, `python -m gandalf` and the tests.
+    """
     args = _build_parser().parse_args(argv)
 
     if args.debug:

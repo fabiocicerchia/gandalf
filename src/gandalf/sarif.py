@@ -111,6 +111,13 @@ def _rule_id(gate: str, rule_name: str) -> str:
 
 
 def to_sarif(results: list[GateResult], meta: dict | None = None) -> dict:
+    """Render the results as a SARIF log.
+
+    SARIF is what GitHub code scanning ingests, so this is how findings become
+    annotations on a pull request instead of lines in a job log. Findings
+    without a resolvable location are counted rather than dropped — a total
+    that quietly omits some of them is not a total.
+    """
     meta = meta or {}
     root = meta.get("workdir", "")
     rules: dict[str, dict] = {}

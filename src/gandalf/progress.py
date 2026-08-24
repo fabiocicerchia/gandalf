@@ -15,6 +15,13 @@ from . import debug
 
 
 class Progress:
+    """A single stderr line that updates in place through a run.
+
+    Silent unless stderr is a TTY, so piped and CI output is not littered with
+    carriage returns, and silent under --debug, whose multi-line output would
+    collide with it.
+    """
+
     def __init__(self, total: int):
         self.total = total
         self.i = 0
