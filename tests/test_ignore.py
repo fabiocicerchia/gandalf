@@ -166,3 +166,19 @@ def test_path_scope_refuses_to_widen_when_everything_under_it_is_excluded(
     plugins.set_extra_ignores([])
     with scope.resolve(None, False, "generated") as sc:
         assert sc.changed_files == ["generated/api.py"]
+
+
+def test_languages_reads_the_same_tracked_listing_every_gate_does(tmp_path):
+    """`languages()` used to run its own `git ls-files` and split on whitespace.
+
+    Plain `ls-files` quotes any path git considers unusual (core.quotePath is on
+    by default), so a non-ASCII filename came back as `"src/caf\\303\\251.py"` —
+    basename `.py"`, no language matched, and every python gate was skipped.
+    plugins.tracked_files asks with `-z`, which quotes nothing, and is already
+    cached from the run every gate is about to make.
+    """
+    repo = _repo(tmp_path, ["src/café.py"])
+    plugins.set_extra_ignores([])
+    plugins.tracked_files.cache_clear()
+
+    assert scope.languages(str(repo), []) == {"python"}

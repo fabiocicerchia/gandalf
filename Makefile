@@ -59,6 +59,15 @@ lint: ## Run all pre-commit checks on the whole tree
 test: ## Run the test suite
 	pytest
 
+# Not part of `make test` on purpose: a wall-clock assertion on a shared runner
+# is either too loose to catch anything or too tight to survive a noisy
+# neighbour. The invariants that hold on any machine — how many times a listing
+# is read, how many writes cross to the renderer — are asserted in the test
+# suite; this is the other half, and it wants your machine, quiet.
+.PHONY: bench
+bench: ## Measure the hot paths and redraw the docs chart
+	python3 scripts/bench.py --svg docs/assets/performance.svg
+
 ##@ VS Code extension
 
 # The same four extension verbs, with the same meanings, in gandalf, greenlint

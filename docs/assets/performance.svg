@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="556" viewBox="0 0 900 556" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" role="img" aria-label="Gandalf in-process hot paths, before and after">
+  <style>
+    svg {
+    --surface: #fcfcfb;
+    --primary: #0b0b0b;
+    --secondary: #52514e;
+    --muted: #8a8984;
+    --grid: #e6e5e1;
+    --after: #2a78d6;
+    --before: #eb6834;
+      background: var(--surface);
+    }
+    @media (prefers-color-scheme: dark) {
+      svg {
+      --surface: #1a1a19;
+      --primary: #ffffff;
+      --secondary: #c3c2b7;
+      --muted: #8a8984;
+      --grid: #33322f;
+      --after: #3987e5;
+      --before: #d95926;
+      }
+    }
+    .chart-title { font-size: 15px; font-weight: 600; fill: var(--primary); }
+    .chart-sub   { font-size: 11.5px; fill: var(--secondary); }
+    .panel-title { font-size: 12px; font-weight: 600; fill: var(--primary); }
+    .unit        { font-weight: 400; fill: var(--muted); }
+    .label       { font-size: 11.5px; fill: var(--secondary); }
+    .value       { font-size: 11px; fill: var(--secondary); font-variant-numeric: tabular-nums; }
+    .delta       { font-size: 11px; font-weight: 600; fill: var(--primary); }
+    .tick        { font-size: 10px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+    .grid        { stroke: var(--grid); stroke-width: 1; }
+    .bar.after   { fill: var(--after); }
+    .bar.before  { fill: var(--before); }
+    .legend      { font-size: 11.5px; fill: var(--secondary); }
+  </style>
+  <rect width="900" height="556" fill="var(--surface)"/>
+  <text x="0" y="18" class="chart-title">Where a scan's in-process time and memory go</text>
+  <text x="0" y="36" class="chart-sub">20k findings across 40 gates — the work gandalf and the extension do themselves, excluding the gate subprocesses that dominate a real scan.</text>
+  <rect x="0" y="50" width="11" height="11" rx="3" class="bar before"/>
+  <text x="17" y="60" class="legend">previous implementation</text>
+  <rect x="176" y="50" width="11" height="11" rx="3" class="bar after"/>
+  <text x="193" y="60" class="legend">as it ships now</text>
+  <text x="0" y="86" class="panel-title">Time<tspan class="unit" dx="8">milliseconds, fastest of N runs — lower is better</tspan></text>
+  <line x1="268.0" y1="102" x2="268.0" y2="329" class="grid"/>
+  <text x="268.0" y="343" class="tick" text-anchor="middle">0</text>
+  <line x1="402.0" y1="102" x2="402.0" y2="329" class="grid"/>
+  <text x="402.0" y="343" class="tick" text-anchor="middle">150</text>
+  <line x1="536.0" y1="102" x2="536.0" y2="329" class="grid"/>
+  <text x="536.0" y="343" class="tick" text-anchor="middle">300</text>
+  <line x1="670.0" y1="102" x2="670.0" y2="329" class="grid"/>
+  <text x="670.0" y="343" class="tick" text-anchor="middle">450</text>
+  <line x1="804.0" y1="102" x2="804.0" y2="329" class="grid"/>
+  <text x="804.0" y="343" class="tick" text-anchor="middle">600</text>
+  <text x="256" y="117.5" class="label" text-anchor="end">Rebuild the board, 40 streamed gates</text>
+  <rect x="268" y="106" width="507.9" height="15" rx="4" class="bar after"><title>Rebuild the board, 40 streamed gates — after 569 milliseconds, fastest of N runs — lower is better</title></rect>
+  <text x="783.9" y="118" class="value">569</text>
+  <text x="256" y="145.5" class="label" text-anchor="end">Reconcile 20k findings</text>
+  <rect x="268" y="134" width="120.1" height="15" rx="4" class="bar after"><title>Reconcile 20k findings — after 134 milliseconds, fastest of N runs — lower is better</title></rect>
+  <text x="396.1" y="146" class="value">134</text>
+  <text x="256" y="182.0" class="label" text-anchor="end">Cache key, 2k files + a 32 MiB blob</text>
+  <rect x="268" y="162" width="96.5" height="15" rx="4" class="bar before"><title>Cache key, 2k files + a 32 MiB blob — before 108 milliseconds, fastest of N runs — lower is better</title></rect>
+  <text x="372.5" y="174" class="value">108</text>
+  <rect x="268" y="179" width="90.5" height="15" rx="4" class="bar after"><title>Cache key, 2k files + a 32 MiB blob — after 101 milliseconds, fastest of N runs — lower is better</title></rect>
+  <text x="366.5" y="191" class="value">101</text>
+  <text x="256" y="218.5" class="label" text-anchor="end">Exclusion filter, 25k paths</text>
+  <rect x="268" y="207" width="75.2" height="15" rx="4" class="bar after"><title>Exclusion filter, 25k paths — after 84.2 milliseconds, fastest of N runs — lower is better</title></rect>
+  <text x="351.2" y="219" class="value">84.2</text>
+  <text x="256" y="246.5" class="label" text-anchor="end">Normalize 20k findings</text>
+  <rect x="268" y="235" width="61.7" height="15" rx="4" class="bar after"><title>Normalize 20k findings — after 69.1 milliseconds, fastest of N runs — lower is better</title></rect>
+  <text x="337.7" y="247" class="value">69.1</text>
+  <text x="256" y="274.5" class="label" text-anchor="end">Sort 20k findings</text>
+  <rect x="268" y="263" width="1.5" height="15" rx="4" class="bar after"><title>Sort 20k findings — after 1.63 milliseconds, fastest of N runs — lower is better</title></rect>
+  <text x="277.5" y="275" class="value">1.63</text>
+  <text x="256" y="311.0" class="label" text-anchor="end">Detect languages, 400-file tree</text>
+  <rect x="268" y="291" width="1.5" height="15" rx="4" class="bar before"><title>Detect languages, 400-file tree — before 1.68 milliseconds, fastest of N runs — lower is better</title></rect>
+  <text x="277.5" y="303" class="value">1.68</text>
+  <rect x="268" y="308" width="1.0" height="15" rx="4" class="bar after"><title>Detect languages, 400-file tree — after 0.23 milliseconds, fastest of N runs — lower is better</title></rect>
+  <text x="277.0" y="320" class="value">0.23</text>
+  <text x="898" y="311.0" class="delta" text-anchor="end">7.4x</text>
+  <text x="0" y="387" class="panel-title">Peak memory<tspan class="unit" dx="8">mebibytes held at once — lower is better</tspan></text>
+  <line x1="268.0" y1="403" x2="268.0" y2="490" class="grid"/>
+  <text x="268.0" y="504" class="tick" text-anchor="middle">0</text>
+  <line x1="402.0" y1="403" x2="402.0" y2="490" class="grid"/>
+  <text x="402.0" y="504" class="tick" text-anchor="middle">10.0</text>
+  <line x1="536.0" y1="403" x2="536.0" y2="490" class="grid"/>
+  <text x="536.0" y="504" class="tick" text-anchor="middle">20.0</text>
+  <line x1="670.0" y1="403" x2="670.0" y2="490" class="grid"/>
+  <text x="670.0" y="504" class="tick" text-anchor="middle">30.0</text>
+  <line x1="804.0" y1="403" x2="804.0" y2="490" class="grid"/>
+  <text x="804.0" y="504" class="tick" text-anchor="middle">40.0</text>
+  <text x="256" y="427.0" class="label" text-anchor="end">Cache key, peak heap</text>
+  <rect x="268" y="407" width="429.1" height="15" rx="4" class="bar before"><title>Cache key, peak heap — before 32.0 mebibytes held at once — lower is better</title></rect>
+  <text x="705.1" y="419" class="value">32.0</text>
+  <rect x="268" y="424" width="3.6" height="15" rx="4" class="bar after"><title>Cache key, peak heap — after 0.27 mebibytes held at once — lower is better</title></rect>
+  <text x="279.6" y="436" class="value">0.27</text>
+  <text x="898" y="427.0" class="delta" text-anchor="end">118.4x</text>
+  <text x="256" y="472.0" class="label" text-anchor="end">Write JSON report, 20k findings</text>
+  <rect x="268" y="452" width="113.5" height="15" rx="4" class="bar before"><title>Write JSON report, 20k findings — before 8.47 mebibytes held at once — lower is better</title></rect>
+  <text x="389.5" y="464" class="value">8.47</text>
+  <rect x="268" y="469" width="1.0" height="15" rx="4" class="bar after"><title>Write JSON report, 20k findings — after 0.05 mebibytes held at once — lower is better</title></rect>
+  <text x="277.0" y="481" class="value">0.05</text>
+  <text x="898" y="472.0" class="delta" text-anchor="end">166.5x</text>
+</svg>

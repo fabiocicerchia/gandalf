@@ -111,8 +111,13 @@ def languages(workdir: str, changed_files: list[str]) -> set[str]:
     untracked vendored llama.cpp doesn't count)."""
     if changed_files:
         return _classify(changed_files)
-    tracked = _git(["ls-files"], workdir).split()
-    return _classify(tracked)
+    # plugins.tracked_files, not a second `git ls-files`: it is the same listing,
+    # already cached per workdir (every gate asks for it moments later), and it
+    # splits on NUL — `.split()` broke any tracked path containing a space into
+    # two bogus filenames.
+    from .plugins import tracked_files  # local: avoids a cycle
+
+    return _classify(list(tracked_files(workdir)))
 
 
 def commit_info(ref: str, workdir: str = ".") -> dict:
