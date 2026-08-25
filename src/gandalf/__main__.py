@@ -300,9 +300,13 @@ def _write_outputs(
     args, out_dir, stem, sc, results, verdict, advice, meta_line, payload
 ) -> None:
     """Write JSON (always) + optional HTML / SARIF / PR-comment artifacts."""
-    # Always emit a JSON file for CI to parse.
+    # Always emit a JSON file for CI to parse. Dumped straight to the file
+    # rather than through a string: the payload carries every finding, and
+    # `write_text(dumps(...))` holds the whole rendered document in memory
+    # alongside the object it was rendered from.
     json_path = out_dir / f"{stem}.json"
-    json_path.write_text(json.dumps(payload, indent=2, default=str))
+    with json_path.open("w", encoding="utf-8") as fh:
+        json.dump(payload, fh, indent=2, default=str)
     print(f"\nJSON report: {json_path}")
 
     if not args.no_html:
@@ -314,9 +318,8 @@ def _write_outputs(
 
     if args.sarif is not None:
         sarif_path = Path(args.sarif) if args.sarif else out_dir / f"{stem}.sarif"
-        sarif_path.write_text(
-            json.dumps(sarif.to_sarif(results, meta_line), indent=2, default=str)
-        )
+        with sarif_path.open("w", encoding="utf-8") as fh:
+            json.dump(sarif.to_sarif(results, meta_line), fh, indent=2, default=str)
         print(f"SARIF report: {sarif_path}")
 
     if args.junit is not None:
@@ -349,11 +352,24 @@ def _write_outputs(
             print(f"PR #{args.pr}: {msg}")
 
     if args.json:
-        print(json.dumps(payload, indent=2, default=str))
+        json.dump(payload, sys.stdout, indent=2, default=str)
+        print()
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(prog="gandalf", description=__doc__)
+    """The CLI surface, in one place.
+
+    Kept separate from main() so the flag table can be read — and tested —
+    without running anything.
+    """
+    # RawDescriptionHelpFormatter, like the sibling CLIs: the module docstring
+    # is a worked list of invocations, and reflowing it runs four commands
+    # together into one paragraph.
+    ap = argparse.ArgumentParser(
+        prog="gandalf",
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     grp = ap.add_mutually_exclusive_group()
     grp.add_argument("--commit", metavar="SHA", help="evaluate a specific commit")
     grp.add_argument(
@@ -509,6 +525,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run gandalf and return the process exit status.
+
+    Returns rather than exits, so the same entry point serves the console
+    script, `python -m gandalf` and the tests.
+    """
     args = _build_parser().parse_args(argv)
 
     if args.debug:

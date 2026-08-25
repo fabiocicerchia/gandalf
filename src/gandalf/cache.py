@@ -42,18 +42,33 @@ def target_files(workdir: str, changed_files: list[str]) -> list[str]:
 
 
 def content_hash(workdir: str, files: list[str]) -> str:
+    """One hash over the scope's file names and contents.
+
+    Names are hashed as well as bytes, so a rename invalidates the entry even
+    when nothing inside the files changed — a gate that reads paths would
+    otherwise return a stale answer. An unreadable file hashes as a fixed
+    marker rather than raising: a cache key is not the place to fail a run.
+    """
     h = hashlib.sha256()
     root = Path(workdir)
     for f in sorted(files):
         h.update(f.encode())
         try:
-            h.update(hashlib.sha256((root / f).read_bytes()).digest())
+            # file_digest reads in fixed-size blocks; `read_bytes()` pulled every
+            # file into memory whole, and this walks the entire tracked tree.
+            with (root / f).open("rb") as fh:
+                h.update(hashlib.file_digest(fh, "sha256").digest())
         except OSError:
             h.update(b"?")
     return h.hexdigest()
 
 
 def load(path: str) -> dict:
+    """Read the cache file, or an empty cache.
+
+    A missing, unreadable or corrupt file is not an error — the worst it can
+    cost is a full re-run, which is exactly what happens.
+    """
     p = Path(path)
     if not p.is_file():
         return {}
@@ -64,10 +79,18 @@ def load(path: str) -> dict:
 
 
 def save(path: str, data: dict) -> None:
-    Path(path).write_text(json.dumps(data, indent=2, default=str))
+    """Write the cache back, pretty-printed so a diff on it is readable."""
+    with Path(path).open("w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2, default=str)
 
 
 def get(cache: dict, gate_name: str, file_hash: str) -> GateResult | None:
+    """The cached result for a gate, if it was recorded against this hash.
+
+    An entry that no longer deserialises is treated as a miss rather than an
+    error: the shape of GateResult can change between versions, and an old
+    cache must not stop a run.
+    """
     entry = cache.get(gate_name)
     if not entry or entry.get("hash") != file_hash:
         return None
@@ -85,4 +108,5 @@ def get(cache: dict, gate_name: str, file_hash: str) -> GateResult | None:
 
 
 def put(cache: dict, gate_name: str, file_hash: str, result: GateResult) -> None:
+    """Record a gate's result against the hash of the files it saw."""
     cache[gate_name] = {"hash": file_hash, "result": asdict(result)}

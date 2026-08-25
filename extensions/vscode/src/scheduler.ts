@@ -46,6 +46,12 @@ export function jobLabel(job: Job): string {
 /** Remembers what a file looked like when it was last scanned. */
 export class ContentGuard {
   private hashes = new Map<string, string>();
+  /**
+   * The map only ever grew — one entry per file ever saved, for the life of the
+   * window. ponytail: flush wholesale at the cap rather than track an LRU; the
+   * cost of a miss is one rescan of a file the user just saved.
+   */
+  private static readonly MAX_ENTRIES = 4096;
 
   private async hash(absPath: string): Promise<string> {
     const buf = await fs.promises.readFile(absPath);
@@ -69,7 +75,14 @@ export class ContentGuard {
 
   /** Remember what a run actually scanned, once it has succeeded. */
   commit(absPath: string, hash: string): void {
-    if (hash) this.hashes.set(absPath, hash);
+    if (!hash) return;
+    if (this.hashes.size >= ContentGuard.MAX_ENTRIES) this.hashes.clear();
+    this.hashes.set(absPath, hash);
+  }
+
+  /** How many files are remembered — the bound is what the test pins. */
+  get size(): number {
+    return this.hashes.size;
   }
 
   forget(): void {

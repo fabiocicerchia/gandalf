@@ -1,0 +1,31 @@
+# Buildkite — run the gates on every build.
+# Copy into .buildkite/pipeline.yml.
+#
+# Buildkite interpolates `$VAR` when the pipeline is *uploaded*; anything the
+# shell must expand at *run* time is written `$$VAR`.
+steps:
+  - label: ":shield: gandalf"
+    key: gandalf
+    plugins:
+      - docker#v5.11.0:
+          # gandalf's scanner image: every gate finds its binary on PATH.
+          image: ghcr.io/fabiocicerchia/gandalf-tools:latest
+          user: root # the image's uid cannot write into the agent's checkout
+          environment:
+            # No LLM endpoint in CI: don't spend 7s per judge gate retrying.
+            - GANDALF_LLM_RETRIES=0
+    command:
+      - git config --global --add safe.directory "*"
+      - git clone --quiet --depth 1 --branch v0.4.0 https://github.com/fabiocicerchia/gandalf /opt/gandalf
+      # Exit code is 1 when the verdict is red, 0 otherwise.
+      - PYTHONPATH=/opt/gandalf/src python3 -m gandalf --no-llm --no-html --no-trend --out-dir reports --junit reports/gandalf.junit.xml
+    artifact_paths:
+      - reports/**
+
+  # Each gate becomes a test case and lands on the build page as an annotation.
+  - wait: ~
+    continue_on_failure: true
+  - label: ":memo: annotate"
+    plugins:
+      - junit-annotate#v2.6.0:
+          artifacts: reports/gandalf.junit.xml

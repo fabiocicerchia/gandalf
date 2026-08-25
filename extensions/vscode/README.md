@@ -3,6 +3,28 @@
 Run [Gandalf](https://github.com/fabiocicerchia/gandalf)'s quality gates while
 you write the code, instead of finding out in CI.
 
+Gandalf is not another linter — it is an aggregator. One scan runs ~50 gates
+over your repository (`ruff`, `mypy`, `bandit`, `semgrep`, `gitleaks`, `trivy`,
+`checkov`, `kics`, `codeql`, `osv`, `eslint`, `tsc`, `clippy`, `govulncheck`,
+`shellcheck`, `hadolint`, the test and build runners, and a set of LLM judges)
+and folds what every one of them said into a single picture: one severity
+ladder, one findings pane, one Red/Amber/Green scorecard. Each tool keeps its
+own output format, its own severity words and its own idea of a rule id;
+gandalf normalizes all of it, so the extension shows you one board to read
+instead of a dozen terminals to reconcile.
+
+<!-- Absolute, not relative: vsce rewrites a relative README link to
+     <repo>/raw/HEAD/<path>, dropping the `repository.directory` prefix — so
+     `media/…` resolves to the repository root and renders broken on the
+     Marketplace. Verified by unpacking the .vsix, not assumed. -->
+![The Gandalf pane in the bottom panel: findings grouped by file, each with the level the tool reported, the gate that found it and the line, plus the score in the status bar](https://raw.githubusercontent.com/fabiocicerchia/gandalf/main/extensions/vscode/media/screenshots/findings-pane.png)
+
+*The pane, next to Problems and Terminal. Gates that could not run are named in the message line at the top rather than counted as findings.*
+
+![The Gandalf report open in an editor tab: an AMBER 82/100 verdict banner with the delta against the previous run, scores by category, and the per-gate table](https://raw.githubusercontent.com/fabiocicerchia/gandalf/main/extensions/vscode/media/screenshots/report.png)
+
+*The report — the same `reports/*.html` the CLI writes, opened in a tab.*
+
 - **Inline diagnostics** — every finding that has a file and a line becomes a
   squiggle. The hover explains the problem, which gate found it, its severity
   and the rule id (linked to the tool's docs when there is one).
@@ -21,23 +43,34 @@ you write the code, instead of finding out in CI.
 
 ## Install
 
-Not on the Marketplace yet — build the `.vsix` and install it locally. From the
-repository root:
+From the Marketplace: open the **Extensions** view, search for *Gandalf —
+Quality Gates*, press **Install**. Or, from a terminal:
 
 ```sh
-make ext-install
+code --install-extension fabiocicerchia.gandalf-quality-gates
+```
+
+- [**VS Marketplace**](https://marketplace.visualstudio.com/items?itemName=fabiocicerchia.gandalf-quality-gates)
+  — VS Code and VS Code Insiders.
+- [**Open VSX**](https://open-vsx.org/extension/fabiocicerchia/gandalf-quality-gates)
+  — Cursor, Windsurf, VSCodium and the other forks, which don't reach the VS
+  Marketplace. Same extension, published by the same release.
+
+Then reload the window (**Developer: Reload Window**) — a **Gandalf** tab
+appears in the bottom panel alongside Problems and Terminal. Gandalf itself is a
+separate thing and has to be reachable; see [Requirements](#requirements).
+
+### From source
+
+To install the unreleased build instead, from the repository root:
+
+```sh
+make ext-install                  # or CODE=cursor, windsurf, codium, code-insiders
 ```
 
 That installs npm's dev dependencies if needed, typechecks, runs the tests,
 builds the `.vsix` and installs it. Node 18+ is needed for the build; nothing of
-it is needed afterwards. Then reload the window (**Developer: Reload Window**) —
-a **Gandalf** tab appears in the bottom panel alongside Problems and Terminal.
-
-Using a fork of VS Code? Pass its CLI:
-
-```sh
-make ext-install CODE=cursor      # or windsurf, codium, code-insiders
-```
+it is needed afterwards. Then reload the window (**Developer: Reload Window**).
 
 No `code` command at all? `make ext-package` builds the `.vsix` and stops, so
 you can install it by hand: **Extensions** view → `...` menu →

@@ -62,15 +62,17 @@ export class DiagnosticPublisher {
       for (const f of findings) {
         if (!f.resolvedPath || !f.line) continue; // No place to put it — the panel has it.
         if (SEVERITY_RANK[f.severity] > floor) continue;
-        const list = byFile.get(f.resolvedPath) ?? [];
+        let list = byFile.get(f.resolvedPath);
+        if (!list) byFile.set(f.resolvedPath, (list = []));
         if (list.length >= MAX_PER_FILE) continue;
         list.push(toDiagnostic(f));
-        byFile.set(f.resolvedPath, list);
       }
     }
-    for (const [file, diagnostics] of byFile) {
-      this.collection.set(vscode.Uri.file(file), diagnostics);
-    }
+    // One call, not one per file: each `set` crosses to the renderer, and a
+    // tree with findings in a thousand files paid that a thousand times.
+    const entries: [vscode.Uri, vscode.Diagnostic[]][] = [];
+    for (const [file, diagnostics] of byFile) entries.push([vscode.Uri.file(file), diagnostics]);
+    this.collection.set(entries);
   }
 
   clear(): void {

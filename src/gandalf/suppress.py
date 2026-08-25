@@ -69,6 +69,14 @@ class _Rule:
 
 
 class Suppressor:
+    """Decides which findings a run is allowed to stop reporting.
+
+    Two mechanisms, deliberately separate: explicit rules are a standing
+    decision about a class of finding, a baseline is "everything as of today,
+    so only new ones nag". Neither deletes a finding — both mark it, so the
+    count of what was suppressed stays visible.
+    """
+
     def __init__(
         self, rules: list[str] | None = None, baseline: set[str] | None = None
     ):
@@ -122,6 +130,11 @@ class Suppressor:
 
 
 def load_baseline(path: str) -> set[str]:
+    """The accepted fingerprints from a baseline file, or an empty set.
+
+    A missing or unreadable baseline suppresses nothing, which is the safe
+    direction: the failure mode is noise, not a silently green run.
+    """
     p = Path(path)
     if not p.is_file():
         return set()

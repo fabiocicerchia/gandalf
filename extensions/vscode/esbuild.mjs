@@ -10,8 +10,22 @@ const watch = process.argv.includes('--watch');
 // framework: the vscode-free modules import nothing special, and the store gets
 // the small shim in src/test/ aliased in for the `vscode` import.
 const tests = process.argv.includes('--tests');
+// `make bench` — same vscode-free bundling as the tests, one entry point.
+const bench = process.argv.includes('--bench');
 
-const options = tests
+const options = bench
+  ? {
+      entryPoints: ['src/bench.ts'],
+      bundle: true,
+      outfile: 'out/bench.js',
+      format: 'cjs',
+      platform: 'node',
+      target: 'node18',
+      external: ['node:*'],
+      alias: { vscode: './src/test/vscode-shim.ts' },
+      logLevel: 'warning',
+    }
+  : tests
   ? {
       entryPoints: readdirSync('src/test')
         .filter((f) => f.endsWith('.test.ts'))

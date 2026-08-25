@@ -1,4 +1,7 @@
-.PHONY: help setup lint test analyze install tools ext-build ext-package ext-install ext-publish
+# gandalf — codebase quality-gate evaluator.
+#
+# Every verb this repo exposes lives here; `make` on its own prints them,
+# grouped, straight out of the `##` comments below.
 
 BINDIR ?= $(HOME)/.local/bin
 EXT_DIR ?= extensions/vscode
@@ -9,41 +12,77 @@ VSIX := $(EXT_DIR)/gandalf-quality-gates-$(EXT_VERSION).vsix
 # The editor's CLI. Override for a fork: make ext-install CODE=cursor
 CODE ?= code
 
-help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
-	  awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
+.DEFAULT_GOAL := help
+# help is pure output; the recipe echo would only be noise.
+.SILENT: help
 
+##@ General
+
+.PHONY: help
+help: ## Show this help
+	awk 'BEGIN {FS = ":.*## "} \
+	  /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } \
+	  /^[a-zA-Z_0-9-]+:.*## / { printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2 }' \
+	  $(MAKEFILE_LIST)
+
+.PHONY: setup
 setup: ## Install the pre-commit hook
 	pre-commit install
 
-lint: ## Run all pre-commit checks on the whole tree
-	pre-commit run --all-files
+##@ Run
 
-test: ## Run the test suite
-	pytest
-
+.PHONY: analyze
 analyze: ## Run gandalf against this repo
 	PYTHONPATH=src python3 -m gandalf
 
+.PHONY: install
 install: ## Drop a `gandalf` wrapper in BINDIR (default ~/.local/bin)
 	@mkdir -p "$(BINDIR)"
 	@printf '#!/bin/sh\nexport PYTHONPATH="%s/src:$$PYTHONPATH"\nexec python3 -m gandalf "$$@"\n' "$(CURDIR)" > "$(BINDIR)/gandalf"
 	@chmod +x "$(BINDIR)/gandalf"
 	@echo "installed $(BINDIR)/gandalf"
 
+# Every scanner a gate can shell out to, in one image. A gate whose binary is
+# neither on PATH nor in this image degrades to WARN rather than failing, so
+# this is what turns a partial run into a complete one with zero host installs.
+.PHONY: tools
 tools: ## Build the scanner-tools image (zero host installs)
 	docker build -f tools.Dockerfile -t gandalf-tools .
+
+##@ Quality
+
+.PHONY: lint
+lint: ## Run all pre-commit checks on the whole tree
+	pre-commit run --all-files
+
+.PHONY: test
+test: ## Run the test suite
+	pytest
+
+# Not part of `make test` on purpose: a wall-clock assertion on a shared runner
+# is either too loose to catch anything or too tight to survive a noisy
+# neighbour. The invariants that hold on any machine — how many times a listing
+# is read, how many writes cross to the renderer — are asserted in the test
+# suite; this is the other half, and it wants your machine, quiet.
+.PHONY: bench
+bench: ## Measure the hot paths and redraw the docs chart
+	python3 scripts/bench.py --svg docs/assets/performance.svg
+
+##@ VS Code extension
 
 # The same four extension verbs, with the same meanings, in gandalf, greenlint
 # and depwatch: build compiles, package writes the .vsix, install side-loads it,
 # publish pushes it to both marketplaces.
+.PHONY: ext-build
 ext-build: ## Compile the VS Code extension
 	@command -v npm >/dev/null 2>&1 || { echo "npm not found — Node 18+ is needed to build the extension"; exit 1; }
 	@cd "$(EXT_DIR)" && { [ -d node_modules ] || npm install; } && npm run typecheck && npm run build
 
+.PHONY: ext-package
 ext-package: ext-build ## Build the VS Code extension into a .vsix
 	@cd "$(EXT_DIR)" && npm run package
 
+.PHONY: ext-install
 ext-install: ext-package ## Build the VS Code extension and install it (override with CODE=)
 	@command -v "$(CODE)" >/dev/null 2>&1 || { \
 	  echo "'$(CODE)' CLI not found. Run \"Shell Command: Install '$(CODE)' command in PATH\""; \
@@ -56,6 +95,7 @@ ext-install: ext-package ## Build the VS Code extension and install it (override
 # Normally CI's business: publishing happens in publish-extension.yml, called by
 # release.yml when release-please cuts a release. This is the manual escape
 # hatch, and it needs VSCE_PAT and OVSX_PAT in the environment.
+.PHONY: ext-publish
 ext-publish: ext-package ## Publish the .vsix to both marketplaces
 	@cd "$(EXT_DIR)" && npm run publish -- --packagePath "$(notdir $(VSIX))"
 	@cd "$(EXT_DIR)" && npx --yes ovsx@1.1.1 publish "$(notdir $(VSIX))" -p "$$OVSX_PAT"

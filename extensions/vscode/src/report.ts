@@ -45,6 +45,8 @@ function adapt(html: string, webview: vscode.Webview): string {
 export class ReportView {
   private panel?: vscode.WebviewPanel;
   private lastPath = '';
+  /** A newer report landed while the tab was hidden; it repaints on return. */
+  private stale = false;
 
   /** Path of the most recent report, so "Open Report" works without rescanning. */
   get current(): string {
@@ -53,7 +55,12 @@ export class ReportView {
 
   set current(p: string) {
     this.lastPath = p;
-    if (this.panel && p) void this.load(p);
+    if (!p || !this.panel) return;
+    // `retainContextWhenHidden` keeps the tab alive, so a scan-on-save would
+    // otherwise re-read and re-render a multi-megabyte document nobody is
+    // looking at, on every save.
+    if (this.panel.visible) void this.load(p);
+    else this.stale = true;
   }
 
   async show(htmlPath: string, title: string): Promise<void> {
@@ -66,6 +73,9 @@ export class ReportView {
         { enableScripts: true, enableFindWidget: true, retainContextWhenHidden: true },
       );
       this.panel.onDidDispose(() => (this.panel = undefined));
+      this.panel.onDidChangeViewState(() => {
+        if (this.panel?.visible && this.stale) void this.load(this.lastPath);
+      });
       this.panel.webview.onDidReceiveMessage((msg: { type: string; href?: string }) => {
         if (msg.type === 'open' && msg.href) void vscode.env.openExternal(vscode.Uri.parse(msg.href));
       });
@@ -76,7 +86,8 @@ export class ReportView {
   }
 
   private async load(htmlPath: string): Promise<void> {
-    if (!this.panel) return;
+    if (!this.panel || !htmlPath) return;
+    this.stale = false;
     const html = await fs.promises.readFile(htmlPath, 'utf8');
     this.panel.webview.html = adapt(html, this.panel.webview);
   }

@@ -16,6 +16,7 @@ import { ReportView } from './report';
 import {
   GandalfNotFoundError,
   probe,
+  promptInstall,
   resetLauncherCache,
   runGandalf,
   ScanKind,
@@ -122,13 +123,7 @@ export function activate(context: vscode.ExtensionContext): void {
       log().error(err.message);
       if (notFoundShown) return;
       notFoundShown = true;
-      void vscode.window
-        .showErrorMessage(`Gandalf: ${err.message}`, 'Open settings')
-        .then((choice) => {
-          if (choice === 'Open settings') {
-            void vscode.commands.executeCommand('workbench.action.openSettings', 'gandalf');
-          }
-        });
+      void promptInstall(err.message);
       return;
     }
     const message = err instanceof Error ? err.message : String(err);

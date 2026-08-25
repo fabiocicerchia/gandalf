@@ -17,6 +17,7 @@ import shutil
 from pathlib import Path
 
 from gandalf.base import GateContext, GateOutcome, GateResult
+from gandalf.plugins import communicate
 
 _EVENT = os.environ.get("GANDALF_ACT_EVENT", "pull_request")
 _PLATFORM = os.environ.get(
@@ -65,11 +66,12 @@ class ActGate:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
             )
-            out_b, _ = await asyncio.wait_for(proc.communicate(), timeout=_TIMEOUT)
-        except asyncio.TimeoutError:
-            return GateResult(
-                self.name, GateOutcome.FAIL, 0.0, f"act timed out after {_TIMEOUT}s"
-            )
+            streams = await communicate(proc, _TIMEOUT)
+            if streams is None:
+                return GateResult(
+                    self.name, GateOutcome.FAIL, 0.0, f"act timed out after {_TIMEOUT}s"
+                )
+            out_b, _ = streams
         except Exception as exc:  # noqa: BLE001
             return GateResult(
                 self.name, GateOutcome.WARN, 0.5, f"act failed to launch: {exc}"

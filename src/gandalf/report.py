@@ -132,6 +132,8 @@ _NO_REMEDIATION = re.compile(r"^\W*no remediation needed\W*$", re.IGNORECASE)
 
 @dataclass
 class Verdict:
+    """The run's single answer: one traffic light and one number out of 100."""
+
     outcome: GateOutcome  # overall RAG
     score: int  # 0..100 composite
 
@@ -217,6 +219,11 @@ def render_terminal(
     advice: dict,
     meta: dict | None = None,
 ) -> str:
+    """Render the scorecard for a terminal.
+
+    The primary surface: the answer has to be readable in the pane it is run
+    in, before anyone opens the HTML report or the JSON.
+    """
     meta = meta or {}
     lines = [f"\n{_BOLD}🧙  GANDALF{_RESET} {_DIM}— {label}{_RESET}"]
     c = meta.get("commit") or {}
@@ -532,6 +539,12 @@ def render_html(
     meta: dict | None = None,
     diff: str = "",
 ) -> str:
+    """Render the scorecard as one self-contained HTML file.
+
+    Self-contained on purpose: no stylesheet, no script, no font to fetch, so
+    the report opens from a CI artifact, an email attachment or a file:// URL
+    and looks the same in all three.
+    """
     vcls = verdict.outcome.name.lower()  # pass | warn | fail
     vword = _RAG[verdict.outcome][3]
     sev = {GateOutcome.PASS: 0, GateOutcome.WARN: 1, GateOutcome.FAIL: 2}

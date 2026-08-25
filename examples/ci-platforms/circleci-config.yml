@@ -1,0 +1,42 @@
+# CircleCI — run the gates on every push.
+# Copy into .circleci/config.yml.
+#
+# The job image is gandalf's own scanner image, so every gate finds its binary
+# on PATH. Do not reach for `setup_remote_docker` here: the remote daemon
+# cannot bind-mount the job's filesystem, so a scan run that way sees an empty
+# tree and passes everything.
+version: 2.1
+
+jobs:
+  gandalf:
+    docker:
+      - image: ghcr.io/fabiocicerchia/gandalf-tools:latest
+        user: root # the image's own uid cannot write into the checkout
+    environment:
+      # No LLM endpoint in CI: don't spend 7s per judge gate retrying.
+      GANDALF_LLM_RETRIES: "0"
+    steps:
+      - checkout
+      - run:
+          name: Fetch gandalf
+          command: |
+            git config --global --add safe.directory "*"
+            git clone --quiet --depth 1 --branch v0.4.0 \
+              https://github.com/fabiocicerchia/gandalf /opt/gandalf
+      - run:
+          name: Gates
+          # Exit code is 1 when the verdict is red, 0 otherwise.
+          command: |
+            PYTHONPATH=/opt/gandalf/src python3 -m gandalf \
+              --no-llm --no-html --no-trend \
+              --out-dir reports \
+              --junit reports/gandalf.junit.xml
+      - store_test_results:
+          path: reports
+      - store_artifacts:
+          path: reports
+
+workflows:
+  quality:
+    jobs:
+      - gandalf

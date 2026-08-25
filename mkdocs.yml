@@ -19,6 +19,7 @@ nav:
   - Editor integration: editors.md
   - Gate ruleset: gates.md
   - Getting Started: getting-started.md
+  - Performance: performance.md
   - Reports and badges: reports.md
 
 markdown_extensions:

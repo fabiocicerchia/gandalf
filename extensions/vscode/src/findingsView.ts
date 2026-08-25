@@ -77,6 +77,14 @@ export class FindingsView implements vscode.TreeDataProvider<Node> {
    */
   private expansion = 0;
   private model?: Model;
+  /**
+   * One repaint reads the same two lists two or three times over — the chrome,
+   * the tree, and the "hidden by the filter" message when there is one — and
+   * each read used to re-filter the whole board into a fresh array. Cleared by
+   * `refresh()`, which is the only way any of their inputs change.
+   */
+  private allFindings?: Finding[];
+  private visibleFindings?: Finding[];
 
   private readonly changed = new vscode.EventEmitter<Node | undefined>();
   readonly onDidChangeTreeData = this.changed.event;
@@ -111,9 +119,15 @@ export class FindingsView implements vscode.TreeDataProvider<Node> {
    * finding has to pass both.
    */
   async pickFilters(): Promise<void> {
-    const findings = this.all();
-    const countLevel = (l: Level) => findings.filter((f) => f.level === l).length;
-    const countSeverity = (s: Severity) => findings.filter((f) => f.severity === s).length;
+    // One pass for all nine tallies — this used to be nine passes over the tree.
+    const levelCount = new Map<Level, number>();
+    const severityCount = new Map<Severity, number>();
+    for (const f of this.all()) {
+      levelCount.set(f.level, (levelCount.get(f.level) ?? 0) + 1);
+      severityCount.set(f.severity, (severityCount.get(f.severity) ?? 0) + 1);
+    }
+    const countLevel = (l: Level) => levelCount.get(l) ?? 0;
+    const countSeverity = (s: Severity) => severityCount.get(s) ?? 0;
 
     type Item = vscode.QuickPickItem & { level?: Level; severity?: Severity };
     const items: Item[] = [
@@ -161,6 +175,8 @@ export class FindingsView implements vscode.TreeDataProvider<Node> {
 
   refresh(): void {
     this.model = undefined;
+    this.allFindings = undefined;
+    this.visibleFindings = undefined;
     this.changed.fire(undefined);
     this.paintChrome();
   }
@@ -178,6 +194,11 @@ export class FindingsView implements vscode.TreeDataProvider<Node> {
 
   /** Everything in scope, before the level/severity filters. */
   private all(): Finding[] {
+    if (this.allFindings) return this.allFindings;
+    return (this.allFindings = this.computeAll());
+  }
+
+  private computeAll(): Finding[] {
     const folder = this.folder();
     if (!folder) return [];
     const all = this.store.findings(folder);
@@ -188,7 +209,13 @@ export class FindingsView implements vscode.TreeDataProvider<Node> {
   }
 
   private visible(): Finding[] {
-    return this.all().filter((f) => this.levels.has(f.level) && this.severities.has(f.severity));
+    if (this.visibleFindings) return this.visibleFindings;
+    const all = this.all();
+    // Nothing filtered out: hand back the same array rather than a copy of it.
+    if (!this.filtered) return (this.visibleFindings = all);
+    return (this.visibleFindings = all.filter(
+      (f) => this.levels.has(f.level) && this.severities.has(f.severity),
+    ));
   }
 
   /**
@@ -315,7 +342,8 @@ export class FindingsView implements vscode.TreeDataProvider<Node> {
       ? `scanning ${this.scanLabel}…`
       : [state, this.filtered ? 'filtered' : ''].filter(Boolean).join(' · ') || undefined;
 
-    const errors = findings.filter((f) => f.severity === 'error').length;
+    let errors = 0;
+    for (const f of findings) if (f.severity === 'error') errors += 1;
     view.badge = errors ? { value: errors, tooltip: `${errors} error(s)` } : undefined;
 
     view.message = this.message(findings.length, Boolean(run));
