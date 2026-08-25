@@ -40,3 +40,6 @@ Thumbs.db
 # ends in a slash — git still descends into a re-included directory.
 !extensions/vscode/.vscode/
 *.swp
+
+# Docs site build
+site/
