@@ -95,7 +95,7 @@ export interface RunResult {
   durationMs: number;
 }
 
-const MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
+const MAX_OUTPUT_CHARS = 4 * 1024 * 1024;
 /** The scorecard and the report paths are a few KB; this is only a backstop. */
 const MAX_PLAIN_CHARS = 256 * 1024;
 const HELP_TIMEOUT_MS = 20_000;
@@ -160,10 +160,10 @@ function exec(
       return;
     }
 
-    const out: Buffer[] = [];
-    const errOut: Buffer[] = [];
-    let outBytes = 0;
-    let errBytes = 0;
+    const out: string[] = [];
+    const errOut: string[] = [];
+    let outChars = 0;
+    let errChars = 0;
     let settled = false;
 
     const finish = (fn: () => void) => {
@@ -191,29 +191,29 @@ function exec(
       finish(() => reject(new vscode.CancellationError()));
     });
 
-    child.stdout?.on('data', (b: Buffer) => {
-      if (opts.collectStdout !== false && outBytes < MAX_OUTPUT_BYTES) {
-        out.push(b);
-        outBytes += b.length;
+    // Decoded by the stream, not per chunk: a read boundary lands mid-UTF-8
+    // sequence often enough on a big scan, and `buf.toString()` on each half
+    // turns one `--stream` gate line into two unparseable ones. It also drops
+    // the Buffer.concat of the whole output at the end.
+    child.stdout?.setEncoding('utf8');
+    child.stderr?.setEncoding('utf8');
+    child.stdout?.on('data', (s: string) => {
+      if (opts.collectStdout !== false && outChars < MAX_OUTPUT_CHARS) {
+        out.push(s);
+        outChars += s.length;
       }
-      opts.onStdout?.(b.toString('utf8'));
+      opts.onStdout?.(s);
     });
-    child.stderr?.on('data', (b: Buffer) => {
-      if (errBytes < MAX_OUTPUT_BYTES) {
-        errOut.push(b);
-        errBytes += b.length;
+    child.stderr?.on('data', (s: string) => {
+      if (errChars < MAX_OUTPUT_CHARS) {
+        errOut.push(s);
+        errChars += s.length;
       }
-      opts.onStderr?.(b.toString('utf8'));
+      opts.onStderr?.(s);
     });
     child.on('error', (err) => finish(() => reject(err)));
     child.on('close', (code) =>
-      finish(() =>
-        resolve({
-          code: code ?? -1,
-          stdout: Buffer.concat(out).toString('utf8'),
-          stderr: Buffer.concat(errOut).toString('utf8'),
-        }),
-      ),
+      finish(() => resolve({ code: code ?? -1, stdout: out.join(''), stderr: errOut.join('') })),
     );
   });
 }

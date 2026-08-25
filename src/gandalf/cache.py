@@ -54,7 +54,10 @@ def content_hash(workdir: str, files: list[str]) -> str:
     for f in sorted(files):
         h.update(f.encode())
         try:
-            h.update(hashlib.sha256((root / f).read_bytes()).digest())
+            # file_digest reads in fixed-size blocks; `read_bytes()` pulled every
+            # file into memory whole, and this walks the entire tracked tree.
+            with (root / f).open("rb") as fh:
+                h.update(hashlib.file_digest(fh, "sha256").digest())
         except OSError:
             h.update(b"?")
     return h.hexdigest()
@@ -77,7 +80,8 @@ def load(path: str) -> dict:
 
 def save(path: str, data: dict) -> None:
     """Write the cache back, pretty-printed so a diff on it is readable."""
-    Path(path).write_text(json.dumps(data, indent=2, default=str))
+    with Path(path).open("w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2, default=str)
 
 
 def get(cache: dict, gate_name: str, file_hash: str) -> GateResult | None:

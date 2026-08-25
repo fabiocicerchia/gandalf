@@ -340,7 +340,15 @@ export function normalizeGate(
   return findings;
 }
 
-/** Sort: reported level, then gate, then file, then line — the pane's order. */
+/**
+ * Sort: reported level, then gate, then file, then line — the pane's order.
+ *
+ * ponytail: `localeCompare` looks like the slow way to do this and isn't — V8
+ * fast-paths it for the default locale. Hoisting an `Intl.Collator` out of the
+ * comparator, which is the usual advice, measured **5x slower** here (33ms vs
+ * 6ms sorting 20k paths, `scripts/bench.py`): the extracted `.compare` loses
+ * the fast path, and `numeric: true` disables it outright. Leave this alone.
+ */
 export function compareFindings(a: Finding, b: Finding): number {
   return (
     LEVEL_RANK[sortLevel(a)] - LEVEL_RANK[sortLevel(b)] ||
