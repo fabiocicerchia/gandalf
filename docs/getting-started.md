@@ -27,7 +27,7 @@ PYTHONPATH=src python -m gandalf --path subdir/  # limit scanning to a folder
 ```
 
 Exit code is `1` when the verdict is red, `0` otherwise — CI-usable. See the
-[README](../README.md) for the full flag reference and configuration
+[README](README.md) for the full flag reference and configuration
 (`.gandalf.toml`).
 
 ## Scanners run in Docker — host stays clean
@@ -81,7 +81,7 @@ scoped to the diff so anchors match GitHub's view. With `code-scanning: true` it
 also uploads SARIF so findings appear in the Security tab and as PR diff
 annotations. It needs only the built-in `GITHUB_TOKEN`. gandalf reviews its own
 PRs the same way via `.github/workflows/gandalf-pr.yml` (`uses: ./`). See
-[`examples/github-actions/`](../examples/github-actions/README.md) for the full
+[`examples/github-actions/`](https://github.com/fabiocicerchia/gandalf/blob/main/examples/github-actions/README.md) for the full
 drop-in workflow, inputs, code scanning, and the advisory-vs-blocking toggle.
 
 ### Other CI systems
@@ -112,6 +112,6 @@ the container as root.
 Drop-in files for GitLab CI, CircleCI, Travis, Azure DevOps, AWS CodePipeline,
 Devtron, Northflank, Spacelift, Jenkins, Bitbucket Pipelines, Google Cloud
 Build, Tekton, Argo Workflows, Harness, Buildkite and Drone/Woodpecker are in
-[`examples/ci-platforms/`](../examples/ci-platforms/README.md), along with which
+[`examples/ci-platforms/`](https://github.com/fabiocicerchia/gandalf/blob/main/examples/ci-platforms/README.md), along with which
 platform ingests `--junit` where, and how to adopt on a repo that isn't green
 yet (`--min-score`, `--write-baseline`).
