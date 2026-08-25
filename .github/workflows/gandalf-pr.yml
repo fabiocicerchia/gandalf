@@ -3,7 +3,7 @@ name: gandalf-pr-review
 # gandalf reviewing its own pull requests (dogfood) via the repo's own composite
 # Action (action.yml, invoked as `uses: ./`). This doubles as the reference for
 # how anyone else wires it up - see examples/github-actions/gandalf-pr-review.yml
-# for the drop-in copy that uses `uses: fabiocicerchia/gandalf@<ref>`.
+# for the drop-in copy that uses `uses: fabiocicerchia/gandalf@34aaf696d7331d1c821a0fae1827ebaf9d5c7017  # v0.4.0
 
 on:
   pull_request:
