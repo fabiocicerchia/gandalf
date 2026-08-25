@@ -39,7 +39,7 @@ The plugin lives in `extensions/nvim/` of the gandalf repository.
 {
   'fabiocicerchia/gandalf',
   rtp = 'extensions/nvim',
-  cmd = { 'GandalfScan', 'GandalfReport', 'GandalfList' },
+  cmd = { 'GandalfScan', 'GandalfScanAll', 'GandalfHover', 'GandalfReport', 'GandalfList' },
   opts = {},
 }
 ```
@@ -111,8 +111,9 @@ rather than a nil index inside a callback a minute into a scan.
 
 | Command | What it does |
 | --- | --- |
-| `:GandalfScan` | Scan the workspace |
-| `:GandalfScanFile` | Scan the current file only |
+| `:GandalfScanAll` | Scan the workspace |
+| `:GandalfScan` | Scan the current file only |
+| `:GandalfHover` | Explain the dependency under the cursor |
 | `:GandalfReport` | The scorecard, in a float |
 | `:GandalfReportLlm` | Rescan with the LLM summary, then open it |
 | `:GandalfList` | Every finding, in the quickfix list |

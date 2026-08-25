@@ -197,6 +197,61 @@ function M.read_finding(raw)
   return normalised(raw) or legacy(raw)
 end
 
+-- What a tool calls the package a finding is about. gandalf leaves every gate's
+-- own keys on the finding alongside the `_gandalf` block, so this reads them
+-- directly rather than asking for a new normalized field.
+--
+-- Deliberately not a bare `name`: on a checkov or semgrep finding that is the
+-- rule, and hovering a package only to be told about an unrelated rule is worse
+-- than being told nothing.
+local PACKAGE_KEYS = { 'PkgName', 'pkg_name', 'PackageName', 'package_name', 'packageName' }
+local INSTALLED_KEYS = { 'InstalledVersion', 'installed_version', 'version', 'Version' }
+local FIXED_KEYS = { 'FixedVersion', 'fixed_version', 'fixed' }
+
+--- The package a finding names, or ''. Several shapes, because the gates pass
+--- their tool's output through untouched: trivy says `PkgName`, osv-scanner
+--- nests it under `affected[].package.name`, others use a `package` object.
+function M.finding_package(raw)
+  if type(raw) ~= 'table' then
+    return ''
+  end
+  local direct = first_string(raw, PACKAGE_KEYS)
+  if direct ~= '' then
+    return direct
+  end
+  local pkg = raw.package
+  if type(pkg) == 'string' and pkg ~= '' then
+    return pkg
+  end
+  if type(pkg) == 'table' and type(pkg.name) == 'string' then
+    return pkg.name
+  end
+  local affected = raw.affected
+  if type(affected) == 'table' and type(affected[1]) == 'table' then
+    local nested = affected[1].package
+    if type(nested) == 'table' and type(nested.name) == 'string' then
+      return nested.name
+    end
+  end
+  -- trivy's PkgID is `name@version`; the name half is still the answer.
+  if type(raw.PkgID) == 'string' then
+    return raw.PkgID:match('^(.+)@[^@]*$') or ''
+  end
+  return ''
+end
+
+--- `fix_versions` is a list in pip-audit and a string everywhere else.
+local function fixed_version(raw)
+  if type(raw) ~= 'table' then
+    return ''
+  end
+  local list = raw.fix_versions
+  if type(list) == 'table' and type(list[1]) == 'string' then
+    return table.concat(list, ', ')
+  end
+  return first_string(raw, FIXED_KEYS)
+end
+
 --- One gate's findings, as rows the editor can place.
 function M.normalize_gate(gate)
   local out = {}
@@ -219,6 +274,9 @@ function M.normalize_gate(gate)
       line = n.line,
       column = n.column,
       url = n.url,
+      package = M.finding_package(raw),
+      installed = first_string(type(raw) == 'table' and raw or {}, INSTALLED_KEYS),
+      fixed = fixed_version(raw),
     }
   end
 
@@ -237,7 +295,50 @@ function M.normalize_gate(gate)
       line = 0,
       column = 0,
       url = '',
+      package = '',
+      installed = '',
+      fixed = '',
     }
+  end
+  return out
+end
+
+--- The dependency named on a manifest line, or ''.
+---
+--- Pattern-based rather than per-format on purpose: five shapes cover
+--- requirements.txt, package.json, go.mod, Cargo.toml, pyproject.toml and
+--- Gemfile between them, and a manifest nobody thought of still has a chance.
+--- Order matters — a quoted requirement is checked before a bare `key =`, or
+--- `dependencies = ["flask>=2"]` would answer "dependencies".
+function M.package_at_cursor(line)
+  local s = (line or ''):gsub('^%s+', ''):gsub('%s+$', '')
+  -- Comments, section headers and pip's flag lines name no dependency.
+  if s == '' or s:match('^[#;]') or s:match('^//') or s:match('^%[%[?%a') or s:match('^%-') then
+    return ''
+  end
+  -- `flask[async]==2.0` is an ordinary requirements.txt line, and the extras
+  -- sit exactly where the version operator is looked for. Only a bracket whose
+  -- contents are extras-shaped is dropped, so Cargo's `features = ["full"]`
+  -- (bracket not glued to a name, quotes inside) is left alone.
+  s = s:gsub('([%a][%w%._%-]*)%[[%w%s,%._%-]*%]', '%1')
+  return s:match("^gem%s+['\"]([^'\"]+)") -- Gemfile
+    or s:match('^"([^"]+)"%s*:') -- package.json, and any JSON manifest
+    or s:match("['\"]%s*([%a][%w%._%-]*)%s*[><=~!^]") -- "flask>=2" in a list
+    or s:match('^([%w%._%-/]+)%s+v%d') -- go.mod
+    or s:match('^([%a@][%w%._%-/]*)%s*[=~<>!]') -- serde = "1", flask==2.0
+    or s:match('^([%a][%w%._%-]*)$') -- a bare requirements.txt line
+    or ''
+end
+
+--- Findings that name `package`. Case-insensitive: tools disagree on the case
+--- of a package name far more often than two real packages differ only by it.
+function M.findings_for_package(findings, package)
+  local want = package:lower()
+  local out = {}
+  for _, finding in ipairs(findings or {}) do
+    if (finding.package or '') ~= '' and finding.package:lower() == want then
+      out[#out + 1] = finding
+    end
   end
   return out
 end

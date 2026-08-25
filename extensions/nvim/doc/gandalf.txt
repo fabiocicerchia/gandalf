@@ -59,7 +59,7 @@ With lazy.nvim: >lua
     {
       'fabiocicerchia/gandalf',
       rtp = 'extensions/nvim',
-      cmd = { 'GandalfScan', 'GandalfReport' },
+      cmd = { 'GandalfScan', 'GandalfScanAll', 'GandalfHover' },
       opts = {},
     }
 <
@@ -109,11 +109,16 @@ Defaults, deep-merged with whatever you pass: >lua
 ==============================================================================
 5. COMMANDS                                                  *gandalf-commands*
 
-                                                                *:GandalfScan*
-:GandalfScan            Scan the workspace.
+                                                             *:GandalfScanAll*
+:GandalfScanAll         Scan the workspace.
 
-                                                            *:GandalfScanFile*
-:GandalfScanFile        Scan the current file only.
+                                                                *:GandalfScan*
+:GandalfScan            Scan the current file only.
+
+                                                               *:GandalfHover*
+:GandalfHover           Explain the dependency under the cursor: what
+                        gandalf found against it, and — when nothing did —
+                        whether any gate was actually able to look.
 
                                                               *:GandalfReport*
 :GandalfReport          The scorecard, in a float: verdict, score, gates by

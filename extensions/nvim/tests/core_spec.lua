@@ -328,3 +328,82 @@ describe('score over time', function()
     assert.equals('', core.delta(70, nil), 'the first scored commit has nothing to compare to')
   end)
 end)
+
+describe('the dependency under the cursor', function()
+  it('reads the manifest formats people actually have open', function()
+    local cases = {
+      -- requirements.txt
+      { 'flask==2.0.1', 'flask' },
+      { '  flask>=1.0', 'flask' },
+      { 'flask[async]==2.0', 'flask' },
+      { 'python-dateutil', 'python-dateutil' },
+      -- package.json, including a scoped name
+      { '    "express": "^4.18.0",', 'express' },
+      { '    "@types/node": "^20.0.0",', '@types/node' },
+      -- go.mod
+      { '\tgithub.com/spf13/cobra v1.8.0', 'github.com/spf13/cobra' },
+      -- Cargo.toml
+      { 'serde = "1.0"', 'serde' },
+      { 'tokio = { version = "1", features = ["full"] }', 'tokio' },
+      -- pyproject.toml -- the quoted requirement wins over the `key =`
+      { 'dependencies = ["flask>=2.0"]', 'flask' },
+      -- Gemfile
+      { "gem 'rails', '~> 7.0'", 'rails' },
+    }
+    for _, case in ipairs(cases) do
+      assert.equals(case[2], core.package_at_cursor(case[1]), 'for: ' .. case[1])
+    end
+  end)
+
+  it('names nothing on a line that is not a dependency', function()
+    for _, line in ipairs({ '', '   ', '# a comment', '// a comment', '[tool.poetry]', '-r base.txt' }) do
+      assert.equals('', core.package_at_cursor(line), 'for: ' .. line)
+    end
+  end)
+
+  it('finds the package on a finding however its tool spelled it', function()
+    -- trivy
+    assert.equals('express', core.finding_package({ PkgName = 'express' }))
+    assert.equals('express', core.finding_package({ PkgID = 'express@4.17.1' }))
+    -- osv-scanner nests it inside each affected range
+    assert.equals('flask', core.finding_package({ affected = { { package = { name = 'flask' } } } }))
+    -- a bare `name` is the rule on most gates, so it must not be read as one
+    assert.equals('', core.finding_package({ name = 'CKV_AWS_1' }))
+    assert.equals('', core.finding_package('a raw line'))
+  end)
+
+  it('matches findings to a package regardless of case', function()
+    local findings = {
+      { package = 'Express', message = 'a' },
+      { package = 'express', message = 'b' },
+      { package = 'flask', message = 'c' },
+      { package = '', message = 'd' },
+    }
+    assert.equals(2, #core.findings_for_package(findings, 'EXPRESS'))
+    assert.equals(0, #core.findings_for_package(findings, 'django'))
+  end)
+
+  it('carries the package through normalization', function()
+    local gate_ = gate({
+      name = 'trivy',
+      findings = {
+        norm({ PkgName = 'express', InstalledVersion = '4.17.1', FixedVersion = '4.19.2' }, {
+          rule = 'CVE-2024-29041',
+          message = 'Express.js open redirect',
+          severity = 'high',
+        }),
+      },
+    })
+    local out = core.normalize_gate(gate_)
+    assert.equals('express', out[1].package)
+    assert.equals('4.17.1', out[1].installed)
+    assert.equals('4.19.2', out[1].fixed)
+  end)
+
+  it('reads pip-audit fix_versions, which is a list', function()
+    assert.equals('2.0.1, 2.1.0', core.normalize_gate(gate({
+      name = 'osv',
+      findings = { norm({ package = 'flask', fix_versions = { '2.0.1', '2.1.0' } }, { rule = 'PYSEC-1' }) },
+    }))[1].fixed)
+  end)
+end)

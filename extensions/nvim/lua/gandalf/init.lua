@@ -372,6 +372,22 @@ function M.report()
   end)
 end
 
+--- Explain the dependency under the cursor: what gandalf found against it, and
+--- what it could not check.
+function M.hover()
+  local package = core.package_at_cursor(vim.api.nvim_get_current_line())
+  if package == '' then
+    return notify('no dependency on this line.')
+  end
+  ensure_scanned(function()
+    local matched = core.findings_for_package(M.findings(), package)
+    ui.float(ui.hover_lines(package, matched, snapshot), {
+      title = ' ' .. package .. ' ',
+      filetype = 'gandalf-hover',
+    })
+  end)
+end
+
 --- Every finding, in the quickfix list.
 function M.list()
   ensure_scanned(function()
@@ -426,7 +442,7 @@ end
 --- since trimming the gate set is the only real lever on a slow scan.
 function M.timings()
   if not snapshot then
-    return notify('no timings yet — run :GandalfScan first.')
+    return notify('no timings yet — run :GandalfScanAll first.')
   end
   local timed = {}
   for _, gate in ipairs(snapshot.payload.gates or {}) do

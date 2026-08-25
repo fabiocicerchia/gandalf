@@ -20,11 +20,11 @@ end
 
 local command = vim.api.nvim_create_user_command
 
-command('GandalfScan', function()
+command('GandalfScanAll', function()
   ready().scan({ kind = 'workspace', manual = true, reason = 'command' })
 end, { desc = 'Gandalf: scan the workspace' })
 
-command('GandalfScanFile', function()
+command('GandalfScan', function()
   local gandalf = ready()
   local path = vim.fs.normalize(vim.api.nvim_buf_get_name(0))
   local rel = path ~= '' and vim.fs.relpath(gandalf.root(), path) or nil
@@ -33,6 +33,10 @@ command('GandalfScanFile', function()
   end
   gandalf.scan({ kind = 'file', rel_path = rel, manual = true, reason = 'command' })
 end, { desc = 'Gandalf: scan the current file' })
+
+command('GandalfHover', function()
+  ready().hover()
+end, { desc = 'Gandalf: explain the dependency under the cursor' })
 
 command('GandalfReport', function()
   ready().report()

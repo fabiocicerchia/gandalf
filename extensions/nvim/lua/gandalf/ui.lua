@@ -178,6 +178,67 @@ function M.report_lines(snapshot)
   return lines
 end
 
+--- Everything gandalf knows about one dependency.
+---
+--- The "nothing found" case deliberately says whether anything actually looked.
+--- A gate whose tool is missing reports AMBER and moves on, so an empty hover
+--- can mean "clean" or "never checked", and those are not the same answer.
+function M.hover_lines(package, findings, snapshot)
+  local installed = ''
+  for _, finding in ipairs(findings) do
+    if finding.installed ~= '' then
+      installed = finding.installed
+      break
+    end
+  end
+
+  local lines = {
+    installed ~= '' and (package .. '  ' .. installed) or package,
+    string.rep('─', math.max(#package + 12, 40)),
+    '',
+  }
+
+  if #findings == 0 then
+    lines[#lines + 1] = 'No findings against this dependency.'
+    local blocked = snapshot and snapshot.blocked or {}
+    if #blocked > 0 then
+      lines[#lines + 1] = ''
+      lines[#lines + 1] = string.format(
+        '⚠ %d gate(s) could not run, so this is not proof of anything:',
+        #blocked
+      )
+      lines[#lines + 1] = '  ' .. table.concat(blocked, ', ')
+      lines[#lines + 1] = '  Run :checkhealth gandalf, or :GandalfLog.'
+    end
+    return lines
+  end
+
+  lines[#lines + 1] = string.format('%d finding(s)', #findings)
+  lines[#lines + 1] = ''
+  for _, finding in ipairs(findings) do
+    local head = { MARK[finding.outcome] or '?' }
+    if finding.severity_label ~= '' then
+      head[#head + 1] = finding.severity_label
+    end
+    head[#head + 1] = finding.gate
+    if finding.rule ~= '' then
+      head[#head + 1] = '· ' .. finding.rule
+    end
+    lines[#lines + 1] = table.concat(head, ' ')
+    for line in finding.message:gmatch('[^\n]+') do
+      lines[#lines + 1] = '    ' .. line
+    end
+    if finding.fixed ~= '' then
+      lines[#lines + 1] = '    fixed in: ' .. finding.fixed
+    end
+    if finding.url ~= '' then
+      lines[#lines + 1] = '    ' .. finding.url
+    end
+    lines[#lines + 1] = ''
+  end
+  return lines
+end
+
 --- Findings into the quickfix list, which is where a list of places to go
 --- belongs in this editor.
 function M.to_quickfix(findings, root, title)
