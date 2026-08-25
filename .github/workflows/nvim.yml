@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-      - uses: rhysd/action-setup-vim@6ba49e35ceb7ba2426d1f4849e0d9723c4f21d3f  # v1.4.2
+      - uses: rhysd/action-setup-vim@febef33995d6649302e9d88dda81e071b68f16a7  # v1.6.1
         with:
           neovim: true
           version: ${{ matrix.neovim }}
@@ -52,7 +52,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - uses: rhysd/action-setup-vim@6ba49e35ceb7ba2426d1f4849e0d9723c4f21d3f  # v1.4.2
+      - uses: rhysd/action-setup-vim@febef33995d6649302e9d88dda81e071b68f16a7  # v1.6.1
         with:
           neovim: true
           version: stable

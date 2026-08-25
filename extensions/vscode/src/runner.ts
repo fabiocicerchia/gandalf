@@ -193,7 +193,7 @@ function exec(
 
     // Decoded by the stream, not per chunk: a read boundary lands mid-UTF-8
     // sequence often enough on a big scan, and `buf.toString()` on each half
-    // turns one `--stream` gate line into two unparseable ones. It also drops
+    // turns one `--stream` gate line into two unparsable ones. It also drops
     // the Buffer.concat of the whole output at the end.
     child.stdout?.setEncoding('utf8');
     child.stderr?.setEncoding('utf8');

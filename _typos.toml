@@ -4,3 +4,7 @@
 # those hex strings as words ("ba" -> "by"/"be"). Ignore SHA-shaped link labels
 # rather than skipping CHANGELOG.md, so its prose is still checked.
 extend-ignore-re = ["\\[[0-9a-f]{7,40}\\]"]
+
+[default.extend-words]
+# `noet` is `noexpandtab` in the Vim help modeline, not a misspelling of "note".
+noet = "noet"
