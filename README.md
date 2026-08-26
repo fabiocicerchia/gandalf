@@ -240,12 +240,12 @@ project, and the same HTML scorecard in an editor tab. It scans the saved file
 on save and the whole tree on demand, so it stays off your CPU.
 
 Install it from the
-[VS Marketplace](https://marketplace.visualstudio.com/items?itemName=fabiocicerchia.gandalf-quality-gates)
-or from [Open VSX](https://open-vsx.org/extension/fabiocicerchia/gandalf-quality-gates)
+[VS Marketplace](https://marketplace.visualstudio.com/items?itemName=fabiocicerchia.gandalf)
+or from [Open VSX](https://open-vsx.org/extension/fabiocicerchia/gandalf)
 for the forks:
 
 ```bash
-code --install-extension fabiocicerchia.gandalf-quality-gates
+code --install-extension fabiocicerchia.gandalf
 make ext-install                   # ...or build the .vsix from this checkout
 make ext-install CODE=cursor       # ...into a fork
 ```
