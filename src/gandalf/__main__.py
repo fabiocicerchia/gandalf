@@ -14,8 +14,10 @@ import argparse
 import asyncio
 import contextlib
 import dataclasses
+import hashlib
 import json
 import os
+import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -82,11 +84,61 @@ async def _run_gates(gates, ctx, on_done=None, limit=0, timeouts=None, on_result
     return await asyncio.gather(*(one(g) for g in gates))
 
 
+def _tree_state(workdir: str) -> dict[str, str]:
+    """path → a hash of that file's uncommitted content, for every file git
+    currently sees as modified.
+
+    A fixer reports what it did in whatever words its tool prints, and the tools
+    disagree wildly: ruff counts what it fixed, `eslint --fix` says nothing at
+    all and exits non-zero whenever anything unfixable is left over. Diffing the
+    worktree either side of a fixer answers the question none of them answer —
+    which files it actually rewrote — and answers it the same way for a plugin's
+    fixer as for a built-in one. Empty, and so silent, outside a git worktree.
+    """
+    try:
+        out = subprocess.run(  # nosec B603 B607 - fixed git argv, no shell
+            ["git", "diff", "--no-color", "--no-ext-diff"],
+            cwd=workdir,
+            capture_output=True,
+            text=True,
+            check=False,
+        ).stdout
+    except OSError:
+        return {}
+    chunks: dict[str, list[str]] = {}
+    body: list[str] | None = None
+    for line in out.splitlines():
+        if line.startswith("diff --git "):
+            body = chunks.setdefault(line.split(" b/", 1)[-1], [])
+        elif body is not None:
+            body.append(line)
+    return {
+        path: hashlib.sha256("\n".join(lines).encode()).hexdigest()
+        for path, lines in chunks.items()
+    }
+
+
+def _touched(before: dict[str, str], after: dict[str, str]) -> list[str]:
+    """Files whose content differs between two worktree states."""
+    return sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k))
+
+
+def _files_note(paths: list[str], limit: int = 5) -> str:
+    """The rewritten files, named — and counted instead once there are too many
+    of them to read in a terminal line."""
+    shown = ", ".join(paths[:limit])
+    return f"{shown}, …+{len(paths) - limit} more" if len(paths) > limit else shown
+
+
 async def _run_fixers(gates, ctx):
     """Apply autofixes from gates that expose `async def fix(ctx)`. Sequential —
     fixers edit files (e.g. ruff --fix then ruff format on the same files), so
-    order matters and concurrent writes would race. Returns [(name, changed, msg)]."""
+    order matters and concurrent writes would race. Returns [(name, changed, msg)].
+
+    What each fixer changed is measured from the worktree rather than taken from
+    its own word — see _tree_state."""
     out = []
+    before = _tree_state(ctx.workdir)
     for g in gates:
         fix = getattr(g, "fix", None)
         if fix is None:
@@ -95,6 +147,11 @@ async def _run_fixers(gates, ctx):
             changed, msg = await fix(ctx)
         except Exception as exc:  # noqa: BLE001 — a broken fixer must not sink the run
             changed, msg = False, f"fix errored: {exc}"
+        after = _tree_state(ctx.workdir)
+        if touched := _touched(before, after):
+            changed, msg = True, f"{msg} — {_files_note(touched)}"
+            debug.log(f"fix {g.name}: rewrote {len(touched)} file(s)")
+        before = after
         out.append((g.name, changed, msg))
     return out
 
@@ -232,7 +289,11 @@ def _print_summary(
         )
     )
     if fixes:
-        applied = [f"{n}: {m}" for n, changed, m in fixes if changed]
+        # `removeprefix`: a fixer that names its own gate ("ruff: 2 autofixed")
+        # would otherwise print it twice.
+        applied = [
+            f"{n}: {m.removeprefix(f'{n}: ')}" for n, changed, m in fixes if changed
+        ]
         print(
             "\nFixes applied:\n"
             + ("\n".join(f"  ✔ {a}" for a in applied) if applied else "  (none)")
@@ -454,7 +515,9 @@ def _build_parser() -> argparse.ArgumentParser:
     ap.add_argument(
         "--fix",
         action="store_true",
-        help="apply gate autofixes (ruff, format, eslint) before scoring",
+        help="let every gate whose tool can fix its own findings do so, in place, "
+        "before scoring (ruff, ruff format, eslint, golangci-lint, clippy, "
+        "sqlfluff, shellcheck, codespell). Ignored for --commit",
     )
     ap.add_argument("--target", help="live URL for dynamic gates (nikto/sqlmap/dalfox)")
     ap.add_argument(
@@ -581,6 +644,7 @@ def main(argv: list[str] | None = None) -> int:
             "languages": sorted(detected),
             "title": args.title or "",
             "body": args.body or "",
+            "fix": do_fix,  # a gate may run its tool differently under --fix
             "config": cfg,
         }
         ctx = GateContext(

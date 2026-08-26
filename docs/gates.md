@@ -15,6 +15,10 @@ scorecard groups gates by the **category** column below.
   false-fails a repo it doesn't apply to.
 - **Degrades to WARN** — LLM/network gates never crash the run; if the endpoint
   is unreachable they warn instead of failing.
+- **Fixes** — under `--fix` the gate runs its tool in write mode and repairs
+  what it can before scoring; where the tool also reports *what* the fix is, a
+  PR comment carries it as an applicable `suggestion` (see
+  [CLI reference](cli.md#suggested-fixes)).
 
 Select gates per repo in `.gandalf.toml`: `only = [...]` (allowlist),
 `skip = [...]` (denylist). Env vars override the file.
@@ -25,7 +29,7 @@ Select gates per repo in `.gandalf.toml`: `only = [...]` (allowlist),
 
 | Gate | Checks | Notes |
 |------|--------|-------|
-| `semgrep` | Pattern-based SAST across languages. | FAIL on any ERROR-severity rule or >5 findings, else WARN. |
+| `semgrep` | Pattern-based SAST across languages. | FAIL on any ERROR-severity rule or >5 findings, else WARN. A rule shipping an autofix suggests it on a PR. |
 | `bandit` | Python SAST (common insecure APIs). | |
 | `gitleaks` | Secret scanning (keys, tokens, credentials). | **Blocking** — a leak is a hard stop. |
 | `codeql` | Semantic SAST; builds a queryable DB, deeper than pattern scanners. | Heavy; needs the CodeQL CLI. |
@@ -62,21 +66,21 @@ Select gates per repo in `.gandalf.toml`: `only = [...]` (allowlist),
 
 | Gate | Checks | Notes |
 |------|--------|-------|
-| `sqlfluff` | SQL lint. | Self-skips without `.sql`; dialect via `GANDALF_SQL_DIALECT`. |
+| `sqlfluff` | SQL lint. | Self-skips without `.sql`; dialect via `GANDALF_SQL_DIALECT`. **Fixes** with `sqlfluff fix`. |
 | `squawk` | Unsafe Postgres DDL (blocking locks, dropped columns, non-concurrent indexes). | Self-skips without `.sql`. |
 
 ## Code quality — lint, format, types, dead code
 
 | Gate | Checks | Notes |
 |------|--------|-------|
-| `ruff` | Python lint. | |
-| `format` | `ruff format --check` — formatting drift (does not rewrite). | |
+| `ruff` | Python lint. | **Fixes** with `ruff check --fix`; suggests the same edits on a PR. |
+| `format` | `ruff format --check` — formatting drift (does not rewrite). | **Fixes** by rewriting with `ruff format`. |
 | `mypy` | Python type checking. | |
 | `vulture` | Python dead-code detection. | |
-| `golangci_lint` | Go meta-linter (govet, staticcheck, errcheck, unused, …). | Go toolchain. |
-| `eslint` | JS/TS lint. | Uses the repo's local config/deps. |
+| `golangci_lint` | Go meta-linter (govet, staticcheck, errcheck, unused, …). | Go toolchain. **Fixes** with `--fix` (gofmt, goimports, misspell, …). |
+| `eslint` | JS/TS lint. | Uses the repo's local config/deps. **Fixes** with `eslint --fix`; suggests the same edits on a PR. |
 | `tsc` | TypeScript type check. | |
-| `shellcheck` | Shell-script lint. | |
+| `shellcheck` | Shell-script lint. | **Fixes** by applying its own `--format=diff` patch; suggests it on a PR. |
 | `yamllint` | YAML lint. | |
 
 ## Complexity
@@ -91,7 +95,7 @@ Select gates per repo in `.gandalf.toml`: `only = [...]` (allowlist),
 |------|--------|-------|
 | `interrogate` | Python docstring coverage. | WARNs below `GANDALF_DOCSTRING_MIN` (default 60%); self-skips without Python. |
 | `mdl` | Markdown lint. | Advisory; self-skips without markdown. |
-| `codespell` | Common misspellings in code/docs. | |
+| `codespell` | Common misspellings in code/docs. | **Fixes** unambiguous typos with `-w`; suggests them on a PR. |
 
 ## Build & tests
 
@@ -160,8 +164,23 @@ class MyGate:
 
 A gate can additionally opt into `--fix` by exposing
 `async def fix(self, ctx) -> tuple[bool, str]` that applies its autofixes in
-place and returns `(changed, message)`. Fixers run sequentially before scoring;
-`ruff`, `format`, and `eslint` ship one.
+place and returns `(changed, message)`. Fixers run sequentially before scoring
+(order matters: a lint fix and a reformat touch the same files), and `--fix`
+cascades to the tool itself — `ruff --fix`, `ruff format`, `eslint --fix`,
+`golangci-lint --fix`, `cargo clippy --fix`, `sqlfluff fix`, `codespell -w`,
+and shellcheck's own `--format=diff` patch. `ctx.meta["fix"]` is `True` during
+such a run, for a gate that wants to run its tool differently under it.
+
+Returning `False` for `changed` is safe: the runner measures what each fixer
+rewrote from the worktree, which is the only honest answer for the tools that
+report nothing (`eslint --fix`) or exit non-zero on a perfectly successful run
+(`eslint`, `golangci-lint`).
+
+If the gate's tool can say *what* the fix is, keep that in the finding — ruff's
+`fix`, shellcheck's `fix.replacements` and semgrep's `extra.fix` are read as-is,
+and anything else can be normalised into a `_fix` block (see
+`gandalf/suggest.py`). That is what becomes a one-click ` ```suggestion ` on a
+pull request.
 
 ### Language relevance
 

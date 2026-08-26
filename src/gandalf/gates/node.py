@@ -11,12 +11,59 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from gandalf import suggest
 from gandalf.base import GateContext, GateOutcome, GateResult
+from gandalf.findings import relpath
 from gandalf.plugins import run_tool, timeout_result, tool_missing
 
 
 def _no_pkg(ctx: GateContext) -> bool:
     return not (Path(ctx.workdir) / "package.json").exists()
+
+
+def _messages(results: list, workdir: str) -> list[dict]:
+    """eslint's per-message findings, flattened to the keys the report, SARIF
+    and the PR comments all read — and, for a rule eslint knows how to fix, a
+    `_fix` block so the pull request can carry the fix as a suggestion.
+
+    eslint reports a fix as a pair of character offsets into the file. Nothing
+    downstream speaks offsets, so the translation happens here, once, where the
+    file that produced them is at hand.
+    """
+    out: list[dict] = []
+    for res in results:
+        if not isinstance(res, dict):
+            continue
+        rel = relpath(res.get("filePath", ""), workdir)
+        source: str | None = None
+        for m in res.get("messages") or []:
+            if not isinstance(m, dict):
+                continue
+            item = {
+                "path": rel,
+                "line": m.get("line") or 0,
+                "column": m.get("column") or 0,
+                "rule_id": m.get("ruleId") or "eslint",
+                "message": m.get("message", ""),
+                "severity": "error" if m.get("severity") == 2 else "warning",
+            }
+            fix = m.get("fix") if isinstance(m.get("fix"), dict) else {}
+            rng = fix.get("range")
+            if isinstance(rng, list) and len(rng) == 2:
+                if source is None:  # read once per file, only if a fix needs it
+                    source = _read(workdir, rel)
+                edit = suggest.utf16_edit(source, rng[0], rng[1], fix.get("text"))
+                if edit:
+                    item["_fix"] = {"edits": [edit]}
+            out.append(item)
+    return out
+
+
+def _read(workdir: str, rel: str) -> str:
+    try:
+        return (Path(workdir) / rel).read_text(errors="replace")
+    except (OSError, ValueError):
+        return ""
 
 
 class EslintGate:
@@ -61,18 +108,23 @@ class EslintGate:
         score = max(0.0, 1.0 - min(total, 10) / 10)
         outcome = GateOutcome.FAIL if errors > 0 else GateOutcome.WARN
         return GateResult(
-            self.name, outcome, score, f"eslint: {errors} error(s), {warns} warning(s)"
+            self.name,
+            outcome,
+            score,
+            f"eslint: {errors} error(s), {warns} warning(s)",
+            _messages(results, ctx.workdir),
         )
 
     async def fix(self, ctx: GateContext) -> tuple[bool, str]:
-        """Apply eslint's autofixes in place (--fix). Called only under `--fix`."""
+        """Apply eslint's autofixes in place (--fix). Called only under `--fix`.
+
+        eslint exits non-zero whenever anything unfixable is left over, which is
+        the normal outcome of a successful fix run — so what it rewrote is not
+        read from the exit code but measured from the worktree by the runner."""
         if _no_pkg(ctx) or tool_missing("npx"):
             return (False, "eslint unavailable — nothing fixed")
-        rc, _out, _err = await run_tool(
-            ["npx", "--no-install", "eslint", "--fix", "."], ctx.workdir
-        )
-        # eslint --fix is silent on success; a clean rc means fixes (if any) applied.
-        return (rc == 0, "eslint --fix applied")
+        await run_tool(["npx", "--no-install", "eslint", "--fix", "."], ctx.workdir)
+        return (False, "eslint --fix applied")
 
 
 class TscGate:

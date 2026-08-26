@@ -193,3 +193,109 @@ if __name__ == "__main__":
     test_post_without_token_is_safe()
     test_brand_defaults_and_override()
     print("ok")
+
+
+# --- one-click fixes ---------------------------------------------------------
+# A finding whose tool ships the replacement text becomes a ```suggestion block
+# on the comment, so the reviewer commits the fix from the PR page.
+
+
+def _fixable(row, col, end_col, content, **extra):
+    return {
+        "filename": "a.py",
+        "code": "F401",
+        "message": "fix me",
+        "location": {"row": row, "column": col},
+        "fix": {
+            "edits": [
+                {
+                    "content": content,
+                    "location": {"row": row, "column": col},
+                    "end_location": {"row": row, "column": end_col},
+                }
+            ]
+        },
+        **extra,
+    }
+
+
+def _tree(
+    tmp_path,
+    text="one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\neleven\nprint( x )\ny = 2\nz = 3\n",
+):
+    (tmp_path / "a.py").write_text(text)
+    return str(tmp_path)
+
+
+def _fail(findings):
+    return [GateResult("ruff", GateOutcome.FAIL, 0.3, "ruff", findings)]
+
+
+def test_comment_carries_the_tools_own_fix(tmp_path):
+    root = _tree(tmp_path)
+    results = _fail([_fixable(12, 7, 8, "")])  # drop the space in `print( x )`
+    (comment,) = pr_comments.build(results, ["a.py"], _DIFF, workdir=root)[0]
+    assert comment["body"].endswith("```suggestion\nprint(x )\n```")
+    assert "start_line" not in comment  # single line: no range needed
+
+
+def test_multi_line_fix_makes_the_comment_span_the_range(tmp_path):
+    root = _tree(tmp_path)
+    joined = {
+        "filename": "a.py",
+        "message": "join these",
+        "location": {"row": 12, "column": 1},
+        "fix": {
+            "edits": [
+                {
+                    "content": "joined",
+                    "location": {"row": 12, "column": 1},
+                    "end_location": {"row": 13, "column": 6},
+                }
+            ]
+        },
+    }
+    (comment,) = pr_comments.build(_fail([joined]), ["a.py"], _DIFF, workdir=root)[0]
+    # lines 12-13 are both added by _DIFF, so GitHub will take the range
+    assert (comment["start_line"], comment["line"]) == (12, 13)
+    assert comment["start_side"] == comment["side"] == "RIGHT"
+    assert comment["body"].endswith("```suggestion\njoined\n```")
+
+
+def test_a_fix_reaching_outside_the_diff_is_left_as_prose(tmp_path):
+    """GitHub rejects a comment whose range leaves the diff, and a rejected
+    comment is a lost finding — so the prose stands on its own instead."""
+    root = _tree(tmp_path)
+    spill = {
+        "filename": "a.py",
+        "message": "reaches line 14",
+        "location": {"row": 13, "column": 1},
+        "fix": {
+            "edits": [
+                {
+                    "content": "x",
+                    "location": {"row": 13, "column": 1},
+                    "end_location": {"row": 14, "column": 1},
+                }
+            ]
+        },
+    }
+    (comment,) = pr_comments.build(_fail([spill]), ["a.py"], _DIFF, workdir=root)[0]
+    assert comment["line"] == 13 and "start_line" not in comment
+    assert "```suggestion" not in comment["body"]  # 14 is not in the diff
+
+
+def test_findings_without_a_fix_are_unchanged(tmp_path):
+    root = _tree(tmp_path)
+    comments, _ = pr_comments.build(_RESULTS, ["a.py", "b.py"], _DIFF, workdir=root)
+    assert all("```suggestion" not in c["body"] for c in comments)
+
+
+def test_summary_counts_the_applicable_fixes(tmp_path):
+    root = _tree(tmp_path)
+    results = _fail([_fixable(12, 7, 8, "")])
+    v = report.aggregate(results)
+    body = pr_comments.review_payload(results, v, ["a.py"], diff=_DIFF, workdir=root)[
+        "body"
+    ]
+    assert "1 carries a suggested fix" in body

@@ -17,6 +17,8 @@ runs them under bounded concurrency, then aggregates and renders the report.
 - **`gates/`** — one file per gate (bandit, ruff, semgrep, codeql, licenses, …).
 - **`base.py`** — `Gate`, `GateContext`, `GateResult`, `GateOutcome`.
 - **`report.py` / `sarif.py`** — RAG aggregation, terminal/HTML/SARIF output.
+- **`pr_comments.py` / `suggest.py`** — GitHub review comments anchored at
+  `file:line`, carrying the tool's own fix as an applicable suggestion.
 - **`llm.py` / `skills.py` / `skillgate.py`** — LLM summary and skill-driven
   review gates (playbooks under a top-level `skills/`).
 - **`config.py` / `scope.py` / `suppress.py` / `severity.py`** — `.gandalf.toml`

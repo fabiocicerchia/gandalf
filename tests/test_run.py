@@ -9,10 +9,13 @@ import subprocess
 
 from gandalf import plugins
 from gandalf.__main__ import (
+    _files_note,
     _gate_timeout,
     _resolve_concurrency,
     _run_fixers,
     _run_gates,
+    _touched,
+    _tree_state,
     main,
 )
 from gandalf.base import GateContext, GateOutcome, GateResult
@@ -328,3 +331,62 @@ def test_payload_gates_carry_their_category(tmp_path, monkeypatch):
 
     payload = json.loads(next(out.glob("gandalf-*.json")).read_text())
     assert [g["category"] for g in payload["gates"]] == ["Build & tests"]
+
+
+# --- --fix: what a fixer actually changed ---------------------------------------
+# A fixer's own account of its work is whatever its tool prints, and several of
+# them print nothing useful (eslint) or exit non-zero on a successful run. The
+# runner measures the worktree instead — these cover that measurement.
+
+
+def test_files_note_lists_and_truncates():
+    assert _files_note(["a.py", "b.py"]) == "a.py, b.py"
+    note = _files_note([f"f{i}.py" for i in range(7)])
+    assert note.startswith("f0.py, ") and note.endswith("…+2 more")
+
+
+def test_touched_spots_content_changes_not_just_new_files():
+    before = {"a.py": "h1", "b.py": "same"}
+    after = {"a.py": "h2", "b.py": "same", "c.py": "new"}
+    assert _touched(before, after) == ["a.py", "c.py"]
+
+
+def test_tree_state_outside_a_repo_is_silent(tmp_path):
+    assert _tree_state(str(tmp_path)) == {}
+
+
+def test_fixer_report_comes_from_the_worktree(tmp_path):
+    """The fixer under-reports (says it changed nothing); the runner corrects it
+    from the diff, which is what `eslint --fix` and `golangci-lint --fix` need."""
+    repo = _mkrepo(tmp_path)
+
+    class _Rewriter:
+        name = "rewriter"
+        blocking = False
+
+        async def fix(self, ctx):
+            path = repo / "src" / "ok.py"
+            path.write_text(path.read_text().replace("VALUE = 1", "VALUE = 2"))
+            return (False, "rewriter ran")
+
+    (name, changed, msg) = asyncio.run(
+        _run_fixers([_Rewriter()], GateContext(repo=str(repo), workdir=str(repo)))
+    )[0]
+    assert (name, changed) == ("rewriter", True)
+    assert msg == "rewriter ran — src/ok.py"
+
+
+def test_a_fixer_that_changes_nothing_is_reported_as_such(tmp_path):
+    repo = _mkrepo(tmp_path)
+
+    class _Idle:
+        name = "idle"
+        blocking = False
+
+        async def fix(self, ctx):
+            return (False, "nothing to do")
+
+    res = asyncio.run(
+        _run_fixers([_Idle()], GateContext(repo=str(repo), workdir=str(repo)))
+    )
+    assert res == [("idle", False, "nothing to do")]

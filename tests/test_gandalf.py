@@ -461,6 +461,75 @@ def test_atheris_gate_ignores_its_own_artifact_prefix_flag(monkeypatch, tmp_path
     assert res.outcome is GateOutcome.FAIL
 
 
+# --- eslint findings: the gate's own translation of a fixable message ----------
+
+
+def test_eslint_messages_carry_a_normalised_fix(tmp_path):
+    """eslint reports a fix as character offsets; the gate turns them into the
+    line/column vocabulary the report, SARIF and the PR suggestion all read."""
+    from gandalf.gates.node import _messages
+
+    (tmp_path / "a.js").write_text("const a = 1\n")
+    results = [
+        {
+            "filePath": str(tmp_path / "a.js"),
+            "messages": [
+                {
+                    "ruleId": "semi",
+                    "severity": 2,
+                    "message": "Missing semicolon.",
+                    "line": 1,
+                    "column": 12,
+                    "fix": {"range": [11, 11], "text": ";"},
+                },
+                {  # no fix, and no ruleId (a parse error) → still a finding
+                    "severity": 2,
+                    "message": "Parsing error",
+                    "line": 1,
+                    "column": 1,
+                },
+            ],
+        }
+    ]
+    fixable, plain = _messages(results, str(tmp_path))
+    assert (fixable["path"], fixable["rule_id"], fixable["severity"]) == (
+        "a.js",
+        "semi",
+        "error",
+    )
+    assert fixable["_fix"]["edits"] == [
+        {
+            "start_line": 1,
+            "start_column": 12,
+            "end_line": 1,
+            "end_column": 12,
+            "text": ";",
+        }
+    ]
+    assert "_fix" not in plain and plain["rule_id"] == "eslint"
+
+
+def test_eslint_messages_survive_junk(tmp_path):
+    """eslint's JSON is external input; a malformed entry must not sink a gate."""
+    from gandalf.gates.node import _messages
+
+    junk = [
+        "not a result",
+        {"filePath": str(tmp_path / "missing.js"), "messages": ["not a message"]},
+        {"filePath": str(tmp_path / "missing.js"), "messages": [{"fix": "nonsense"}]},
+    ]
+    assert _messages(junk, str(tmp_path)) == [
+        {
+            "path": "missing.js",
+            "line": 0,
+            "column": 0,
+            "rule_id": "eslint",
+            "message": "",
+            "severity": "warning",
+        }
+    ]
+
+
 if __name__ == "__main__":
     test_aggregate_rag()
     test_aggregate_score()
