@@ -59,8 +59,9 @@ jobs:
       EXT: extensions/vscode
       # Must match package.json's `name`, and neither can ever change: the
       # Marketplace identity is publisher.name, so a rename is a new extension
-      # (and plain `gandalf` is already taken by someone else). Rename only
-      # `displayName`.
+      # (and plain `gandalf` is already taken by someone else). `displayName`
+      # is just as global — bare "Gandalf" belongs to rberga06.gandalf — so it
+      # has to keep the suffix too. Neither field is ours to shorten.
       VSIX_NAME: gandalf-quality-gates
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
