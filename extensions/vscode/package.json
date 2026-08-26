@@ -1,6 +1,6 @@
 {
-  "name": "gandalf",
-  "displayName": "Gandalf — Quality Gates",
+  "name": "gandalf-quality-gates",
+  "displayName": "Gandalf",
   "description": "Run Gandalf's quality gates while you code: inline diagnostics, a findings panel, and the full HTML scorecard inside VS Code.",
   "version": "0.9.0",
   "publisher": "fabiocicerchia",

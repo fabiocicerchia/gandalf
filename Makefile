@@ -8,7 +8,7 @@ EXT_DIR ?= extensions/vscode
 # Read rather than hard-coded: vsce names the VSIX after the version in the
 # manifest, so a release bump must not turn ext-publish into "file not found".
 EXT_VERSION := $(shell node -p "require('./$(EXT_DIR)/package.json').version" 2>/dev/null)
-VSIX := $(EXT_DIR)/gandalf-$(EXT_VERSION).vsix
+VSIX := $(EXT_DIR)/gandalf-quality-gates-$(EXT_VERSION).vsix
 # The editor's CLI. Override for a fork: make ext-install CODE=cursor
 CODE ?= code
 
