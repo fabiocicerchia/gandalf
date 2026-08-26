@@ -22,13 +22,13 @@ What you get:
 From the Marketplace — **Extensions** view, search *Gandalf — Quality Gates*, or:
 
 ```sh
-code --install-extension fabiocicerchia.gandalf
+code --install-extension fabiocicerchia.gandalf-quality-gates
 ```
 
 It is published to the
-[VS Marketplace](https://marketplace.visualstudio.com/items?itemName=fabiocicerchia.gandalf)
+[VS Marketplace](https://marketplace.visualstudio.com/items?itemName=fabiocicerchia.gandalf-quality-gates)
 for VS Code and to
-[Open VSX](https://open-vsx.org/extension/fabiocicerchia/gandalf)
+[Open VSX](https://open-vsx.org/extension/fabiocicerchia/gandalf-quality-gates)
 for the forks (Cursor, Windsurf, VSCodium), from the same release.
 
 To build it from a checkout instead — an unreleased change, or no Marketplace —

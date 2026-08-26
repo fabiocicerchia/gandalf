@@ -57,7 +57,11 @@ jobs:
       contents: write  # attach the VSIX to the release
     env:
       EXT: extensions/vscode
-      VSIX_NAME: gandalf
+      # Must match package.json's `name`, and neither can ever change: the
+      # Marketplace identity is publisher.name, so a rename is a new extension
+      # (and plain `gandalf` is already taken by someone else). Rename only
+      # `displayName`.
+      VSIX_NAME: gandalf-quality-gates
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 

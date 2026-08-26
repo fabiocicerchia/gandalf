@@ -47,12 +47,12 @@ From the Marketplace: open the **Extensions** view, search for *Gandalf —
 Quality Gates*, press **Install**. Or, from a terminal:
 
 ```sh
-code --install-extension fabiocicerchia.gandalf
+code --install-extension fabiocicerchia.gandalf-quality-gates
 ```
 
-- [**VS Marketplace**](https://marketplace.visualstudio.com/items?itemName=fabiocicerchia.gandalf)
+- [**VS Marketplace**](https://marketplace.visualstudio.com/items?itemName=fabiocicerchia.gandalf-quality-gates)
   — VS Code and VS Code Insiders.
-- [**Open VSX**](https://open-vsx.org/extension/fabiocicerchia/gandalf)
+- [**Open VSX**](https://open-vsx.org/extension/fabiocicerchia/gandalf-quality-gates)
   — Cursor, Windsurf, VSCodium and the other forks, which don't reach the VS
   Marketplace. Same extension, published by the same release.
 
@@ -82,7 +82,7 @@ To hack on it instead of installing it: `npm run watch`, open
 Extension Development Host with the extension loaded from source.
 
 To remove it: **Extensions** view → Gandalf → Uninstall, or
-`code --uninstall-extension fabiocicerchia.gandalf`.
+`code --uninstall-extension fabiocicerchia.gandalf-quality-gates`.
 
 ## Requirements
 
