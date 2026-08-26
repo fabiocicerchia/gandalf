@@ -57,7 +57,7 @@ jobs:
       contents: write  # attach the VSIX to the release
     env:
       EXT: extensions/vscode
-      VSIX_NAME: gandalf-quality-gates
+      VSIX_NAME: gandalf
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
