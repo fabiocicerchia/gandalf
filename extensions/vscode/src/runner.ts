@@ -152,9 +152,13 @@ function exec(
   },
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    let child;
+    let child: ReturnType<typeof spawn>;
     try {
-      child = spawn(command, args, { cwd: opts.cwd, env: opts.env });
+      // Its own process group: gandalf shells out to the scanners (trivy,
+      // semgrep, docker), and signalling the python process alone leaves those
+      // running as orphans of the extension host — a cancelled scan that keeps
+      // burning a core. The group is what has to die, not the parent.
+      child = spawn(command, args, { cwd: opts.cwd, env: opts.env, detached: process.platform !== 'win32' });
     } catch (err) {
       reject(err);
       return;
@@ -165,6 +169,7 @@ function exec(
     let outChars = 0;
     let errChars = 0;
     let settled = false;
+    let exited = false;
 
     const finish = (fn: () => void) => {
       if (settled) return;
@@ -174,11 +179,31 @@ function exec(
       fn();
     };
 
+    const signal = (sig: NodeJS.Signals) => {
+      try {
+        if (process.platform === 'win32') {
+          // No process groups: taskkill's /T walks the child tree instead.
+          spawn('taskkill', ['/pid', String(child.pid), '/T', '/F']).unref();
+        } else if (child.pid) {
+          process.kill(-child.pid, sig);
+        }
+      } catch {
+        // Group already gone, or never formed — fall back to the child itself.
+        try {
+          child.kill(sig);
+        } catch {
+          // Nothing left to signal.
+        }
+      }
+    };
+
     // SIGTERM first so a dockerized gate gets a chance to tear its container
     // down; SIGKILL only if the process is still there a few seconds later.
+    // `exited` rather than `child.killed`: that flag only says a signal was
+    // delivered, so it is true immediately and the escalation never fired.
     const kill = () => {
-      child.kill('SIGTERM');
-      setTimeout(() => child.killed || child.kill('SIGKILL'), 3000).unref?.();
+      signal('SIGTERM');
+      setTimeout(() => exited || signal('SIGKILL'), 3000).unref?.();
     };
 
     const timer = setTimeout(() => {
@@ -211,7 +236,11 @@ function exec(
       }
       opts.onStderr?.(s);
     });
-    child.on('error', (err) => finish(() => reject(err)));
+    child.on('error', (err) => {
+      exited = true;
+      finish(() => reject(err));
+    });
+    child.on('exit', () => (exited = true));
     child.on('close', (code) =>
       finish(() => resolve({ code: code ?? -1, stdout: out.join(''), stderr: errOut.join('') })),
     );
