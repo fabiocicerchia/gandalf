@@ -88,6 +88,31 @@ class ClippyGate:
         outcome = GateOutcome.WARN if n <= 3 else GateOutcome.FAIL
         return GateResult(self.name, outcome, score, f"clippy: {n} issue(s)")
 
+    async def fix(self, ctx: GateContext) -> tuple[bool, str]:
+        """`cargo clippy --fix` — applies the machine-applicable lints. Called
+        only under `--fix`.
+
+        cargo refuses to rewrite a dirty checkout unless told otherwise, and a
+        dirty checkout is exactly the case `--fix` exists for: the point is to
+        fix the change you are working on. git is the undo button here."""
+        if _no_crate(ctx) or tool_missing("cargo"):
+            return (False, "cargo unavailable — nothing fixed")
+        rc, _out, err = await run_tool(
+            [
+                "cargo",
+                "clippy",
+                "--fix",
+                "--allow-dirty",
+                "--allow-staged",
+                "--allow-no-vcs",
+            ],
+            ctx.workdir,
+        )
+        if rc != 0:
+            tail = "\n".join((err or "").strip().splitlines()[-2:])
+            return (False, f"clippy --fix: did not complete — {tail[:120]}")
+        return (False, "clippy --fix applied")
+
 
 class CargoAuditGate:
     """cargo-audit — RUSTSEC advisory scan of Cargo.lock."""

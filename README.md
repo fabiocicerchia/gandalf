@@ -93,6 +93,11 @@ More in [`docs/architecture.md`](docs/architecture.md).
 - **Emits what other tools already read** — SARIF for code scanning, JUnit for
   a CI test panel, a shields.io endpoint badge, PR review comments anchored at
   `file:line`, NDJSON while the run is still going.
+- **Fixes what can be fixed.** `--fix` cascades to the tools themselves (ruff,
+  ruff format, eslint, golangci-lint, clippy, sqlfluff, codespell, shellcheck),
+  so the scorecard reflects the fixed tree and what is left is what needs a
+  person. On a pull request the same fixes arrive as GitHub `suggestion`
+  blocks — one click to commit, no retyping.
 - **Zero host installs, optionally.** `make tools` builds one image holding
   every scanner; gates find it automatically. Caveat: it is built, never
   pulled — a quality gate should not reach the network on its own initiative.

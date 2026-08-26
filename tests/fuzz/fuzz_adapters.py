@@ -31,9 +31,9 @@ try:
     import atheris
 
     with atheris.instrument_imports():  # type: ignore[attr-defined]  # no stubs for atheris
-        from gandalf import llm, report, severity, skills, suppress
+        from gandalf import llm, report, severity, skills, suggest, suppress
 except ImportError:
-    from gandalf import llm, report, severity, skills, suppress
+    from gandalf import llm, report, severity, skills, suggest, suppress
 
 # Exceptions each adapter is CONTRACTED to raise on bad input — expected, not a
 # fuzz finding. Anything outside these propagates and atheris flags it.
@@ -44,6 +44,16 @@ def _exercise(text: str) -> None:
     """Feed one fuzzed string through every text adapter, and through the dict
     adapters as both a message string and a nested finding dict."""
     finding = {"path": text[:80], "message": text, "extra": {"message": text}}
+    # A fix adapter reads a tool's own coordinates and rewrites source from
+    # them, so a crash — or an edit that doesn't land where it claims — is the
+    # one that would reach a reviewer as a wrong one-click patch.
+    lines = ["x = 1", text[:200], ""]
+    suggest.edits(finding, lines)
+    suggest.edits({"typo": text}, lines)
+    suggest.edits(
+        {"fix": {"edits": [{"content": text, "location": {"row": text[:2]}}]}}, lines
+    )
+    suggest.utf16_edit(text, 0, len(text), text)
 
     llm._split_sections(text)
     llm._split_gates(text)
@@ -81,6 +91,8 @@ def _selfcheck() -> None:
         '```json\n{"score": 5}\n```',
         "not json { broken",
         "ruff:E501:foo.py:12",
+        "a.py:1: colr ==> color",
+        "==>" * 5000,  # the correction scrape, with nothing to anchor it
         ":::::",
         "\x00￿\U0001f4a9",
         "["

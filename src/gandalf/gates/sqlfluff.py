@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.plugins import missing_result, run_tool, timeout_result
+from gandalf.plugins import missing_result, run_tool, timeout_result, tool_missing
 
 _SKIP = (".venv", "node_modules", "llama.cpp", ".git", "reports")
 _DIALECT = os.environ.get("GANDALF_SQL_DIALECT", "ansi")
@@ -67,3 +67,25 @@ class SqlfluffGate:
         return GateResult(
             self.name, outcome, score, f"sqlfluff: {n} lint issue(s)", findings
         )
+
+    async def fix(self, ctx: GateContext) -> tuple[bool, str]:
+        """Rewrite the SQL with `sqlfluff fix`. Called only under `--fix`.
+
+        `--force` is tried first and dropped on the retry: sqlfluff 2.x prompts
+        before writing unless it is passed, and sqlfluff 3.x removed the flag
+        because it stopped prompting. Asking the tool which it is costs another
+        subprocess; letting the wrong one fail and retrying costs the same and
+        cannot go stale.
+        """
+        sqls = _sql_files(Path(ctx.workdir))
+        if not sqls:
+            return (False, "sqlfluff: no SQL files")
+        if tool_missing("sqlfluff"):
+            return (False, "sqlfluff unavailable — nothing fixed")
+        base = ["sqlfluff", "fix", "--disable-progress-bar", "--dialect", _DIALECT]
+        rc, out, err = await run_tool([*base, "--force", *sqls], ctx.workdir)
+        if rc != 0 and "no such option" in (out + err).lower():
+            rc, out, err = await run_tool([*base, *sqls], ctx.workdir)
+        if rc < 0:
+            return (False, "sqlfluff: did not run")
+        return (False, f"sqlfluff fix: {len(sqls)} file(s) processed")

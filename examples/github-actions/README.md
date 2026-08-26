@@ -71,6 +71,12 @@ inline comments; the rest (`yamllint`, `mdl`, `shellcheck`, repo-level checks, a
 anything on an unchanged line) roll up under "Other findings" in the summary so
 nothing is dropped.
 
+A comment whose tool also knows the fix carries it as a GitHub
+**suggestion** — `ruff`, `eslint`, `shellcheck`, `codespell` and any `semgrep`
+rule with an autofix — so you apply it with **Commit suggestion**, or batch
+several and commit them in one go, without leaving the diff. What is suggested
+is exactly what `gandalf --fix` would have written locally.
+
 Re-runs update, they don't pile up. The summary is a single sticky comment that
 gets **edited in place** with a "Last updated …" stamp on every push, and inline
 comments are reconciled against the PR: unchanged ones are left alone (so reply

@@ -8,6 +8,32 @@ from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.plugins import _scan_targets, missing_result, run_tool, timeout_result
 
 
+def _flat(f: dict) -> dict:
+    return {
+        "path": f.get("path", ""),
+        "line": f.get("start", {}).get("line", ""),
+        "check_id": f.get("check_id", ""),
+        "message": f.get("extra", {}).get("message", "") or f.get("check_id", ""),
+    }
+
+
+def _autofix(f: dict) -> dict:
+    """The rule's own autofix, kept whole when it has one.
+
+    A rule that ships `extra.fix` knows the exact replacement text, and that is
+    what becomes a one-click suggestion on the pull request (see suggest.py) —
+    so for those findings the position keys travel with the flattened finding
+    instead of being flattened away.
+    """
+    if not (f.get("extra") or {}).get("fix"):
+        return {}
+    return {
+        "start": f.get("start") or {},
+        "end": f.get("end") or {},
+        "extra": {"fix": f["extra"]["fix"]},
+    }
+
+
 class SemgrepGate:
     name = "semgrep"
     blocking = False
@@ -71,14 +97,5 @@ class SemgrepGate:
         outcome = GateOutcome.FAIL if has_error or n > 5 else GateOutcome.WARN
         # semgrep nests message/rule under extra + check_id; flatten to the keys
         # report.fmt_finding reads, so the report shows the actual issue not just a path.
-        flat = [
-            {
-                "path": f.get("path", ""),
-                "line": f.get("start", {}).get("line", ""),
-                "check_id": f.get("check_id", ""),
-                "message": f.get("extra", {}).get("message", "")
-                or f.get("check_id", ""),
-            }
-            for f in findings
-        ]
+        flat = [{**_flat(f), **_autofix(f)} for f in findings]
         return GateResult(self.name, outcome, score, f"semgrep: {n} finding(s)", flat)

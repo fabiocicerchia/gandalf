@@ -5,6 +5,13 @@
 comment; findings GitHub would reject — no usable line, or a line the PR diff
 never adds — roll up into the summary body so nothing is dropped.
 
+When the tool that flagged something also knows how to fix it (ruff, shellcheck,
+semgrep, eslint, codespell), the comment carries the fix as a ```suggestion
+block, so the reader applies it from the PR instead of retyping it — see
+gandalf/suggest.py. A comment whose suggestion spans several lines becomes a
+multi-line comment (`start_line`..`line`), which is the only form GitHub will
+apply a multi-line block from.
+
 `post()` is idempotent across re-runs: the summary lives in one sticky issue
 comment that gets edited (with a "last updated" stamp) instead of re-posted,
 and inline comments are diffed against what's already on the PR — unchanged
@@ -26,7 +33,7 @@ from datetime import datetime, timezone
 
 from .base import GateOutcome, GateResult
 from .report import fmt_finding
-from . import findings
+from . import findings, suggest
 
 # Hidden in the rendered comment; how a re-run finds what it posted last time.
 _MARKER = "<!-- gandalf-pr-review -->"
@@ -95,6 +102,34 @@ def _text_location(f: dict) -> tuple[str, int]:
     return (hit[1], int(hit[2])) if hit else ("", 0)
 
 
+def _comment(
+    path: str,
+    line: int,
+    items: list[tuple[str, dict]],
+    anchorable: set[int] | None,
+    workdir: str,
+) -> dict:
+    """One inline review comment: the findings on that line, plus their fix as a
+    one-click ```suggestion block when the tools shipped one.
+
+    All the findings merged into the comment are fixed together — two ruff hits
+    on one line produce a single suggestion rather than two, each of which would
+    go stale the moment the other was applied.
+    """
+    body = "\n\n---\n\n".join(b for b, _ in items)
+    comment = {"path": path, "line": line, "side": "RIGHT", "body": body}
+    fix = suggest.for_anchor(workdir, path, line, [f for _, f in items], anchorable)
+    if fix is None:
+        return comment
+    last, text = fix
+    comment["body"] = f"{body}\n\n{suggest.block(text)}"
+    if last > line:
+        # A block is applied to whatever range the comment covers, so a
+        # replacement spanning several lines needs the comment to span them too.
+        comment.update({"start_line": line, "start_side": "RIGHT", "line": last})
+    return comment
+
+
 def build(
     results: list[GateResult],
     changed_files: list[str] | None = None,
@@ -105,7 +140,9 @@ def build(
     line the diff adds; overflow is human-readable text for the summary."""
     changed = set(changed_files or [])
     added = added_lines(diff)
-    inline: dict[tuple[str, int], list[str]] = {}
+    # The finding travels with its rendered body: the suggestion block is built
+    # from the tool's own fix data, which only the raw finding still carries.
+    inline: dict[tuple[str, int], list[tuple[str, dict]]] = {}
     overflow: list[str] = []
     for r in results:
         if r.outcome == GateOutcome.PASS:
@@ -128,15 +165,15 @@ def build(
                     bool(path) and line > 0 and (not changed or path in changed)
                 )
             if anchorable:
-                inline.setdefault((path, line), []).append(body)
+                inline.setdefault((path, line), []).append((body, f))
             else:
                 where = f"{path}:{line}" if path and line else (path or r.name)
                 overflow.append(
                     f"- {_RAG_WORD[r.outcome]} `{r.name}` {where} — {fmt_finding(f)}"
                 )
     comments = [
-        {"path": p, "line": ln, "side": "RIGHT", "body": "\n\n---\n\n".join(bodies)}
-        for (p, ln), bodies in sorted(inline.items())
+        _comment(p, ln, items, added.get(p), workdir)
+        for (p, ln), items in sorted(inline.items())
     ]
     return comments, overflow
 
@@ -165,7 +202,15 @@ def review_payload(
     header = f"{icon} {name}".strip()
     lines = [f"## {header} — {word} · {verdict.score}/100", ""]
     if comments:
-        lines.append(f"{len(comments)} inline comment(s) below.")
+        fixable = sum(1 for c in comments if "```suggestion" in c["body"])
+        note = f"{len(comments)} inline comment(s) below."
+        if fixable:
+            note += (
+                f" {fixable} carr{'ies' if fixable == 1 else 'y'} a suggested fix — "
+                "commit it straight from the diff with **Add suggestion to batch** "
+                "or **Commit suggestion**."
+            )
+        lines.append(note)
     if overflow:
         shown = overflow[:max_overflow]
         # <details> keeps a long finding list from burying the PR conversation.

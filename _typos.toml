@@ -8,3 +8,6 @@ extend-ignore-re = ["\\[[0-9a-f]{7,40}\\]"]
 [default.extend-words]
 # `noet` is `noexpandtab` in the Vim help modeline, not a misspelling of "note".
 noet = "noet"
+# `colr` is the stand-in misspelling in the codespell-suggestion tests — the
+# fixture *is* a typo, and correcting it would delete what the test checks.
+colr = "colr"

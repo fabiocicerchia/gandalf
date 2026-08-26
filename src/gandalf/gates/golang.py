@@ -88,6 +88,18 @@ class GolangciLintGate:
             self.name, outcome, score, f"golangci-lint: {n} issue(s)", issues
         )
 
+    async def fix(self, ctx: GateContext) -> tuple[bool, str]:
+        """`golangci-lint run --fix` — applies the fixes its linters ship
+        (gofmt/gofumpt, goimports, misspell, …). Called only under `--fix`.
+
+        Exits non-zero whenever anything unfixable is left, which is the usual
+        end of a successful fix run, so what it rewrote is measured from the
+        worktree rather than read from the exit code."""
+        if _no_module(ctx) or tool_missing("golangci-lint"):
+            return (False, "golangci-lint unavailable — nothing fixed")
+        await run_tool(["golangci-lint", "run", "--fix", "./..."], ctx.workdir)
+        return (False, "golangci-lint --fix applied")
+
 
 class GovulncheckGate:
     name = "govulncheck"
