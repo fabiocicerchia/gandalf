@@ -83,6 +83,30 @@ def test_discovery_finds_builtins():
         "eslint",
         "tsc",
         "node_test",
+        # java / kotlin
+        "java_build",
+        "checkstyle",
+        "ktlint",
+        "java_test",
+        # ruby
+        "ruby_syntax",
+        "rubocop",
+        "bundler_audit",
+        "ruby_test",
+        # php
+        "php_syntax",
+        "phpcs",
+        "composer_audit",
+        "php_test",
+        # c / c++
+        "cpp_build",
+        "cppcheck",
+        "cpp_test",
+        # .net
+        "dotnet_build",
+        "dotnet_format",
+        "dotnet_audit",
+        "dotnet_test",
         # ci / compliance / dynamic
         "ci_act",
         "compliance",

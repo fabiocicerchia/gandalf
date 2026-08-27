@@ -18,6 +18,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import time
 from fnmatch import translate
 from functools import lru_cache
@@ -440,6 +441,11 @@ def _load_module(path: Path):
     if spec is None or spec.loader is None:
         raise ImportError(f"cannot load gate module from {path}")
     mod = importlib.util.module_from_spec(spec)
+    # Registered before it executes, the way importlib itself does it: several
+    # stdlib decorators (@dataclass, Enum, NamedTuple) look their own class's
+    # module up in sys.modules while the class body is being built, and a gate
+    # file using one of them dies on import if it is not there.
+    sys.modules[spec.name] = mod
     spec.loader.exec_module(mod)
     return mod
 

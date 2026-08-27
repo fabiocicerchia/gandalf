@@ -76,10 +76,14 @@ More in [`docs/architecture.md`](docs/architecture.md).
 
 ## What it does
 
-- **Runs ~35 gates** across security, dependencies, code quality, complexity,
+- **Runs ~60 gates** across security, dependencies, code quality, complexity,
   documentation, build & tests, best practices and architecture. Caveat: most
   wrap a third-party scanner, so what actually runs depends on what is
   installed — see the status note above.
+- **Speaks nine ecosystems.** Python, Go, Rust, Node/TypeScript, Java/Kotlin,
+  Ruby, PHP, C/C++ and .NET each get build, lint, dependency-audit and test
+  gates wired to that ecosystem's standard tooling — and only the ones matching
+  the languages in scope run.
 - **Degrades instead of failing.** A missing tool is amber with the reason in
   the line, so a partial run is legible rather than silently narrower.
 - **Evaluates a scope, not a file.** Working tree, the index, or a commit —
@@ -94,7 +98,8 @@ More in [`docs/architecture.md`](docs/architecture.md).
   a CI test panel, a shields.io endpoint badge, PR review comments anchored at
   `file:line`, NDJSON while the run is still going.
 - **Fixes what can be fixed.** `--fix` cascades to the tools themselves (ruff,
-  ruff format, eslint, golangci-lint, clippy, sqlfluff, codespell, shellcheck),
+  ruff format, eslint, golangci-lint, clippy, rubocop, ktlint, phpcbf,
+  dotnet format, sqlfluff, codespell, shellcheck),
   so the scorecard reflects the fixed tree and what is left is what needs a
   person. On a pull request the same fixes arrive as GitHub `suggestion`
   blocks — one click to commit, no retyping.
@@ -213,7 +218,7 @@ variables that override it, are in
 ```toml
 [gandalf]
 skip        = ["atheris"]                    # never run these
-concurrency = 8                              # ~35 gates each able to spawn a
+concurrency = 8                              # ~60 gates each able to spawn a
                                              # docker run: bound them
 exclude     = ["src/generated", "*.min.js"]  # paths no gate should read
 

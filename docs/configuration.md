@@ -38,7 +38,7 @@ exclude     = ["src/generated", "*.min.js"]  # paths no gate should read
 ```
 
 `concurrency` bounds how many gates run simultaneously — important because
-~35 gates may each spawn a `docker run`, which can swamp a laptop or CI runner
+~60 gates may each spawn a `docker run`, which can swamp a laptop or CI runner
 if they all launch at once. Precedence: `--concurrency N` → `GANDALF_CONCURRENCY`
 → config → CPU count.
 
