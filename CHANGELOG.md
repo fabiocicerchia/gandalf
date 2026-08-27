@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.1](https://github.com/fabiocicerchia/gandalf/compare/v0.11.0...v0.11.1) (2026-08-27)
+
+
+### Bug Fixes
+
+* **vscode:** kill the whole scan process group on cancel ([#68](https://github.com/fabiocicerchia/gandalf/issues/68)) ([9311115](https://github.com/fabiocicerchia/gandalf/commit/9311115028c26d00a8a32de7eed2d5366579ba76))
+
 ## [0.11.0](https://github.com/fabiocicerchia/gandalf/compare/v0.10.0...v0.11.0) (2026-08-26)
 
 
