@@ -46,6 +46,9 @@ Select gates per repo in `.gandalf.toml`: `only = [...]` (allowlist),
 | `osv_scanner` | OSV scan across lockfiles (multi-ecosystem). | |
 | `govulncheck` | Go vulnerability database check. | Go toolchain. |
 | `trivy` | Known-vuln scan of dependencies. | |
+| `bundler_audit` | Ruby advisories against `Gemfile.lock`. | bundler-audit; `--no-update` (the DB is yours to refresh). |
+| `composer_audit` | PHP advisories from Packagist. | Part of Composer — no plugin. |
+| `dotnet_audit` | Vulnerable NuGet packages, transitive included. | Part of the .NET SDK. |
 
 ## Licensing
 
@@ -82,6 +85,12 @@ Select gates per repo in `.gandalf.toml`: `only = [...]` (allowlist),
 | `tsc` | TypeScript type check. | |
 | `shellcheck` | Shell-script lint. | **Fixes** by applying its own `--format=diff` patch; suggests it on a PR. |
 | `yamllint` | YAML lint. | |
+| `checkstyle` | Java style/lint. | The repo's `checkstyle.xml` when it ships one, else Google style (`GANDALF_CHECKSTYLE_CONFIG`). |
+| `ktlint` | Kotlin lint. | **Fixes** with `ktlint --format`. |
+| `rubocop` | Ruby lint. | **Fixes** with `rubocop --autocorrect` (safe corrections only). |
+| `phpcs` | PHP style/lint. | Prefers `vendor/bin/phpcs`; the repo's ruleset, else PSR-12. **Fixes** with `phpcbf`. |
+| `cppcheck` | C/C++ static analysis. | Needs no compile database. |
+| `dotnet_format` | .NET formatting/style drift. | **Fixes** with `dotnet format`. |
 
 ## Complexity
 
@@ -107,6 +116,27 @@ Select gates per repo in `.gandalf.toml`: `only = [...]` (allowlist),
 | `go_test` | Runs `go test`. | |
 | `node_test` | Runs `npm test`. | |
 | `ci_act` | Runs `.github/workflows/*` locally via `act` in Docker. | Self-skips without workflows. |
+| `java_build` | `mvn compile` / `gradle classes`. | **Blocking**; the wrapper wins over a host `gradle`. |
+| `java_test` | `mvn test` / `gradle test`. | |
+| `ruby_syntax` | `ruby -c` over the Ruby in scope. | **Blocking**. |
+| `ruby_test` | `rspec` when there is a `spec/`, else `rake test`. | |
+| `php_syntax` | `php -l` over the PHP in scope. | **Blocking**. |
+| `php_test` | phpunit. | Prefers `vendor/bin/phpunit`; needs a `phpunit.xml`. |
+| `cpp_build` | `cmake` configure + build, into a throwaway directory. | Advisory, not blocking — see below. |
+| `cpp_test` | `ctest` in a build tree that already exists. | Configures nothing of its own. |
+| `dotnet_build` | `dotnet build`. | **Blocking**. |
+| `dotnet_test` | `dotnet test`. | |
+
+`cpp_build` is the one build gate that does not block. A C++ configure step fails
+for a missing system library as readily as for broken code, so a failed
+**configure** is amber (something about this machine) while a failed **compile**
+is red (something about the change). Blocking on the first would fail changes
+that build fine in their own CI.
+
+Java and C/C++ have no ecosystem-native dependency audit — Maven and Gradle ship
+none, and C/C++ has no standard package manager — so for those two the generic
+`osv_scanner` and `trivy` gates are the audit: they read `pom.xml`,
+`gradle.lockfile` and conan/vcpkg locks already.
 
 ## Best practices
 
@@ -187,7 +217,8 @@ pull request.
 gandalf detects the languages in scope and **only runs the gates relevant to them,
 plus the language-agnostic ones** — so a Go change never triggers eslint or mypy.
 Detection is by file extension + marker files (`go.mod`, `package.json`,
-`tsconfig.json`, `pyproject.toml`, `Dockerfile`, …): from the **changed files** in
+`tsconfig.json`, `pyproject.toml`, `pom.xml`, `Gemfile`, `composer.json`,
+`CMakeLists.txt`, `*.csproj`, `Dockerfile`, …): from the **changed files** in
 `--staged`/`--commit` mode, or the whole tracked tree by default. Irrelevant
 language gates are dropped from the run entirely (listed under "skipped" in the
 output and JSON), not just skipped-green.
@@ -196,15 +227,15 @@ A gate opts into this by setting a `langs` class attribute (e.g.
 `langs = frozenset({"go"})`); gates without one are generic and always run. The
 tag → language mapping lives in `scope.py` (`_EXT_LANG` / `_MARKER_LANG`).
 
-### Built-in gates (36)
+### Built-in gates (63)
 
 Each gate needs its external tool — on the host `PATH` or (for the scanners) in
 the `gandalf-tools` image. When the tool is unavailable, or a dynamic gate has no
 `--target`, or `compliance` has no `--title`/`--body`, the gate degrades to 🟡
 WARN — so any repo still produces a full scorecard. Language-tagged gates (the
-Python, Go, Node/TS groups, plus `shellcheck`=shell, `yamllint`=yaml,
-`hadolint`=docker) run only when that language is in scope; everything else is
-generic and always runs.
+Python, Go, Node/TS, Java/Kotlin, Ruby, PHP, C/C++ and .NET groups, plus
+`shellcheck`=shell, `yamllint`=yaml, `hadolint`=docker) run only when that
+language is in scope; everything else is generic and always runs.
 
 **Image = host-clean.** `gandalf-tools` provides the language-agnostic scanners
 (ruff, semgrep, bandit, pip-audit, osv-scanner, trivy, gitleaks, checkov,
@@ -213,9 +244,10 @@ mdl). The
 `kics` gate runs from the official `checkmarx/kics` image (it ships its own query
 assets), and `codeql` from a host `codeql` binary or a bundle image
 (`GANDALF_CODEQL_IMAGE`) — the CodeQL CLI is a large bundle, not a pip/apt package,
-so it's not baked into `gandalf-tools`. The Go and Node gates use your **host**
-toolchain (`go`, `npx`, `npm`) —
-you already have those — so they're never containerized.
+so it's not baked into `gandalf-tools`. The Go, Node, Java, Ruby, PHP, C/C++ and
+.NET gates use your **host** toolchain (`go`, `npx`, `npm`, `mvn`/`gradle`,
+`ruby`, `php`/`composer`, `cmake`, `dotnet`) — you already have the ones for the
+languages you write — so they're never containerized.
 
 If the image is stale or partial (a tool it claims to provide isn't actually
 present), the gate degrades to 🟡 WARN — a missing dockerized tool never reads
@@ -281,6 +313,54 @@ Node / TypeScript (host toolchain; self-skips without `package.json`):
 | `eslint` | no | npx eslint | JS/TS lint (project-local config) |
 | `tsc` | no | npx tsc | TypeScript type check (needs `tsconfig.json`) |
 | `node_test` | no | npm test | runs the `test` script |
+
+Java / Kotlin (host build tool; runs where the manifest is, self-skips without
+`pom.xml` / `build.gradle[.kts]`):
+
+| Gate | Blocking | Tool | Checks |
+|------|----------|------|--------|
+| `java_build` | yes | mvn / gradle | `mvn compile` or `gradle classes` |
+| `checkstyle` | no | checkstyle | Java style/lint (repo ruleset, else Google style) |
+| `ktlint` | no | ktlint | Kotlin lint (`*.kt`/`*.kts` only) |
+| `java_test` | no | mvn / gradle | `mvn test` or `gradle test` |
+
+Ruby (host toolchain; the lint/test gates want a real project — `Gemfile`,
+`*.gemspec`, `Rakefile` or `.rubocop.yml` — so a stray `.rb` config file does not
+pull them in):
+
+| Gate | Blocking | Tool | Checks |
+|------|----------|------|--------|
+| `ruby_syntax` | yes | ruby | `ruby -c` over the files in scope |
+| `rubocop` | no | rubocop | lint / style |
+| `bundler_audit` | no | bundle-audit | advisories against `Gemfile.lock` |
+| `ruby_test` | no | rspec / rake | `rspec` when there is a `spec/`, else `rake test` |
+
+PHP (prefers the project's own `vendor/bin/`; self-skips without `composer.json`
+or `*.php`):
+
+| Gate | Blocking | Tool | Checks |
+|------|----------|------|--------|
+| `php_syntax` | yes | php | `php -l` over the files in scope |
+| `phpcs` | no | phpcs | style/lint (repo ruleset, else PSR-12) |
+| `composer_audit` | no | composer | Packagist advisories for `composer.lock` |
+| `php_test` | no | phpunit | runs the suite (needs `phpunit.xml`) |
+
+C / C++ (self-skips without `CMakeLists.txt` / C sources):
+
+| Gate | Blocking | Tool | Checks |
+|------|----------|------|--------|
+| `cpp_build` | no | cmake + a compiler | configure + build in a throwaway dir |
+| `cppcheck` | no | cppcheck | static analysis, no compile DB needed |
+| `cpp_test` | no | ctest | runs an already-configured build tree's tests |
+
+.NET (all four are the SDK itself; self-skips without a `*.sln`/`*.csproj`):
+
+| Gate | Blocking | Tool | Checks |
+|------|----------|------|--------|
+| `dotnet_build` | yes | dotnet | `dotnet build` compiles |
+| `dotnet_format` | no | dotnet | formatting / style drift |
+| `dotnet_audit` | no | dotnet | vulnerable NuGet packages (transitive too) |
+| `dotnet_test` | no | dotnet | `dotnet test` |
 
 Tests + compliance + dynamic:
 

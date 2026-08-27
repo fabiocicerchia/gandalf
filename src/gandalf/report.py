@@ -39,6 +39,9 @@ _CATEGORY = {
     "osv_scanner": "Dependencies",
     "govulncheck": "Dependencies",
     "trivy": "Dependencies",
+    "bundler_audit": "Dependencies",
+    "composer_audit": "Dependencies",
+    "dotnet_audit": "Dependencies",
     # Licensing — dependency license obligations
     "licenses": "Licensing",
     # Infrastructure — IaC, containers, CI config
@@ -59,6 +62,12 @@ _CATEGORY = {
     "tsc": "Code quality",
     "shellcheck": "Code quality",
     "yamllint": "Code quality",
+    "checkstyle": "Code quality",
+    "ktlint": "Code quality",
+    "rubocop": "Code quality",
+    "phpcs": "Code quality",
+    "cppcheck": "Code quality",
+    "dotnet_format": "Code quality",
     # Complexity — maintainability / cyclomatic complexity
     "lizard": "Complexity",
     # Documentation — docstrings, markdown, spelling
@@ -72,6 +81,16 @@ _CATEGORY = {
     "go_test": "Build & tests",
     "node_test": "Build & tests",
     "ci_act": "Build & tests",
+    "java_build": "Build & tests",
+    "java_test": "Build & tests",
+    "ruby_syntax": "Build & tests",
+    "ruby_test": "Build & tests",
+    "php_syntax": "Build & tests",
+    "php_test": "Build & tests",
+    "cpp_build": "Build & tests",
+    "cpp_test": "Build & tests",
+    "dotnet_build": "Build & tests",
+    "dotnet_test": "Build & tests",
     # Best-practices / compliance
     "compliance": "Best practices",
     # Skill-backed advisory gates (LLM judges built from embedded skills/)
