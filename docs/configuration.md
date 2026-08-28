@@ -57,7 +57,9 @@ matched the same way:
 | `.env` | that filename in any directory |
 
 The list narrows what **every** gate reads, not only the tree-scanning ones that
-translate it into their own tool's exclude flag. It also decides what the
+translate it into their own tool's exclude flag. It sits on top of git: gates
+only ever see git-tracked files, so anything `.gitignore` hides — build output,
+a docs site, a virtualenv — is already out of scope and needs no entry here. It also decides what the
 `--cache` hash covers, so editing an excluded file doesn't invalidate results
 no gate would have re-derived.
 

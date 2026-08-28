@@ -5,21 +5,12 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 
 from gandalf.base import GateContext, GateOutcome, GateResult
+from gandalf.gates._toolchain import named
 from gandalf.plugins import missing_result, run_tool, timeout_result, tool_missing
 
-_SKIP = (".venv", "node_modules", "llama.cpp", ".git", "reports")
 _DIALECT = os.environ.get("GANDALF_SQL_DIALECT", "ansi")
-
-
-def _sql_files(root: Path) -> list[str]:
-    return [
-        str(p.relative_to(root))
-        for p in root.rglob("*.sql")
-        if not any(s in p.parts for s in _SKIP)
-    ]
 
 
 class SqlfluffGate:
@@ -29,7 +20,7 @@ class SqlfluffGate:
     category = "Database"
 
     async def run(self, ctx: GateContext) -> GateResult:
-        sqls = _sql_files(Path(ctx.workdir))
+        sqls = named(ctx, "*.sql")
         if not sqls:
             return GateResult(
                 self.name, GateOutcome.PASS, 1.0, "sqlfluff: no SQL files"
@@ -77,7 +68,7 @@ class SqlfluffGate:
         subprocess; letting the wrong one fail and retrying costs the same and
         cannot go stale.
         """
-        sqls = _sql_files(Path(ctx.workdir))
+        sqls = named(ctx, "*.sql")
         if not sqls:
             return (False, "sqlfluff: no SQL files")
         if tool_missing("sqlfluff"):

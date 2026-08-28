@@ -72,6 +72,22 @@ def sources(ctx: GateContext, *suffixes: str) -> list[str]:
     return [f for f in scannable_files(ctx.workdir) if f.endswith(suffixes)]
 
 
+def named(ctx: GateContext, *globs: str) -> list[str]:
+    """Repo-relative tracked, non-ignored files whose *name* matches one of these
+    globs (`*.md`, `Dockerfile`, `requirements*.txt`).
+
+    Whole-tree regardless of scope, unlike `sources`: the gates that want this
+    are the ones that used to `rglob` the working directory themselves, and a
+    raw rglob walks straight into `dist/`, `site/` and everything else git
+    ignores. Tracked-and-not-excluded is the same answer every other gate gets.
+    """
+    return [
+        f
+        for f in scannable_files(ctx.workdir)
+        if any(fnmatch.fnmatch(f.rsplit("/", 1)[-1], g) for g in globs)
+    ]
+
+
 def tail(text: str, lines: int = 5) -> str:
     return "\n".join((text or "").strip().splitlines()[-lines:])
 

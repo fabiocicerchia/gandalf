@@ -375,7 +375,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
 
     vscode.window.onDidChangeActiveTextEditor(() => findingsView.refresh()),
-    vscode.workspace.onDidSaveTextDocument((doc) => onSave(doc)),
+    vscode.workspace.onDidSaveTextDocument((doc) => void onSave(doc)),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (!e.affectsConfiguration('gandalf')) return;
       resetLauncherCache();
@@ -507,7 +507,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
   }
 
-  function onSave(doc: vscode.TextDocument): void {
+  async function onSave(doc: vscode.TextDocument): Promise<void> {
     if (doc.uri.scheme !== 'file') return;
     const folder = vscode.workspace.getWorkspaceFolder(doc.uri);
     if (!folder) return;
@@ -518,6 +518,11 @@ export function activate(context: vscode.ExtensionContext): void {
     // Never let gandalf's own output re-trigger gandalf.
     if (relPath.startsWith('..') || /^(reports|\.git)[/\\]/.test(relPath)) return;
     if (/^\.gandalf-(cache|trend|baseline)/.test(path.basename(relPath))) return;
+    // gandalf scans git-tracked files only — `--path` resolves through `git
+    // ls-files` — so saving something git ignores (build output, a scratch
+    // file) has nothing to scan, and scheduling a run just fails it.
+    const tracked = await probe('git', ['ls-files', '--error-unmatch', '--', relPath], folder.uri.fsPath);
+    if (!tracked.ok) return;
 
     const job: Job = {
       folder,

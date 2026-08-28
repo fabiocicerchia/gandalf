@@ -3,12 +3,9 @@ Self-skips when the repo has no markdown."""
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from gandalf.base import GateContext, GateOutcome, GateResult
+from gandalf.gates._toolchain import named
 from gandalf.plugins import missing_result, run_tool, timeout_result
-
-_SKIP = (".venv", "node_modules", "llama.cpp", ".git", "reports")
 
 
 class MdlGate:
@@ -16,13 +13,11 @@ class MdlGate:
     blocking = False
 
     async def run(self, ctx: GateContext) -> GateResult:
-        root = Path(ctx.workdir)
         mds = [
-            str(p.relative_to(root))
-            for p in root.rglob("*.md")
-            if not any(s in p.parts for s in _SKIP)
+            f
+            for f in named(ctx, "*.md")
             # Skip hidden/generated artifacts (e.g. .aider.chat.history.md) at any depth.
-            and not any(part.startswith(".") for part in p.relative_to(root).parts)
+            if not any(part.startswith(".") for part in f.split("/"))
         ]
         if not mds:
             return GateResult(

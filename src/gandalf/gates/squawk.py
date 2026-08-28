@@ -5,12 +5,9 @@ Best on migration files; on non-migration SQL it degrades to WARN gracefully."""
 from __future__ import annotations
 
 import json
-from pathlib import Path
-
 from gandalf.base import GateContext, GateOutcome, GateResult
+from gandalf.gates._toolchain import named
 from gandalf.plugins import missing_result, run_tool, timeout_result
-
-_SKIP = (".venv", "node_modules", "llama.cpp", ".git", "reports")
 
 
 class SquawkGate:
@@ -20,12 +17,7 @@ class SquawkGate:
     category = "Database"
 
     async def run(self, ctx: GateContext) -> GateResult:
-        root = Path(ctx.workdir)
-        sqls = [
-            str(p.relative_to(root))
-            for p in root.rglob("*.sql")
-            if not any(s in p.parts for s in _SKIP)
-        ]
+        sqls = named(ctx, "*.sql")
         if not sqls:
             return GateResult(self.name, GateOutcome.PASS, 1.0, "squawk: no SQL files")
         if (m := missing_result(self.name, "squawk")) is not None:
