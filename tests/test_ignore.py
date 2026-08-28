@@ -11,6 +11,7 @@ import pytest
 
 from gandalf import plugins, scope
 from gandalf.base import GateContext
+from gandalf.gates._toolchain import named
 from gandalf.plugins import _scan_targets, ignore_patterns, is_ignored, scannable_files
 
 
@@ -182,3 +183,20 @@ def test_languages_reads_the_same_tracked_listing_every_gate_does(tmp_path):
     plugins.tracked_files.cache_clear()
 
     assert scope.languages(str(repo), []) == {"python"}
+
+
+def test_named_skips_what_git_ignores(tmp_path):
+    """The gates that used to rglob the working tree (mdl, sqlfluff, squawk,
+    shellcheck, yamllint, codespell, hadolint) walked straight into build output
+    and everything else .gitignore hides. `named` asks git instead."""
+    repo = _repo(tmp_path, ["README.md", "db/schema.sql", "Dockerfile"])
+    (repo / ".gitignore").write_text("site/\n")
+    (repo / "site").mkdir()
+    (repo / "site" / "index.md").write_text("# built\n")
+    (repo / "site" / "Dockerfile").write_text("FROM scratch\n")
+    plugins.tracked_files.cache_clear()
+    ctx = GateContext(repo=str(repo), workdir=str(repo), changed_files=[])
+
+    assert named(ctx, "*.md") == ["README.md"]
+    assert named(ctx, "*.sql") == ["db/schema.sql"]
+    assert named(ctx, "Dockerfile", "*.dockerfile") == ["Dockerfile"]

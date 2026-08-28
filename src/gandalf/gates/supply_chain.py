@@ -12,6 +12,7 @@ import shutil
 from pathlib import Path
 
 from gandalf.base import GateContext, GateOutcome, GateResult
+from gandalf.gates._toolchain import named
 from gandalf.plugins import (
     _TIMEOUT_RC,
     communicate,
@@ -32,15 +33,7 @@ class OsvGate:
     async def run(self, ctx: GateContext) -> GateResult:
         if (m := missing_result(self.name, "pip-audit")) is not None:
             return m
-        root = Path(ctx.workdir)
-        req_files = list(root.glob("requirements*.txt")) + list(
-            root.glob("**/requirements*.txt")
-        )
-        req_files = [
-            r
-            for r in req_files
-            if ".venv" not in r.parts and "node_modules" not in r.parts
-        ]
+        req_files = named(ctx, "requirements*.txt")
         if not req_files:
             rc, out, _ = await run_tool(["pip-audit", "--format", "json"], ctx.workdir)
         else:
@@ -49,7 +42,7 @@ class OsvGate:
                 [
                     "pip-audit",
                     "-r",
-                    str(req_files[0].relative_to(root)),
+                    req_files[0],
                     "--format",
                     "json",
                 ],
@@ -232,17 +225,7 @@ class HadolintGate:
     async def run(self, ctx: GateContext) -> GateResult:
         if (m := missing_result(self.name, "hadolint")) is not None:
             return m
-        root = Path(ctx.workdir)
-        dockerfiles = (
-            list(root.rglob("Dockerfile"))
-            + list(root.rglob("Dockerfile.*"))
-            + list(root.rglob("*.dockerfile"))
-        )
-        dockerfiles = [
-            d
-            for d in dockerfiles
-            if ".venv" not in d.parts and "node_modules" not in d.parts
-        ]
+        dockerfiles = named(ctx, "Dockerfile", "Dockerfile.*", "*.dockerfile")
         if not dockerfiles:
             return GateResult(
                 self.name, GateOutcome.PASS, 1.0, "hadolint: no Dockerfiles found"
@@ -251,14 +234,14 @@ class HadolintGate:
         for df in dockerfiles:
             # workdir-relative so the path resolves inside the container mount too.
             rc, out, _ = await run_tool(
-                ["hadolint", "--format", "json", str(df.relative_to(root))], ctx.workdir
+                ["hadolint", "--format", "json", df], ctx.workdir
             )
             if rc == _TIMEOUT_RC:
                 return GateResult(
                     self.name,
                     GateOutcome.WARN,
                     0.8,
-                    f"{self.name}: timed out on {df.name} — skipped",
+                    f"{self.name}: timed out on {df} — skipped",
                 )
             try:
                 all_findings.extend(json.loads(out or "[]"))

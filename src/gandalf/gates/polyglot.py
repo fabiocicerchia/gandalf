@@ -10,22 +10,19 @@ import tempfile
 from pathlib import Path
 
 from gandalf.base import GateContext, GateOutcome, GateResult
+from gandalf.gates._toolchain import named
 from gandalf.plugins import missing_result, run_tool, timeout_result, tool_missing
-
-_SKIP = (".venv", "node_modules", "llama.cpp", ".git", "reports")
 
 # What codespell must not read. One list, so `--fix` corrects exactly the files
 # the gate scored — a fixer with a wider reach would rewrite vendored trees.
 _CODESPELL_SKIP = "*.lock,*.min.js,.git,.venv,node_modules,llama.cpp,reports,*.svg"
 
 
-def _find(root: Path, *globs: str) -> list[str]:
-    hits: list[str] = []
-    for g in globs:
-        for p in root.rglob(g):
-            if not any(s in p.parts for s in _SKIP) and p.is_file():
-                hits.append(str(p.relative_to(root)))
-    return hits
+def _spellable(ctx: GateContext) -> list[str]:
+    """The files codespell may read: tracked and not excluded, never `.`. Walking
+    the directory would drag in whatever git ignores — build output, a docs site,
+    a virtualenv — and `--fix` would then rewrite it."""
+    return named(ctx, "*") or ["."]
 
 
 class ShellcheckGate:
@@ -36,7 +33,7 @@ class ShellcheckGate:
     async def run(self, ctx: GateContext) -> GateResult:
         if (m := missing_result(self.name, "shellcheck")) is not None:
             return m
-        scripts = _find(Path(ctx.workdir), "*.sh", "*.bash")
+        scripts = named(ctx, "*.sh", "*.bash")
         if not scripts:
             return GateResult(
                 self.name, GateOutcome.PASS, 1.0, "shellcheck: no shell scripts"
@@ -80,7 +77,7 @@ class ShellcheckGate:
         """
         if tool_missing("shellcheck"):
             return (False, "shellcheck unavailable — nothing fixed")
-        scripts = _find(Path(ctx.workdir), "*.sh", "*.bash")
+        scripts = named(ctx, "*.sh", "*.bash")
         if not scripts:
             return (False, "shellcheck: no shell scripts")
         _rc, out, _err = await run_tool(
@@ -142,7 +139,7 @@ class YamllintGate:
     async def run(self, ctx: GateContext) -> GateResult:
         if (m := missing_result(self.name, "yamllint")) is not None:
             return m
-        yamls = _find(Path(ctx.workdir), "*.yml", "*.yaml")
+        yamls = named(ctx, "*.yml", "*.yaml")
         if not yamls:
             return GateResult(
                 self.name, GateOutcome.PASS, 1.0, "yamllint: no YAML files"
@@ -188,7 +185,7 @@ class CodespellGate:
         if (m := missing_result(self.name, "codespell")) is not None:
             return m
         rc, out, _ = await run_tool(
-            ["codespell", "--skip", _CODESPELL_SKIP, "."], ctx.workdir
+            ["codespell", "--skip", _CODESPELL_SKIP, *_spellable(ctx)], ctx.workdir
         )
         if (to := timeout_result(self.name, rc)) is not None:
             return to
@@ -214,7 +211,13 @@ class CodespellGate:
         if tool_missing("codespell"):
             return (False, "codespell unavailable — nothing fixed")
         rc, out, err = await run_tool(
-            ["codespell", "--write-changes", "--skip", _CODESPELL_SKIP, "."],
+            [
+                "codespell",
+                "--write-changes",
+                "--skip",
+                _CODESPELL_SKIP,
+                *_spellable(ctx),
+            ],
             ctx.workdir,
         )
         if rc < 0:
