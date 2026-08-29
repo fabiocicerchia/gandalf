@@ -6,9 +6,11 @@ Ported from ai-harness. (gitleaks lives in secrets.py.)
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import json
 import re
 import shutil
+import sys
 from pathlib import Path
 
 from gandalf.base import GateContext, GateOutcome, GateResult
@@ -281,17 +283,25 @@ class TestsGate:
         base = ["--tb=no", "-q", "--no-header"]
         for p in ignore_patterns(ctx.workdir):
             base += ["--ignore", p]
-        if (
+        configured = (
             (root / "pytest.ini").exists()
             or (root / "pyproject.toml").exists()
             or (root / "setup.cfg").exists()
-        ):
-            runner = ["python", "-m", "pytest", *base]
+        )
+        # A config file says the repo *uses* pytest, not that pytest is installed:
+        # `python -m pytest` then exits non-zero with "No module named pytest", which
+        # reads exactly like a failing suite. Ask the interpreter that would run it,
+        # and run it through sys.executable so the answer is about that interpreter.
+        if configured and importlib.util.find_spec("pytest") is not None:
+            runner = [sys.executable, "-m", "pytest", *base]
         elif shutil.which("pytest"):
             runner = ["pytest", *base]
         else:
             return GateResult(
-                self.name, GateOutcome.WARN, 0.8, "tests: no pytest found — skipped"
+                self.name,
+                GateOutcome.WARN,
+                0.8,
+                "tests: pytest not installed — skipped",
             )
         proc = await asyncio.create_subprocess_exec(
             *runner,
