@@ -11,7 +11,7 @@
 | `GANDALF_LLM_RETRIES` | `2` | transient-failure retries for the LLM call (attempts = retries + 1); retries network errors, timeouts, and 429/5xx with exponential backoff — not 4xx |
 | `GANDALF_LLM_BACKOFF` | `1.0` | base backoff seconds (delay = base × 2^attempt) |
 | `GANDALF_GATE_TIMEOUT` | `120` | per-gate subprocess timeout (seconds) |
-| `GANDALF_GATES_PATH` | — | extra `:`-separated dirs to load gates from |
+| `GANDALF_GATES_PATH` | — | extra `:`-separated dirs to load gates from — **a trust boundary, see below** |
 | `GANDALF_PROGRESS` | auto | set `1` to force the stderr progress bar when stderr isn't a TTY |
 | `GANDALF_TOOLS_IMAGE` | `gandalf-tools` | Docker image scanners run in when off the host PATH |
 | `GANDALF_KICS_IMAGE` | `checkmarx/kics:latest` | image the `kics` gate runs from (it ships its own query assets) |
@@ -21,6 +21,35 @@
 | `GANDALF_ACT_EVENT` / `GANDALF_ACT_PLATFORM` / `GANDALF_ACT_TIMEOUT` | `pull_request` / `ubuntu-latest=…` / `900` | `act` runner config |
 
 If headroom is unreachable the summary shows a one-line note and gates still run.
+
+## Trust boundary: `GANDALF_GATES_PATH`
+
+`GANDALF_GATES_PATH` names directories that gandalf imports Python from. Every
+`.py` in them is executed at import time — module-level code runs *before*
+anything checks whether the file defines a gate — so setting this variable is
+equivalent to arbitrary code execution as whatever user gandalf runs as. In CI
+that is the job's user, with the job's secrets and the job's token.
+
+A gate loaded this way can also **replace a built-in**: discovery is keyed by
+gate name, and the last one wins, so a plugin named `gitleaks` silently becomes
+the `gitleaks` gate and can report a clean pass in the scorecard, the JSON, the
+SARIF upload and the PR comment. gandalf prints a line to stderr when this
+happens, but the run continues — overriding a scanner is a legitimate thing to
+want, and gandalf cannot tell a deliberate swap from a malicious one.
+
+So:
+
+- Treat it exactly as you would `PYTHONPATH` or a `curl | sh`.
+- **Never** let it be set from untrusted input. In particular, do not derive it
+  from a pull-request branch, a fork's workflow file, or anything a contributor
+  can edit — a PR that adds one file could disable the secret scanner that is
+  meant to be reviewing it.
+- Point it at directories inside the repository you are already trusting with
+  code review, or at a path baked into the runner image.
+- If you do not use plugin gates, leave it unset. There is no default.
+
+Gate files under `src/gandalf/gates/` carry the same weight, but they arrive
+through the same review as the rest of the codebase.
 
 ## Configuration (`.gandalf.toml`)
 

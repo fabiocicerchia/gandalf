@@ -540,6 +540,11 @@ def _gate_dirs() -> list[Path]:
 
     The built-in directory first, then anything on GANDALF_GATES_PATH — which
     is how a project adds its own gate without vendoring gandalf.
+
+    GANDALF_GATES_PATH is a trust boundary: every `.py` in those directories is
+    imported, and module-level code runs at import time, before anything checks
+    whether the file defines a gate at all. Whoever can set that variable can
+    execute code as whatever user gandalf runs as. See docs/configuration.md.
     """
     dirs = [Path(__file__).parent / "gates"]
     for extra in filter(
@@ -571,7 +576,11 @@ def _load_module(path: Path):
 def discover_gates() -> list[Gate]:
     """Instantiate every Gate-shaped class found in the plugin dirs."""
     gates: dict[str, Gate] = {}
+    builtin = _gate_dirs()[0]
     for d in _gate_dirs():
+        external = d != builtin
+        if external:
+            debug.log(f"loading external gates from {d} (GANDALF_GATES_PATH)")
         for path in sorted(d.glob("*.py")):
             if path.name.startswith("_"):
                 continue
@@ -587,6 +596,16 @@ def discover_gates() -> list[Gate]:
                     continue
                 inst = obj()
                 if isinstance(inst, Gate):
+                    if external and inst.name in gates:
+                        # A plugin replacing a built-in is legitimate — it is how
+                        # you swap a scanner — but it must never be silent: a gate
+                        # named `gitleaks` that reports a clean pass is otherwise
+                        # indistinguishable from the real one in every output.
+                        print(
+                            f"gandalf: gate '{inst.name}' overridden by "
+                            f"{path} (GANDALF_GATES_PATH)",
+                            file=sys.stderr,
+                        )
                     gates[inst.name] = (
                         inst  # name wins on collision → override built-ins
                     )

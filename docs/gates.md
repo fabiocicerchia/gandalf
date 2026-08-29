@@ -175,7 +175,11 @@ A gate is any class with `name: str`, `blocking: bool`, and
 `async def run(self, ctx) -> GateResult`. To add one, drop a `.py` file
 exporting such a class into `gandalf/gates/` (or any dir on `GANDALF_GATES_PATH`) —
 it's discovered automatically, no registry to edit. Name collisions let a
-plugin override a built-in.
+plugin override a built-in; the override is announced on stderr, since a
+replacement `gitleaks` is otherwise indistinguishable from the real one in every
+output. `GANDALF_GATES_PATH` imports and executes arbitrary Python — it is a
+trust boundary, see
+[configuration](configuration.md#trust-boundary-gandalf_gates_path).
 
 ```python
 # gandalf/gates/mygate.py
