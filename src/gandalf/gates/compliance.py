@@ -8,6 +8,7 @@ no request/diff it degrades to WARN. Passes at >= 85% compliance.
 from __future__ import annotations
 
 from gandalf.base import GateContext, GateOutcome, GateResult
+from gandalf.plugins import unavailable
 from gandalf.skills import _parse_json as _parse_judge
 
 COMPLIANCE_THRESHOLD = 0.85
@@ -54,11 +55,8 @@ class ComplianceGate:
         body = (meta.get("body") or "").strip()
         diff = (meta.get("diff") or "").strip()
         if not diff or not (title or body):
-            return GateResult(
-                self.name,
-                GateOutcome.WARN,
-                1.0,
-                "compliance: no request/diff to judge (pass --title/--body)",
+            return unavailable(
+                self.name, "compliance: no request/diff to judge (pass --title/--body)"
             )
 
         diff_trunc = diff[:_DIFF_LIMIT] + (

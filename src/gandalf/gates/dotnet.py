@@ -22,7 +22,11 @@ from gandalf.gates._toolchain import (
     project_dir,
     tail,
 )
-from gandalf.plugins import run_tool, timeout_result
+from gandalf.plugins import (
+    run_tool,
+    timeout_result,
+    unavailable,
+)
 
 _MARKERS = ("*.sln", "*.slnx", "*.csproj", "*.fsproj", "*.vbproj")
 _LANGS = frozenset({"dotnet"})
@@ -89,11 +93,8 @@ class DotnetFormatGate(ToolchainGate):
         if not findings:
             # No restore, no SDK for this project, an analyser that crashed: the
             # command failed without telling us anything about the code.
-            return GateResult(
-                self.name,
-                GateOutcome.WARN,
-                0.8,
-                f"dotnet format: did not run — {tail(combined, 2)}",
+            return unavailable(
+                self.name, f"dotnet format: did not run — {tail(combined, 2)}"
             )
         return counted(
             self.name,
@@ -131,11 +132,8 @@ class DotnetAuditGate(ToolchainGate):
         hits = [m for m in (_VULN_HIT.match(ln) for ln in combined.splitlines()) if m]
         if not hits:
             if rc != 0:
-                return GateResult(
-                    self.name,
-                    GateOutcome.WARN,
-                    0.8,
-                    f"dotnet audit: did not run — {tail(combined, 2)}",
+                return unavailable(
+                    self.name, f"dotnet audit: did not run — {tail(combined, 2)}"
                 )
             return GateResult(
                 self.name, GateOutcome.PASS, 1.0, "dotnet audit: no vulnerable packages"

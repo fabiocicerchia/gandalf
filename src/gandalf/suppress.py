@@ -123,7 +123,7 @@ class Suppressor:
             kept,
         )
         # Preserve gate flags that live as private attrs (set by the runner).
-        for attr in ("_blocking", "_category"):
+        for attr in ("_blocking", "_category", "_unavailable"):
             if hasattr(res, attr):
                 setattr(res_out, attr, getattr(res, attr))
         return res_out

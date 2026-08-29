@@ -13,7 +13,12 @@ import re
 from pathlib import Path
 
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.plugins import run_tool, timeout_result, tool_missing
+from gandalf.plugins import (
+    run_tool,
+    timeout_result,
+    tool_missing,
+    unavailable,
+)
 
 
 def _no_module(ctx: GateContext) -> bool:
@@ -33,9 +38,7 @@ class GoBuildGate:
                 self.name, GateOutcome.PASS, 1.0, "go: no module (no go.mod)"
             )
         if tool_missing("go"):
-            return GateResult(
-                self.name, GateOutcome.WARN, 0.8, "go not installed — skipped"
-            )
+            return unavailable(self.name, "go not installed — skipped")
         rc, _out, err = await run_tool(["go", "build", "./..."], ctx.workdir)
         if (to := timeout_result(self.name, rc)) is not None:
             return to
@@ -64,12 +67,7 @@ class GolangciLintGate:
                 self.name, GateOutcome.PASS, 1.0, "go: no module (no go.mod)"
             )
         if tool_missing("golangci-lint"):
-            return GateResult(
-                self.name,
-                GateOutcome.WARN,
-                0.8,
-                "golangci-lint not installed — skipped",
-            )
+            return unavailable(self.name, "golangci-lint not installed — skipped")
         rc, out, _ = await run_tool(
             ["golangci-lint", "run", "--out-format", "json", "./..."], ctx.workdir
         )
@@ -112,9 +110,7 @@ class GovulncheckGate:
                 self.name, GateOutcome.PASS, 1.0, "go: no module (no go.mod)"
             )
         if tool_missing("govulncheck"):
-            return GateResult(
-                self.name, GateOutcome.WARN, 0.8, "govulncheck not installed — skipped"
-            )
+            return unavailable(self.name, "govulncheck not installed — skipped")
         rc, out, _ = await run_tool(["govulncheck", "./..."], ctx.workdir)
         if (to := timeout_result(self.name, rc)) is not None:
             return to
@@ -144,9 +140,7 @@ class GoTestGate:
                 self.name, GateOutcome.PASS, 1.0, "go: no module (no go.mod)"
             )
         if tool_missing("go"):
-            return GateResult(
-                self.name, GateOutcome.WARN, 0.8, "go not installed — skipped"
-            )
+            return unavailable(self.name, "go not installed — skipped")
         rc, out, err = await run_tool(["go", "test", "./..."], ctx.workdir)
         if (to := timeout_result(self.name, rc)) is not None:
             return to

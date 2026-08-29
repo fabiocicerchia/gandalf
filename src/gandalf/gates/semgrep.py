@@ -5,7 +5,13 @@ from __future__ import annotations
 import json
 
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.plugins import _scan_targets, missing_result, run_tool, timeout_result
+from gandalf.plugins import (
+    _scan_targets,
+    missing_result,
+    run_tool,
+    timeout_result,
+    unavailable,
+)
 
 
 def _flat(f: dict) -> dict:
@@ -76,18 +82,13 @@ class SemgrepGate:
         try:
             data = json.loads(out or "{}")
         except json.JSONDecodeError:
-            return GateResult(
-                self.name, GateOutcome.WARN, 0.8, "semgrep: unparsable output"
-            )
+            return unavailable(self.name, "semgrep: unparsable output")
         findings = data.get("results", [])
         errors = data.get("errors", [])
         n = len(findings)
         if errors and n == 0:
-            return GateResult(
-                self.name,
-                GateOutcome.WARN,
-                0.8,
-                f"semgrep: {len(errors)} rule error(s), no findings",
+            return unavailable(
+                self.name, f"semgrep: {len(errors)} rule error(s), no findings"
             )
         if n == 0:
             return GateResult(self.name, GateOutcome.PASS, 1.0, "semgrep: clean")

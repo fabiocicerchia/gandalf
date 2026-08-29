@@ -5,7 +5,13 @@ from __future__ import annotations
 import json
 
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.plugins import _scan_targets, missing_result, run_tool, timeout_result
+from gandalf.plugins import (
+    _scan_targets,
+    missing_result,
+    run_tool,
+    timeout_result,
+    unavailable,
+)
 
 
 class BanditGate:
@@ -37,9 +43,7 @@ class BanditGate:
         try:
             data = json.loads(out or "{}")
         except json.JSONDecodeError:
-            return GateResult(
-                self.name, GateOutcome.WARN, 0.8, "bandit: unparsable output"
-            )
+            return unavailable(self.name, "bandit: unparsable output")
         results = data.get("results", [])
         n = len(results)
         if n == 0:

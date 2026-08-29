@@ -8,7 +8,13 @@ import os
 
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.gates._toolchain import named
-from gandalf.plugins import missing_result, run_tool, timeout_result, tool_missing
+from gandalf.plugins import (
+    missing_result,
+    run_tool,
+    timeout_result,
+    tool_missing,
+    unavailable,
+)
 
 _DIALECT = os.environ.get("GANDALF_SQL_DIALECT", "ansi")
 
@@ -36,9 +42,7 @@ class SqlfluffGate:
         try:
             data = json.loads(out or "[]")
         except json.JSONDecodeError:
-            return GateResult(
-                self.name, GateOutcome.WARN, 0.8, "sqlfluff: unparsable output"
-            )
+            return unavailable(self.name, "sqlfluff: unparsable output")
         findings = [
             {
                 "file": f.get("filepath", ""),

@@ -22,6 +22,7 @@ from functools import cache
 from pathlib import Path
 
 from gandalf.base import GateContext, GateOutcome, GateResult
+from gandalf.plugins import unavailable
 
 # One tolerant JSON parser for every LLM-judge gate; it hardens json.loads so
 # over-nested replies surface as JSONDecodeError instead of leaking RecursionError.
@@ -136,10 +137,8 @@ class SkillGate:
 
         rubric = _rubric(self.skills)
         if not rubric:
-            return GateResult(
+            return unavailable(
                 self.name,
-                GateOutcome.WARN,
-                0.8,
                 f"{self.name}: skill not embedded ({', '.join(self.skills)}) — skipped",
             )
 
@@ -150,18 +149,13 @@ class SkillGate:
         files = _changed_file_contents(ctx)
 
         if self.needs_request and not (title or body):
-            return GateResult(
+            return unavailable(
                 self.name,
-                GateOutcome.WARN,
-                0.8,
                 f"{self.name}: no plan to judge — pass --title/--body describing the intent",
             )
         if not (diff or files or title or body):
-            return GateResult(
-                self.name,
-                GateOutcome.WARN,
-                0.8,
-                f"{self.name}: nothing in scope to judge — skipped",
+            return unavailable(
+                self.name, f"{self.name}: nothing in scope to judge — skipped"
             )
 
         prompt = self._prompt(rubric, title, body, diff, files, ctx)
@@ -171,11 +165,8 @@ class SkillGate:
             )
             data = parse_json(text)
         except Exception as exc:  # noqa: BLE001 — never crash or false-pass the run
-            return GateResult(
-                self.name,
-                GateOutcome.WARN,
-                0.6,
-                f"{self.name}: judge unavailable ({str(exc)[:70]}) — skipped",
+            return unavailable(
+                self.name, f"{self.name}: judge unavailable ({str(exc)[:70]}) — skipped"
             )
 
         try:

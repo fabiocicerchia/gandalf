@@ -10,6 +10,8 @@ from dataclasses import dataclass
 
 from . import findings
 from .base import GateOutcome, GateResult
+from .plugins import did_not_run
+
 
 def fmt_finding(f) -> str:
     """One-line, human-readable rendering of a heterogeneous gate finding."""
@@ -129,6 +131,8 @@ _RAG = {
     GateOutcome.WARN: ("🟡", "\033[33m", "#eab308", "AMBER"),
     GateOutcome.FAIL: ("🔴", "\033[31m", "#ef4444", "RED"),
 }
+# A gate that could not run gets its own glyph — it is not a traffic light.
+_SKIP_EMOJI = "⚪"
 _RESET = "\033[0m"
 _BOLD = "\033[1m"
 _DIM = "\033[2m"
@@ -206,28 +210,44 @@ def _format_delta(delta: int | None) -> str:
 
 def aggregate(results: list[GateResult]) -> Verdict:
     """Red if any FAIL (blocking or not); amber if any WARN; green if all pass.
-    Composite score = mean of gate sub-scores ×100."""
+    Composite score = mean of gate sub-scores ×100.
+
+    Gates that could not run are left out of both. A missing scanner is not a
+    quality signal, and counting one as amber-at-0.8 is wrong in both directions:
+    it drags a clean repo down and props a bad one up, and on a host with nothing
+    installed it produces a scorecard that says nothing about the code. They are
+    counted and shown separately instead — see `render_terminal`."""
     if not results:
         return Verdict(GateOutcome.WARN, 0)
-    if any(r.outcome == GateOutcome.FAIL for r in results):
+    ran = [r for r in results if not did_not_run(r)]
+    if not ran:
+        # Every gate was unavailable: there is no score to report, and claiming
+        # one would be inventing it. The CLI prints a setup banner for this case.
+        return Verdict(GateOutcome.WARN, 0)
+    if any(r.outcome == GateOutcome.FAIL for r in ran):
         overall = GateOutcome.FAIL
-    elif any(r.outcome == GateOutcome.WARN for r in results):
+    elif any(r.outcome == GateOutcome.WARN for r in ran):
         overall = GateOutcome.WARN
     else:
         overall = GateOutcome.PASS
-    score = round(sum(r.score for r in results) / len(results) * 100)
+    score = round(sum(r.score for r in ran) / len(ran) * 100)
     return Verdict(overall, score)
 
 
-def _group_outcome_and_pct(members: list[GateResult]) -> tuple[GateOutcome, int]:
-    """Worst outcome and mean score% across a category's gate results."""
-    if any(r.outcome == GateOutcome.FAIL for r in members):
+def _group_outcome_and_pct(members: list[GateResult]) -> tuple[GateOutcome, int | None]:
+    """Worst outcome and mean score% across a category's gate results, counting
+    only the gates that ran. `None` percent means none of them did — rendered as
+    "not run" rather than as a 0% the category did not earn."""
+    ran = [r for r in members if not did_not_run(r)]
+    if not ran:
+        return GateOutcome.WARN, None
+    if any(r.outcome == GateOutcome.FAIL for r in ran):
         outcome = GateOutcome.FAIL
-    elif any(r.outcome == GateOutcome.WARN for r in members):
+    elif any(r.outcome == GateOutcome.WARN for r in ran):
         outcome = GateOutcome.WARN
     else:
         outcome = GateOutcome.PASS
-    pct = round(sum(r.score for r in members) / len(members) * 100)
+    pct = round(sum(r.score for r in ran) / len(ran) * 100)
     return outcome, pct
 
 
@@ -266,15 +286,25 @@ def render_terminal(
             continue
         gc, pct = _group_outcome_and_pct(members)
         gcol = _RAG[gc][1]
-        lines.append(f"\n{_BOLD}{gcol}{group}{_RESET} {_DIM}· {pct}%{_RESET}")
+        shown = "not run" if pct is None else f"{pct}%"
+        lines.append(f"\n{_BOLD}{gcol}{group}{_RESET} {_DIM}· {shown}{_RESET}")
         for r in members:
             emoji, color, _, _w = _RAG[r.outcome]
+            if did_not_run(r):
+                # Deliberately not a traffic light: this gate reported nothing
+                # about the code, and an amber dot claims it did.
+                emoji, color = _SKIP_EMOJI, _DIM
             block = (
                 f" {_DIM}[blocking]{_RESET}" if getattr(r, "_blocking", False) else ""
             )
             lines.append(
                 f"  {emoji} {color}{r.name.ljust(width)}{_RESET}  {r.summary}{block}"
             )
+    if n_skipped := sum(1 for r in results if did_not_run(r)):
+        lines.append(
+            f"\n{_DIM}{n_skipped} of {len(results)} gate(s) could not run "
+            f"— not counted in the score{_RESET}"
+        )
     outcome_of = {r.name: r.outcome for r in results}
     sev_order = {GateOutcome.FAIL: 0, GateOutcome.WARN: 1, GateOutcome.PASS: 2}
     for header in ("summary", "changeset", "remediation", "improvement"):
@@ -571,6 +601,8 @@ def render_html(
     def row(r: GateResult) -> str:
         emoji, _, _, word = _RAG[r.outcome]
         cls = r.outcome.name.lower()
+        if did_not_run(r):
+            emoji, word = _SKIP_EMOJI, "NOT RUN"
         detail = html.escape(r.summary)
         if r.findings:
             items = "".join(
@@ -610,9 +642,10 @@ def render_html(
     for group in _GROUP_ORDER:
         if group in categorized_results:
             gc, pct = _group_outcome_and_pct(categorized_results[group])
+            shown = "not run" if pct is None else f"{pct}%"
             cards.append(
                 f'<div class="cat {gc.name.lower()}"><div class="cat-name">{group}</div>'
-                f'<div class="cat-score">{pct}%</div></div>'
+                f'<div class="cat-score">{shown}</div></div>'
             )
 
     cat_grid = f'<div class="cat-grid">{"".join(cards)}</div>' if cards else ""

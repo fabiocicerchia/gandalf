@@ -19,7 +19,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from gandalf.base import GateContext, GateOutcome, GateResult
+from gandalf.base import GateContext, GateResult
 from gandalf.gates._toolchain import (
     ToolchainGate,
     counted,
@@ -27,7 +27,12 @@ from gandalf.gates._toolchain import (
     project_dir,
     tail,
 )
-from gandalf.plugins import run_tool, timeout_result, tool_missing
+from gandalf.plugins import (
+    run_tool,
+    timeout_result,
+    tool_missing,
+    unavailable,
+)
 
 _MARKERS = ("pom.xml", "build.gradle", "build.gradle.kts")
 
@@ -125,11 +130,8 @@ class CheckstyleGate(ToolchainGate):
             ln for ln in combined.splitlines() if ln.startswith(("[WARN]", "[ERROR]"))
         ]
         if rc != 0 and not lines:
-            return GateResult(
-                self.name,
-                GateOutcome.WARN,
-                0.8,
-                f"checkstyle: did not run — {tail(combined, 2)}",
+            return unavailable(
+                self.name, f"checkstyle: did not run — {tail(combined, 2)}"
             )
         return counted(
             self.name,
@@ -157,9 +159,7 @@ class KtlintGate(ToolchainGate):
         try:
             report = json.loads(out or "[]")
         except json.JSONDecodeError:
-            return GateResult(
-                self.name, GateOutcome.WARN, 0.8, "ktlint: unparsable output"
-            )
+            return unavailable(self.name, "ktlint: unparsable output")
         findings = [
             {
                 "file": entry.get("file", ""),

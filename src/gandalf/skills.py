@@ -26,6 +26,7 @@ from pathlib import Path
 
 from gandalf import llm
 from gandalf.base import GateContext, GateOutcome, GateResult
+from gandalf.plugins import unavailable
 
 # skills/ lives at the repo root, above the src/gandalf/ package.
 _SKILLS_DIR = Path(__file__).resolve().parent.parent.parent / "skills"
@@ -150,10 +151,8 @@ async def judge(
         )
         data = _parse_json(text)
     except Exception as exc:  # noqa: BLE001 — the judge must never sink the run
-        return GateResult(
+        return unavailable(
             gate_name,
-            GateOutcome.WARN,
-            0.8,
             f"{gate_name}: skill judge unavailable ({str(exc)[:80]}) — skipped",
         )
 

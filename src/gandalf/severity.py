@@ -27,6 +27,7 @@ _WEIGHT = {
 # total weight at which the score floors to 0 (≈ two-and-a-half critical findings).
 _FLOOR_AT = 5.0
 
+
 def of(f) -> str:
     """Normalized severity of a finding, or '' if it reports none."""
     return findings_mod.severity(f)
@@ -48,7 +49,7 @@ def reweight(res: GateResult) -> GateResult:
     if s is None:
         return res
     out = GateResult(res.name, res.outcome, round(s, 3), res.summary, res.findings)
-    for attr in ("_blocking", "_category"):
+    for attr in ("_blocking", "_category", "_unavailable"):
         if hasattr(res, attr):
             setattr(out, attr, getattr(res, attr))
     return out

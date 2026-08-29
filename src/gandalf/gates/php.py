@@ -24,7 +24,12 @@ from gandalf.gates._toolchain import (
     project_dir,
     tail,
 )
-from gandalf.plugins import run_tool, timeout_result, tool_missing
+from gandalf.plugins import (
+    run_tool,
+    timeout_result,
+    tool_missing,
+    unavailable,
+)
 
 _MARKERS = ("composer.json", "*.php")
 _LANGS = frozenset({"php"})
@@ -81,11 +86,8 @@ class PhpcsGate(ToolchainGate):
         try:
             data = json.loads(out or "{}")
         except json.JSONDecodeError:
-            return GateResult(
-                self.name,
-                GateOutcome.WARN,
-                0.8,
-                f"phpcs: did not run — {tail((out or '') + (err or ''), 2)}",
+            return unavailable(
+                self.name, f"phpcs: did not run — {tail((out or '') + (err or ''), 2)}"
             )
         findings = [
             {
@@ -135,10 +137,8 @@ class ComposerAuditGate(ToolchainGate):
         try:
             data = json.loads(out or "{}")
         except json.JSONDecodeError:
-            return GateResult(
+            return unavailable(
                 self.name,
-                GateOutcome.WARN,
-                0.8,
                 f"composer audit: did not run — {tail((out or '') + (err or ''), 2)}",
             )
         advisories = [

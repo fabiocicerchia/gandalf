@@ -24,7 +24,12 @@ from gandalf.gates._toolchain import (
     project_dir,
     tail,
 )
-from gandalf.plugins import run_tool, timeout_result, tool_missing
+from gandalf.plugins import (
+    run_tool,
+    timeout_result,
+    tool_missing,
+    unavailable,
+)
 
 # A bare `*.rb` is enough to justify a parse check and nothing more: Ruby is a
 # popular configuration DSL (mdl styles, Vagrantfile, Brewfile), and one of those
@@ -69,10 +74,8 @@ class RubocopGate(ToolchainGate):
         except json.JSONDecodeError:
             # rubocop exits 2 and prints nothing parseable when its config is
             # broken or a required gem is absent — a tool failure, not offences.
-            return GateResult(
+            return unavailable(
                 self.name,
-                GateOutcome.WARN,
-                0.8,
                 f"rubocop: did not run — {tail((out or '') + (err or ''), 2)}",
             )
         findings = [
@@ -123,11 +126,8 @@ class BundlerAuditGate(ToolchainGate):
                 self.name, GateOutcome.PASS, 1.0, "bundler-audit: no known advisories"
             )
         if not advisories:
-            return GateResult(
-                self.name,
-                GateOutcome.WARN,
-                0.8,
-                f"bundler-audit: did not run — {tail(combined, 2)}",
+            return unavailable(
+                self.name, f"bundler-audit: did not run — {tail(combined, 2)}"
             )
         n = len(advisories)
         score = max(0.0, 1.0 - min(n, 10) / 10)

@@ -17,7 +17,7 @@ import shutil
 from pathlib import Path
 
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.plugins import communicate
+from gandalf.plugins import communicate, unavailable
 
 _EVENT = os.environ.get("GANDALF_ACT_EVENT", "pull_request")
 _PLATFORM = os.environ.get(
@@ -45,17 +45,12 @@ class ActGate:
         if not workflows:
             return GateResult(self.name, GateOutcome.PASS, 1.0, "no workflows to run")
         if shutil.which(_BINARY) is None:
-            return GateResult(
-                self.name,
-                GateOutcome.WARN,
-                0.5,
-                f"'{_BINARY}' not found; CI not verified locally",
+            return unavailable(
+                self.name, f"'{_BINARY}' not found; CI not verified locally"
             )
         if shutil.which("docker") is None:
-            return GateResult(
+            return unavailable(
                 self.name,
-                GateOutcome.WARN,
-                0.5,
                 "Docker not available; act cannot run; CI not verified locally",
             )
         cmd = [_BINARY, _EVENT, "--platform", _PLATFORM]

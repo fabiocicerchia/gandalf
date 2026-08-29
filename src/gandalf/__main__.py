@@ -189,6 +189,7 @@ class _GateStream:
                 "category": report.category_of(r),
                 "duration": getattr(r, "_duration", None),
                 "blocking": getattr(r, "_blocking", False),
+                "unavailable": plugins.did_not_run(r),
             }
         )
 
@@ -350,6 +351,10 @@ def _build_payload(
                 "findings": gfindings.annotate_all(r.findings, sc.workdir),
                 "category": report.category_of(r),
                 "blocking": getattr(r, "_blocking", False),
+                # True when the gate produced no signal about the code (tool not
+                # installed, timed out, judge unreachable, nothing in scope). Such
+                # gates are left out of `score` — see report.aggregate.
+                "unavailable": plugins.did_not_run(r),
                 "duration": getattr(r, "_duration", None),
             }
             for r in results
