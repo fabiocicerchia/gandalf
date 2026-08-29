@@ -98,3 +98,45 @@ def test_marker_survives_partial_suppression():
     r._unavailable = False
     assert not did_not_run(sup.apply(r))
     assert sup.apply(unavailable("trivy", "missing")) is not None
+
+
+# --- out-of-band attributes survive a rebuild -------------------------------
+def _decorated() -> GateResult:
+    """A result as the runner hands it on: score-carrying fields plus the
+    metadata it attaches out of band."""
+    r = GateResult("trivy", W, 0.5, "2 vulns", [{"severity": "HIGH", "code": "X"}])
+    r._blocking, r._category, r._duration = True, "Dependencies", 1.25
+    return r
+
+
+def test_reweighting_keeps_the_duration():
+    """It never did: --severity-weight wrote a null duration for every gate."""
+    out = severity.reweight(_decorated())
+    assert out._duration == 1.25
+    assert out._blocking is True and out._category == "Dependencies"
+
+
+def test_partial_suppression_keeps_the_duration():
+    sup = suppress.build({"rules": ["trivy::*"]}, None)
+    r = _decorated()
+    r.findings.append({"severity": "LOW", "code": "Y", "path": "b.py"})
+    out = sup.apply(r)
+    assert out._duration == 1.25 and out._blocking is True
+
+
+def test_full_suppression_keeps_the_metadata_too():
+    sup = suppress.build({"rules": ["trivy"]}, None)
+    out = sup.apply(_decorated())
+    assert out.outcome is P  # everything muted
+    assert out._duration == 1.25 and out._category == "Dependencies"
+
+
+def test_carry_over_ignores_the_dataclass_fields():
+    """Only runner metadata travels — the rebuilt score/summary must stand."""
+    from gandalf.plugins import carry_over
+
+    src = _decorated()
+    dst = GateResult("trivy", P, 1.0, "rebuilt", [])
+    carry_over(src, dst)
+    assert dst.score == 1.0 and dst.summary == "rebuilt" and dst.findings == []
+    assert dst._duration == 1.25

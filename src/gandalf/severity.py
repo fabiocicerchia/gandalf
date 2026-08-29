@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from . import findings as findings_mod
 from .base import GateResult
+from .plugins import carry_over
 
 _WEIGHT = {
     "critical": 2.0,
@@ -48,10 +49,9 @@ def reweight(res: GateResult) -> GateResult:
     s = score(res.findings)
     if s is None:
         return res
-    out = GateResult(res.name, res.outcome, round(s, 3), res.summary, res.findings)
-    for attr in ("_blocking", "_category", "_unavailable"):
-        if hasattr(res, attr):
-            setattr(out, attr, getattr(res, attr))
+    out = carry_over(
+        res, GateResult(res.name, res.outcome, round(s, 3), res.summary, res.findings)
+    )
     # Keep what the gate itself scored. Without it --explain-score can only show
     # the weighted number, which is the one the user cannot derive from the gate's
     # own output — so the explanation would be the least explanatory part.

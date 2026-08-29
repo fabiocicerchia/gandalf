@@ -459,6 +459,23 @@ def unavailable(name: str, summary: str) -> GateResult:
     return r
 
 
+def carry_over(src: GateResult, dst: GateResult) -> GateResult:
+    """Copy the out-of-band attributes from one result onto a rebuilt one.
+
+    suppress and severity both rebuild a GateResult to change its score, and both
+    used to name the attributes worth keeping. That list went stale every time one
+    was added: `_duration` was never in it, so every reweighted run wrote a null
+    duration into the JSON, and `_unavailable` had to be added to two call sites
+    the day it was introduced. Copy whatever is actually there instead — the
+    underscore prefix is exactly what distinguishes runner metadata from the
+    dataclass's own fields.
+    """
+    for key, value in vars(src).items():
+        if key.startswith("_"):
+            setattr(dst, key, value)
+    return dst
+
+
 def did_not_run(r: GateResult) -> bool:
     """Whether this result came from `unavailable` — the reader for the marker,
     so no caller has to know it is an underscore attribute."""
