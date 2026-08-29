@@ -17,6 +17,7 @@ import dataclasses
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -276,6 +277,15 @@ def _print_summary(
 ) -> None:
     """Terminal scorecard + the language / fixes / config / policy footer lines."""
     print(report.render_terminal(sc.label, results, verdict, advice, meta_line))
+    # Before the per-run footer: on a host with no scanners this is the only line
+    # that tells the user anything actionable, so it must not be the last thing
+    # after a wall of gate rows.
+    if banner := report.setup_banner(
+        results,
+        plugins._tools_image_available(),
+        bool(shutil.which("docker")),
+    ):
+        print(banner)
     print(
         f"\nLanguages: {', '.join(sorted(detected)) or 'none detected'}"
         + (

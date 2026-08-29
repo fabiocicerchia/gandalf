@@ -14,10 +14,11 @@ traffic-light scorecard from pluggable gates. Stdlib-only, no dependencies.
 
 > **0.x, and gandalf runs other people's tools.** It is stdlib-only itself and
 > installs nothing: a gate whose scanner is neither on your `PATH` nor in the
-> `gandalf-tools` image degrades to amber and says so, rather than failing or
-> pretending to pass. So a *first* run on a bare machine is mostly amber — that
-> is the design, not a bug, and `make tools` is the fix. The LLM summary is
-> optional (`--no-llm`) and never gates anything on its own.
+> `gandalf-tools` image reports that it could not run, rather than failing or
+> pretending to pass. Such gates are not scored — "we could not check this" is
+> not a quality signal — and a first run on a bare machine prints a setup
+> banner pointing at `make tools`. The LLM summary is optional (`--no-llm`)
+> and never gates anything on its own.
 
 ```bash
 PYTHONPATH=src python -m gandalf                 # whole working tree, as-is (default)
@@ -52,7 +53,7 @@ One pass over a scope, every gate against the same file set:
   │  cache hit on the scope's content hash?  → reuse       │
   │  tool on PATH?               → run it                  │
   │  tool in the gandalf-tools image?  → run it there      │
-  │  neither                     → WARN, and say which     │
+  │  neither                     → not run, and say which  │
   └────────────────────────────────────────────────────────┘
       │
   suppress ───────────────► .gandalf.toml rules + baseline; findings are marked,
@@ -84,8 +85,11 @@ More in [`docs/architecture.md`](docs/architecture.md).
   Ruby, PHP, C/C++ and .NET each get build, lint, dependency-audit and test
   gates wired to that ecosystem's standard tooling — and only the ones matching
   the languages in scope run.
-- **Degrades instead of failing.** A missing tool is amber with the reason in
-  the line, so a partial run is legible rather than silently narrower.
+- **Never scores what it could not check.** A gate whose tool is missing, that
+  timed out, or that had nothing in scope is reported as not run, with the
+  reason in the line — and left out of the composite and the verdict, so a
+  missing scanner neither drags a clean repo down nor props a bad one up. When
+  most gates land there, the run says so and points at the setup step.
 - **Evaluates a scope, not a file.** Working tree, the index, or a commit —
   and a commit is checked out into a throwaway worktree, so the run cannot
   disturb what you are working on.
