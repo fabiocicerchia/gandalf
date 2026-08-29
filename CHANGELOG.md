@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0](https://github.com/fabiocicerchia/gandalf/compare/v0.11.1...v0.12.0) (2026-08-29)
+
+
+### Features
+
+* **gates:** add Java/Kotlin, Ruby, PHP, C/C++ and .NET gate suites ([#70](https://github.com/fabiocicerchia/gandalf/issues/70)) ([9fc70f4](https://github.com/fabiocicerchia/gandalf/commit/9fc70f433feeacd6a31be5b4dc30773ed910bc46)), closes [#21](https://github.com/fabiocicerchia/gandalf/issues/21)
+
+
+### Bug Fixes
+
+* **gates:** scan git-tracked files only, never the ignored tree ([#73](https://github.com/fabiocicerchia/gandalf/issues/73)) ([176f218](https://github.com/fabiocicerchia/gandalf/commit/176f2189e3a9f1a6ddeb0dedc65d8b2b9667118d))
+* unblock quality and clear the Scorecard pinned-dependencies finding ([#74](https://github.com/fabiocicerchia/gandalf/issues/74)) ([e5e1ca7](https://github.com/fabiocicerchia/gandalf/commit/e5e1ca7ea174ae1cc04b3ec9db24e5f3df40bbe6))
+
 ## [0.11.1](https://github.com/fabiocicerchia/gandalf/compare/v0.11.0...v0.11.1) (2026-08-27)
 
 
