@@ -93,9 +93,13 @@ More in [`docs/architecture.md`](docs/architecture.md).
 - **Evaluates a scope, not a file.** Working tree, the index, or a commit —
   and a commit is checked out into a throwaway worktree, so the run cannot
   disturb what you are working on.
-- **Caches on content.** One hash over the scope's files skips gates whose
-  input has not changed. Caveat: the hash covers file contents only, so a tool
-  upgrade or a newly published CVE does not invalidate a hit.
+- **Caches on content, keyed to the toolchain.** One hash over the scope's files
+  skips gates whose input has not changed. The key is salted with the
+  `gandalf-tools` image id, and dependency gates expire after six hours, so a
+  newly published CVE against an untouched lockfile is not served from cache.
+  Caveat: a scanner upgraded on the host `PATH` is still not detected — host
+  versions are only known after the tools run, and the key is needed before.
+  Delete `.gandalf-cache.json` after upgrading host scanners.
 - **Suppresses without hiding.** Rules and a baseline mark findings; the count
   of what was suppressed stays in the report.
 - **Emits what other tools already read** — SARIF for code scanning, JUnit for

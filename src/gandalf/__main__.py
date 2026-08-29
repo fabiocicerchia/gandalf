@@ -750,10 +750,14 @@ def main(argv: list[str] | None = None) -> int:
             cache_path = str(Path(scope.repo_root()) / args.cache)
             cache_data = gcache.load(cache_path)
             file_hash = gcache.content_hash(
-                sc.workdir, gcache.target_files(sc.workdir, sc.changed_files)
+                sc.workdir,
+                gcache.target_files(sc.workdir, sc.changed_files),
+                salt=gcache.toolchain_salt(),
             )
             to_run = [
-                g for g in active if gcache.get(cache_data, g.name, file_hash) is None
+                g
+                for g in active
+                if gcache.get(cache_data, g.name, file_hash, gcache.max_age(g)) is None
             ]
 
         limit = _resolve_concurrency(args.concurrency, cfg)
@@ -788,7 +792,7 @@ def main(argv: list[str] | None = None) -> int:
                 gcache.put(cache_data, r.name, file_hash, r)
             gcache.save(cache_path, cache_data)
             cached = [
-                gcache.get(cache_data, g.name, file_hash)
+                gcache.get(cache_data, g.name, file_hash, gcache.max_age(g))
                 for g in active
                 if g not in to_run
             ]
