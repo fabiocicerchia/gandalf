@@ -87,9 +87,55 @@ def _tools_image_available() -> bool:
     return r.returncode == 0
 
 
+@lru_cache(maxsize=1)
+def tools_image_id() -> str:
+    """The built image's content id, or "".
+
+    The image tag is a moving target — `make tools` rebuilds `gandalf-tools:latest`
+    from whatever the upstream package indexes serve that day. The id is what
+    actually distinguishes one build from another, so it is the thing a report
+    has to carry if "it passes on my machine" is ever going to be answerable.
+    """
+    if not _tools_image_available():
+        return ""
+    r = subprocess.run(  # nosec B603 B607 - fixed docker argv, no shell
+        ["docker", "image", "inspect", "-f", "{{.Id}}", TOOLS_IMAGE],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
 def _via_image(binary: str) -> bool:
     """Whether a tool would run out of the image rather than off the host PATH."""
     return binary in IMAGE_TOOLS and _tools_image_available()
+
+
+# binary → "host" | "image", for every tool a gate actually invoked this run.
+# Two machines that resolve the same gate differently produce different findings
+# and no way to tell why; recorded here so the report can simply say which.
+_TOOL_SOURCE: dict[str, str] = {}
+
+
+def _record_tool(binary: str, source: str) -> None:
+    """First resolution wins — a tool resolves the same way all run long."""
+    _TOOL_SOURCE.setdefault(binary, source)
+
+
+def tool_sources() -> dict[str, str]:
+    """binary → where it ran, for the tools invoked through `run_tool` this run.
+
+    Gates that build their own `docker run` argv (kics, codeql) name their image
+    in their own summary and are not in here.
+    """
+    return dict(_TOOL_SOURCE)
+
+
+def reset_tool_sources() -> None:
+    """Clear the record. Process state, so a second run in one process (the
+    editor extension, the tests) must not inherit the first run's resolutions."""
+    _TOOL_SOURCE.clear()
 
 
 def tool_missing(binary: str) -> bool:
@@ -107,8 +153,12 @@ def _dockerize(cmd: list[str], workdir: str, name: str = "") -> list[str]:
     `name` is what makes the container killable on timeout — without it there is
     no handle to stop, only the client process, and stopping that stops nothing.
     """
-    if shutil.which(cmd[0]) or not _via_image(cmd[0]):
+    if shutil.which(cmd[0]):
+        _record_tool(cmd[0], "host")
         return cmd
+    if not _via_image(cmd[0]):
+        return cmd
+    _record_tool(cmd[0], "image")
     return [
         "docker",
         "run",
@@ -437,6 +487,35 @@ def missing_result(
         name,
         f"{tool or binary} unavailable (no host binary or gandalf-tools image) — skipped",
     )
+
+
+# First line of `<tool> --version` is the version for nearly every scanner here;
+# the ones that disagree get "unknown" rather than a guess, which is still enough
+# to answer "did these two machines run the same thing?" (they did not).
+_VERSION_TIMEOUT = 30
+
+
+async def tool_version(binary: str, workdir: str) -> str:
+    """`<binary> --version`, routed the same way the gate's own calls were.
+
+    Through `run_tool`, so an image-resolved tool is asked inside the image — the
+    host may not even have the binary, and if it does, its version is not the one
+    that produced the findings.
+    """
+    rc, out, err = await run_tool([binary, "--version"], workdir, _VERSION_TIMEOUT)
+    text = (out or "").strip() or (err or "").strip()
+    if rc != 0 or not text:
+        return "unknown"
+    return text.splitlines()[0].strip()[:120]
+
+
+async def tool_versions(workdir: str) -> dict[str, str]:
+    """Version of every tool that ran this run, probed concurrently."""
+    names = sorted(_TOOL_SOURCE)
+    if not names:
+        return {}
+    got = await asyncio.gather(*(tool_version(n, workdir) for n in names))
+    return dict(zip(names, got))
 
 
 def _gate_dirs() -> list[Path]:
