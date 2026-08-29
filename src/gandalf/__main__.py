@@ -275,9 +275,12 @@ def _print_summary(
     passed,
     reason,
     tools,
+    explain,
 ) -> None:
     """Terminal scorecard + the language / fixes / config / policy footer lines."""
     print(report.render_terminal(sc.label, results, verdict, advice, meta_line))
+    if explain:
+        print(report.explain_score(results, verdict))
     # Before the per-run footer: on a host with no scanners this is the only line
     # that tells the user anything actionable, so it must not be the last thing
     # after a wall of gate rows.
@@ -651,6 +654,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="write current findings to a baseline file (default path if none given)",
     )
     ap.add_argument(
+        "--explain-score",
+        action="store_true",
+        help="show how the composite score was arrived at: every gate that "
+        "counted, its score, and what it contributed",
+    )
+    ap.add_argument(
         "--tool-versions",
         action="store_true",
         help="probe the version of every scanner that ran and record it in the "
@@ -873,6 +882,7 @@ def main(argv: list[str] | None = None) -> int:
             passed,
             reason,
             tools,
+            args.explain_score,
         )
 
         out_dir = (

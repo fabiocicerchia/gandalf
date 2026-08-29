@@ -327,6 +327,49 @@ def render_terminal(
     return "\n".join(lines)
 
 
+def explain_score(results: list[GateResult], verdict: Verdict) -> str:
+    """Show how the composite was arrived at: every gate that counted, its score,
+    and what it contributed.
+
+    The composite is an unweighted mean, which is simple enough that nobody
+    documents it and therefore nobody can reproduce it — "why is this 81 and not
+    74?" has no answer short of reading report.py. Printing the addends answers it,
+    and makes the two things that silently move the number visible: gates left out
+    because they could not run, and scores replaced by severity weighting.
+    """
+    counted = [r for r in results if not did_not_run(r)]
+    skipped = [r for r in results if did_not_run(r)]
+    lines = [f"\n{_BOLD}SCORE{_RESET}  {verdict.score}/100"]
+    if not counted:
+        lines.append(
+            f"  {_DIM}no gate produced a result — there is nothing to average{_RESET}"
+        )
+        return "\n".join(lines)
+    width = max(len(r.name) for r in counted)
+    lines.append(f"  {_DIM}{'gate'.ljust(width)}   score   contributes{_RESET}")
+    for r in sorted(counted, key=lambda r: (r.score, r.name)):
+        note = ""
+        raw = getattr(r, "_raw_score", None)
+        if raw is not None and round(raw, 3) != round(r.score, 3):
+            note = f"  {_DIM}(gate scored {raw:.2f}, severity-weighted){_RESET}"
+        emoji = _RAG[r.outcome][0]
+        lines.append(
+            f"  {r.name.ljust(width)}  {r.score:5.2f}   "
+            f"{r.score / len(counted) * 100:9.1f}  {emoji}{note}"
+        )
+    lines.append(
+        f"  {_DIM}{'─' * (width + 24)}{_RESET}\n"
+        f"  {len(counted)} gate(s) counted · mean "
+        f"{sum(r.score for r in counted) / len(counted):.3f} → {verdict.score}/100"
+    )
+    if skipped:
+        names = ", ".join(sorted(r.name for r in skipped))
+        lines.append(
+            f"  {_DIM}{len(skipped)} not counted (could not run): {names}{_RESET}"
+        )
+    return "\n".join(lines)
+
+
 def setup_banner(results: list[GateResult], image_built: bool, has_docker: bool) -> str:
     """A setup banner for a host where most gates found no tool to run, else "".
 

@@ -52,4 +52,8 @@ def reweight(res: GateResult) -> GateResult:
     for attr in ("_blocking", "_category", "_unavailable"):
         if hasattr(res, attr):
             setattr(out, attr, getattr(res, attr))
+    # Keep what the gate itself scored. Without it --explain-score can only show
+    # the weighted number, which is the one the user cannot derive from the gate's
+    # own output — so the explanation would be the least explanatory part.
+    out._raw_score = res.score  # type: ignore[attr-defined]
     return out
