@@ -25,6 +25,8 @@
 | `--write-baseline [PATH]` | Snapshot current findings to a baseline file (default `.gandalf-baseline.json`). |
 | `--config <path>` | Path to a `.gandalf.toml` (default: repo root). |
 | `--exclude <glob>` | Skip paths matching the glob, for **every** gate. Repeatable. A bare name skips that directory anywhere (`node_modules`), a path anchors at the repository root (`src/generated`), and globs work (`*.min.js`). Adds to `.gandalfignore` and the built-in defaults rather than replacing them; `[gandalf] exclude = [...]` in `.gandalf.toml` does the same. |
+| `--explain-score` | Show how the composite was arrived at: every gate that counted, its score, its contribution, and the gates left out because they could not run. |
+| `--tool-versions` | Probe the version of every scanner that ran and record it in the report (one extra subprocess per tool). |
 | `--cache [PATH]` | Reuse a gate's prior result when the scanned files are unchanged (default `.gandalf-cache.json`). Ignored with `--target`/`--title`/`--body`. |
 
 ## Suggested fixes

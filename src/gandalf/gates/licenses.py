@@ -7,7 +7,12 @@ from __future__ import annotations
 import json
 
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.plugins import missing_result, run_tool, timeout_result
+from gandalf.plugins import (
+    missing_result,
+    run_tool,
+    timeout_result,
+    unavailable,
+)
 
 
 class LicensesGate:
@@ -44,9 +49,7 @@ class LicensesGate:
         try:
             data = json.loads(out or "{}")
         except json.JSONDecodeError:
-            return GateResult(
-                self.name, GateOutcome.WARN, 0.8, "licenses: unparsable output"
-            )
+            return unavailable(self.name, "licenses: unparsable output")
         lic = [
             lc
             for r in data.get("Results", [])

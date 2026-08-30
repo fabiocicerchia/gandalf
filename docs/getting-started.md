@@ -46,7 +46,7 @@ off the host. Resolution per tool, in order:
 
 1. host binary on `PATH` → run it directly (no Docker);
 1. else `gandalf-tools` image present → run the tool in a throwaway container;
-1. else → the gate degrades to 🟡 WARN.
+1. else → the gate reports ⚪ not run (and is left out of the score).
 
 So you can `make tools` for zero host installs, *or* install any subset of tools
 on the host and skip the image — both work, mixed freely. Override the image

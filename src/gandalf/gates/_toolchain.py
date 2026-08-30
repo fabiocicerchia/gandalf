@@ -26,6 +26,7 @@ from gandalf.plugins import (
     scannable_files,
     timeout_result,
     tool_missing,
+    unavailable,
 )
 
 # A syntax check spawns one process per file, so the tree it runs over is capped:
@@ -214,10 +215,8 @@ class ToolchainGate:
                 f"{self.ecosystem}: not in this tree (no {', '.join(self.markers)})",
             )
         if self.binary and tool_missing(self.binary):
-            return GateResult(
+            return unavailable(
                 self.name,  # type: ignore[attr-defined]
-                GateOutcome.WARN,
-                0.8,
                 f"{self.binary} not installed — skipped",
             )
         return await self.check(ctx, root)
@@ -227,9 +226,7 @@ class ToolchainGate:
 
     def missing(self, binary: str) -> GateResult:
         """WARN for a toolchain the gate resolved itself (see `binary`)."""
-        return GateResult(
+        return unavailable(
             self.name,  # type: ignore[attr-defined]
-            GateOutcome.WARN,
-            0.8,
             f"{binary} not installed — skipped",
         )

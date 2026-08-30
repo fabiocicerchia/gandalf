@@ -27,7 +27,11 @@ from gandalf.gates._toolchain import (
     sources,
     tail,
 )
-from gandalf.plugins import run_tool, timeout_result
+from gandalf.plugins import (
+    run_tool,
+    timeout_result,
+    unavailable,
+)
 
 _SUFFIXES = (".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx")
 _SOURCES = tuple(f"*{s}" for s in _SUFFIXES)
@@ -59,10 +63,8 @@ class CppBuildGate(ToolchainGate):
             if (to := timeout_result(self.name, rc)) is not None:
                 return to
             if rc != 0:
-                return GateResult(
+                return unavailable(
                     self.name,
-                    GateOutcome.WARN,
-                    0.8,
                     f"cmake: configure failed (toolchain or deps) — "
                     f"{tail((out or '') + (err or ''), 3)}",
                 )
@@ -122,10 +124,8 @@ class CppcheckGate(ToolchainGate):
                     }
                 )
         if rc != 0 and not findings:
-            return GateResult(
+            return unavailable(
                 self.name,
-                GateOutcome.WARN,
-                0.8,
                 f"cppcheck: did not run — {tail((err or '') + (out or ''), 2)}",
             )
         return counted(self.name, len(findings), "cppcheck", findings[:50])

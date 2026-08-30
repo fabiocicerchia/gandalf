@@ -14,7 +14,12 @@ from pathlib import Path
 from gandalf import suggest
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.findings import relpath
-from gandalf.plugins import run_tool, timeout_result, tool_missing
+from gandalf.plugins import (
+    run_tool,
+    timeout_result,
+    tool_missing,
+    unavailable,
+)
 
 
 def _no_pkg(ctx: GateContext) -> bool:
@@ -75,9 +80,7 @@ class EslintGate:
         if _no_pkg(ctx):
             return GateResult(self.name, GateOutcome.PASS, 1.0, "node: no package.json")
         if tool_missing("npx"):
-            return GateResult(
-                self.name, GateOutcome.WARN, 0.8, "npx/node not installed — skipped"
-            )
+            return unavailable(self.name, "npx/node not installed — skipped")
         rc, out, _err = await run_tool(
             ["npx", "--no-install", "eslint", "-f", "json", "."], ctx.workdir
         )
@@ -85,21 +88,13 @@ class EslintGate:
             return to
         if not (out or "").strip():
             # npx --no-install printed nothing → eslint isn't installed in the project.
-            return GateResult(
-                self.name,
-                GateOutcome.WARN,
-                0.8,
-                "eslint: not installed in project (npm i eslint) — skipped",
+            return unavailable(
+                self.name, "eslint: not installed in project (npm i eslint) — skipped"
             )
         try:
             results = json.loads(out)
         except json.JSONDecodeError:
-            return GateResult(
-                self.name,
-                GateOutcome.WARN,
-                0.8,
-                "eslint: not configured in project — skipped",
-            )
+            return unavailable(self.name, "eslint: not configured in project — skipped")
         errors = sum(r.get("errorCount", 0) for r in results)
         warns = sum(r.get("warningCount", 0) for r in results)
         total = errors + warns
@@ -136,9 +131,7 @@ class TscGate:
         if not (Path(ctx.workdir) / "tsconfig.json").exists():
             return GateResult(self.name, GateOutcome.PASS, 1.0, "tsc: no tsconfig.json")
         if tool_missing("npx"):
-            return GateResult(
-                self.name, GateOutcome.WARN, 0.8, "npx/node not installed — skipped"
-            )
+            return unavailable(self.name, "npx/node not installed — skipped")
         rc, out, err = await run_tool(
             ["npx", "--no-install", "tsc", "--noEmit"], ctx.workdir
         )
@@ -150,10 +143,8 @@ class TscGate:
             return GateResult(self.name, GateOutcome.PASS, 1.0, "tsc: no type errors")
         if n == 0:
             # non-zero exit but no TS errors parsed → tsc missing or misconfigured, not a clean pass.
-            return GateResult(
+            return unavailable(
                 self.name,
-                GateOutcome.WARN,
-                0.8,
                 "tsc: could not run (not installed or misconfigured) — skipped",
             )
         score = max(0.0, 1.0 - min(n, 20) / 20)
@@ -180,9 +171,7 @@ class NodeTestGate:
         if "test" not in scripts:
             return GateResult(self.name, GateOutcome.PASS, 1.0, "node: no test script")
         if tool_missing("npm"):
-            return GateResult(
-                self.name, GateOutcome.WARN, 0.8, "npm/node not installed — skipped"
-            )
+            return unavailable(self.name, "npm/node not installed — skipped")
         rc, out, err = await run_tool(["npm", "test", "--silent"], ctx.workdir)
         if (to := timeout_result(self.name, rc)) is not None:
             return to

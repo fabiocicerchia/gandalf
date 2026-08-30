@@ -26,6 +26,7 @@ from pathlib import Path
 
 from . import findings
 from .base import GateOutcome, GateResult
+from .plugins import carry_over
 
 DEFAULT_BASELINE = ".gandalf-baseline.json"
 
@@ -106,27 +107,28 @@ class Suppressor:
             return res
         total = muted + len(kept)
         if not kept:
-            return GateResult(
-                res.name,
-                GateOutcome.PASS,
-                1.0,
-                f"{res.summary}  · all {muted} finding(s) suppressed",
-                [],
+            return carry_over(
+                res,
+                GateResult(
+                    res.name,
+                    GateOutcome.PASS,
+                    1.0,
+                    f"{res.summary}  · all {muted} finding(s) suppressed",
+                    [],
+                ),
             )
         # Partial: keep outcome, nudge score toward green by the muted fraction.
         score = res.score + (1.0 - res.score) * (muted / total)
-        res_out = GateResult(
-            res.name,
-            res.outcome,
-            min(1.0, max(res.score, score)),
-            f"{res.summary}  · {muted} suppressed, {len(kept)} remaining",
-            kept,
+        return carry_over(
+            res,
+            GateResult(
+                res.name,
+                res.outcome,
+                min(1.0, max(res.score, score)),
+                f"{res.summary}  · {muted} suppressed, {len(kept)} remaining",
+                kept,
+            ),
         )
-        # Preserve gate flags that live as private attrs (set by the runner).
-        for attr in ("_blocking", "_category"):
-            if hasattr(res, attr):
-                setattr(res_out, attr, getattr(res, attr))
-        return res_out
 
 
 def load_baseline(path: str) -> set[str]:

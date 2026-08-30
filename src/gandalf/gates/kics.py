@@ -17,7 +17,12 @@ import shutil
 import tempfile
 
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.plugins import ignore_patterns, run_tool, timeout_result
+from gandalf.plugins import (
+    ignore_patterns,
+    run_tool,
+    timeout_result,
+    unavailable,
+)
 
 _IMAGE = os.environ.get("GANDALF_KICS_IMAGE", "checkmarx/kics:latest")
 
@@ -29,11 +34,8 @@ class KicsGate:
     async def run(self, ctx: GateContext) -> GateResult:
         have_host = shutil.which("kics") is not None
         if not have_host and not shutil.which("docker"):
-            return GateResult(
-                self.name,
-                GateOutcome.WARN,
-                0.8,
-                "kics unavailable (no host binary and no docker) — skipped",
+            return unavailable(
+                self.name, "kics unavailable (no host binary and no docker) — skipped"
             )
 
         outdir = tempfile.mkdtemp(prefix="gandalf-kics-")
@@ -72,18 +74,13 @@ class KicsGate:
                 return to
             results = os.path.join(outdir, "results.json")
             if not os.path.exists(results):
-                return GateResult(
-                    self.name,
-                    GateOutcome.WARN,
-                    0.8,
-                    "kics: no results produced — skipped",
-                )
+                return unavailable(self.name, "kics: no results produced — skipped")
             # Small local results read right after the subprocess completes —
             # not worth a thread hop.
             with open(results, errors="replace") as fh:  # noqa: ASYNC230
                 data = json.load(fh)
         except (OSError, json.JSONDecodeError) as exc:
-            return GateResult(self.name, GateOutcome.WARN, 0.8, f"kics: {exc}")
+            return unavailable(self.name, f"kics: {exc}")
         finally:
             shutil.rmtree(outdir, ignore_errors=True)
 

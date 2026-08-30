@@ -52,7 +52,13 @@ scope → discover_gates → run (bounded concurrency) → aggregate → render 
    expandable per-gate findings, and a header showing the commit ref and the
    UTC generation time.
 
-Overall verdict: 🔴 if any gate fails · 🟡 if any warns · 🟢 if all pass.
+Overall verdict: 🔴 if any gate fails · 🟡 if any warns · 🟢 if all pass —
+counting only the gates that actually ran. A gate that could not run (tool not
+installed, timed out, judge unreachable, nothing in scope) is marked ⚪ and
+excluded from both the verdict and the composite score; `plugins.unavailable()`
+builds those results and `plugins.did_not_run()` reads the marker. `GateOutcome`
+deliberately keeps its three members, so the cache, SARIF, JUnit and the badge
+are unaffected and gate files stay portable to ai-harness.
 
 ## Contract compatibility with ai-harness
 

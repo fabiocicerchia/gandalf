@@ -15,7 +15,12 @@ from __future__ import annotations
 import json
 
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.plugins import missing_result, run_tool, timeout_result
+from gandalf.plugins import (
+    missing_result,
+    run_tool,
+    timeout_result,
+    unavailable,
+)
 
 # Scorecard's aggregate is a 0–10 float. Bands are generous: local mode drops the
 # GitHub-API checks entirely, so a clean file-based posture already sits high.
@@ -44,15 +49,10 @@ class ScorecardGate:
         except json.JSONDecodeError:
             # A non-local run would ask for a token; local mode shouldn't, but be safe.
             if err and ("token" in err.lower() or "auth" in err.lower()):
-                return GateResult(
-                    self.name,
-                    GateOutcome.WARN,
-                    0.8,
-                    "scorecard: needs GITHUB_AUTH_TOKEN — skipped",
+                return unavailable(
+                    self.name, "scorecard: needs GITHUB_AUTH_TOKEN — skipped"
                 )
-            return GateResult(
-                self.name, GateOutcome.WARN, 0.8, "scorecard: unparsable output"
-            )
+            return unavailable(self.name, "scorecard: unparsable output")
 
         checks = data.get("checks") or []
         try:
@@ -61,11 +61,8 @@ class ScorecardGate:
             aggregate = -1.0
         # score -1 = scorecard couldn't compute an aggregate (every check inconclusive).
         if aggregate < 0 or not checks:
-            return GateResult(
-                self.name,
-                GateOutcome.WARN,
-                0.8,
-                "scorecard: no conclusive checks (local mode) — skipped",
+            return unavailable(
+                self.name, "scorecard: no conclusive checks (local mode) — skipped"
             )
 
         # Findings: each check that ran (score >= 0) below a perfect 10, with its reason.

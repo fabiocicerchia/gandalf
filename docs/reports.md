@@ -15,13 +15,26 @@
   "remediation": "…markdown…",
   "improvement": "…markdown…",
   "skipped_gates": ["eslint", "go_build"],
+  "tools": {
+    "resolved": {"ruff": {"source": "host", "version": "ruff 0.15.8"},
+                 "trivy": {"source": "image"}},
+    "image": {"name": "gandalf-tools", "id": "sha256:…"}
+  },
   "gates": [
     {"name": "build", "outcome": "fail", "score": 0.0,
      "summary": "1 file(s) fail to compile — …", "findings": [...],
-     "category": "Build & tests", "blocking": true, "duration": 0.42}
+     "category": "Build & tests", "blocking": true, "unavailable": false,
+     "duration": 0.42}
   ]
 }
 ```
+
+`tools` records where each scanner actually came from — `host` (found on `PATH`)
+or `image` (run inside `gandalf-tools`) — plus the image's content id, which is
+what distinguishes one `make tools` build from another. `version` is present only
+with `--tool-versions`. Gates that build their own `docker run` (kics, codeql)
+name their image in their own summary instead. `unavailable` is true for a gate
+that produced no signal about the code; those are excluded from `score`.
 
 `commit` is the evaluated commit for `--commit`, else the latest commit (HEAD)
 even for `--staged` / working-tree scopes. `category` is the same grouping the

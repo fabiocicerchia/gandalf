@@ -32,7 +32,11 @@ import shutil
 import tempfile
 
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.plugins import run_tool, timeout_result
+from gandalf.plugins import (
+    run_tool,
+    timeout_result,
+    unavailable,
+)
 from gandalf.scope import _classify
 
 _IMAGE = os.environ.get(
@@ -58,11 +62,8 @@ class CodeqlGate:
     async def run(self, ctx: GateContext) -> GateResult:
         have_host = shutil.which("codeql") is not None
         if not have_host and not shutil.which("docker"):
-            return GateResult(
-                self.name,
-                GateOutcome.WARN,
-                0.8,
-                "codeql unavailable (no host binary and no docker) — skipped",
+            return unavailable(
+                self.name, "codeql unavailable (no host binary and no docker) — skipped"
             )
 
         detected = _classify(ctx.changed_files) if ctx.changed_files else None
@@ -105,10 +106,8 @@ class CodeqlGate:
             shutil.rmtree(work, ignore_errors=True)
 
         if not ran:
-            return GateResult(
+            return unavailable(
                 self.name,
-                GateOutcome.WARN,
-                0.8,
                 "codeql: no database analyzed (build/query-pack unavailable) — skipped",
             )
 

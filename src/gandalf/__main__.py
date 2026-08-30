@@ -17,6 +17,7 @@ import dataclasses
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -189,6 +190,7 @@ class _GateStream:
                 "category": report.category_of(r),
                 "duration": getattr(r, "_duration", None),
                 "blocking": getattr(r, "_blocking", False),
+                "unavailable": plugins.did_not_run(r),
             }
         )
 
@@ -272,9 +274,22 @@ def _print_summary(
     cfg,
     passed,
     reason,
+    tools,
+    explain,
 ) -> None:
     """Terminal scorecard + the language / fixes / config / policy footer lines."""
     print(report.render_terminal(sc.label, results, verdict, advice, meta_line))
+    if explain:
+        print(report.explain_score(results, verdict))
+    # Before the per-run footer: on a host with no scanners this is the only line
+    # that tells the user anything actionable, so it must not be the last thing
+    # after a wall of gate rows.
+    if banner := report.setup_banner(
+        results,
+        plugins._tools_image_available(),
+        bool(shutil.which("docker")),
+    ):
+        print(banner)
     print(
         f"\nLanguages: {', '.join(sorted(detected)) or 'none detected'}"
         + (
@@ -298,11 +313,66 @@ def _print_summary(
             "\nFixes applied:\n"
             + ("\n".join(f"  ✔ {a}" for a in applied) if applied else "  (none)")
         )
+    if tools_line := _tools_line(tools):
+        print(tools_line)
     if cfg.path:
         print(f"Config: {cfg.path}")
     if not passed and verdict.outcome != GateOutcome.FAIL:
         # RAG isn't red but policy fails the run — say so explicitly.
         print(f"Policy: run FAILED — {reason}")
+
+
+def _tool_report(workdir: str, probe_versions: bool) -> dict:
+    """Which scanner ran from where, and optionally at what version.
+
+    Recorded because the same gate resolves differently on two machines — host
+    binary here, container there, different versions of both — and until now the
+    report gave no way to tell, so "it passes for me" had no answer. Provenance is
+    free (the resolution already happened); versions cost a subprocess each and
+    are opt-in behind --tool-versions.
+    """
+    sources = plugins.tool_sources()
+    if not sources:
+        return {}
+    versions = asyncio.run(plugins.tool_versions(workdir)) if probe_versions else {}
+    report_block: dict = {
+        "resolved": {
+            name: {
+                "source": src,
+                **({"version": versions[name]} if name in versions else {}),
+            }
+            for name, src in sorted(sources.items())
+        }
+    }
+    if any(src == "image" for src in sources.values()):
+        report_block["image"] = {
+            "name": plugins.TOOLS_IMAGE,
+            "id": plugins.tools_image_id(),
+        }
+    return report_block
+
+
+def _tools_line(tools: dict) -> str:
+    """One-line provenance summary for the terminal footer."""
+    resolved = tools.get("resolved") or {}
+    if not resolved:
+        return ""
+    host = sum(1 for v in resolved.values() if v["source"] == "host")
+    image = sum(1 for v in resolved.values() if v["source"] == "image")
+    parts = []
+    if host:
+        parts.append(f"{host} from PATH")
+    if image:
+        img = tools.get("image") or {}
+        ident = (img.get("id") or "")[:19] or img.get("name", "")
+        parts.append(f"{image} from {img.get('name', 'image')} ({ident})")
+    line = f"Tools: {', '.join(parts)}"
+    versioned = {n: v["version"] for n, v in resolved.items() if v.get("version")}
+    if versioned:
+        line += "\n" + "\n".join(
+            f"  {n} ({resolved[n]['source']}) {v}" for n, v in sorted(versioned.items())
+        )
+    return line
 
 
 def _build_payload(
@@ -318,6 +388,7 @@ def _build_payload(
     disabled,
     fixes,
     results,
+    tools,
 ) -> dict:
     """The machine-readable run record written to reports/<stem>.json."""
     return {
@@ -340,6 +411,9 @@ def _build_payload(
         "skipped_gates": sorted(skipped),
         "disabled_gates": disabled,
         "fixes": [{"gate": n, "changed": c, "message": m} for n, c, m in fixes],
+        # Where each scanner actually came from this run (and, with
+        # --tool-versions, at what version) — see _tool_report.
+        "tools": tools,
         "gates": [
             {
                 **dataclasses.asdict(r),
@@ -350,6 +424,10 @@ def _build_payload(
                 "findings": gfindings.annotate_all(r.findings, sc.workdir),
                 "category": report.category_of(r),
                 "blocking": getattr(r, "_blocking", False),
+                # True when the gate produced no signal about the code (tool not
+                # installed, timed out, judge unreachable, nothing in scope). Such
+                # gates are left out of `score` — see report.aggregate.
+                "unavailable": plugins.did_not_run(r),
                 "duration": getattr(r, "_duration", None),
             }
             for r in results
@@ -576,6 +654,18 @@ def _build_parser() -> argparse.ArgumentParser:
         help="write current findings to a baseline file (default path if none given)",
     )
     ap.add_argument(
+        "--explain-score",
+        action="store_true",
+        help="show how the composite score was arrived at: every gate that "
+        "counted, its score, and what it contributed",
+    )
+    ap.add_argument(
+        "--tool-versions",
+        action="store_true",
+        help="probe the version of every scanner that ran and record it in the "
+        "report (one extra subprocess per tool)",
+    )
+    ap.add_argument(
         "--cache",
         nargs="?",
         const=gcache.DEFAULT_CACHE,
@@ -608,6 +698,9 @@ def main(argv: list[str] | None = None) -> int:
     # Always set, even when empty: this is process state, and a second run in
     # the same process must not inherit the first one's exclusions.
     plugins.set_extra_ignores(excludes)
+    # Same reason: tool resolutions are process state, and a second run in one
+    # process (the editor extension) must not report the first run's tools.
+    plugins.reset_tool_sources()
     if excludes:
         debug.log(f"excluding {len(excludes)} extra pattern(s): {', '.join(excludes)}")
 
@@ -666,10 +759,14 @@ def main(argv: list[str] | None = None) -> int:
             cache_path = str(Path(scope.repo_root()) / args.cache)
             cache_data = gcache.load(cache_path)
             file_hash = gcache.content_hash(
-                sc.workdir, gcache.target_files(sc.workdir, sc.changed_files)
+                sc.workdir,
+                gcache.target_files(sc.workdir, sc.changed_files),
+                salt=gcache.toolchain_salt(),
             )
             to_run = [
-                g for g in active if gcache.get(cache_data, g.name, file_hash) is None
+                g
+                for g in active
+                if gcache.get(cache_data, g.name, file_hash, gcache.max_age(g)) is None
             ]
 
         limit = _resolve_concurrency(args.concurrency, cfg)
@@ -704,7 +801,7 @@ def main(argv: list[str] | None = None) -> int:
                 gcache.put(cache_data, r.name, file_hash, r)
             gcache.save(cache_path, cache_data)
             cached = [
-                gcache.get(cache_data, g.name, file_hash)
+                gcache.get(cache_data, g.name, file_hash, gcache.max_age(g))
                 for g in active
                 if g not in to_run
             ]
@@ -770,6 +867,7 @@ def main(argv: list[str] | None = None) -> int:
             "score_delta": score_delta,
             "workdir": sc.workdir,  # lets sarif.to_sarif rebase paths repo-relative
         }
+        tools = _tool_report(sc.workdir, args.tool_versions)
         _print_summary(
             sc,
             results,
@@ -783,6 +881,8 @@ def main(argv: list[str] | None = None) -> int:
             cfg,
             passed,
             reason,
+            tools,
+            args.explain_score,
         )
 
         out_dir = (
@@ -804,6 +904,7 @@ def main(argv: list[str] | None = None) -> int:
             disabled,
             fixes,
             results,
+            tools,
         )
         _write_outputs(
             args, out_dir, stem, sc, results, verdict, advice, meta_line, payload

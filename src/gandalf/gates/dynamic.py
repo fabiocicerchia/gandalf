@@ -15,7 +15,10 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.plugins import communicate
+from gandalf.plugins import (
+    communicate,
+    unavailable,
+)
 
 _DEFAULT_FUZZ_TIME = 60
 _DAST_TIMEOUT = 300
@@ -50,18 +53,12 @@ def _guard(ctx: GateContext, name: str):
     """Return (target_url, None) or (None, skip_result)."""
     target = (ctx.meta or {}).get("target", "")
     if not target:
-        return None, GateResult(
-            name,
-            GateOutcome.WARN,
-            0.8,
-            f"{name}: no target URL — skipped (pass --target)",
+        return None, unavailable(
+            name, f"{name}: no target URL — skipped (pass --target)"
         )
     if not _is_local(target) and not (ctx.meta or {}).get("allow_remote", False):
-        return None, GateResult(
-            name,
-            GateOutcome.WARN,
-            0.8,
-            f"{name}: refusing active scan against non-local target '{target}'",
+        return None, unavailable(
+            name, f"{name}: refusing active scan against non-local target '{target}'"
         )
     return target, None
 
@@ -91,19 +88,11 @@ class AtherisGate:
     async def run(self, ctx: GateContext) -> GateResult:
         harness = Path(ctx.workdir) / "tests" / "fuzz" / "fuzz_adapters.py"
         if not harness.exists():
-            return GateResult(
-                self.name,
-                GateOutcome.WARN,
-                0.8,
-                "atheris: no fuzz harness at tests/fuzz/fuzz_adapters.py",
+            return unavailable(
+                self.name, "atheris: no fuzz harness at tests/fuzz/fuzz_adapters.py"
             )
         if not await _atheris_installed(ctx.workdir):
-            return GateResult(
-                self.name,
-                GateOutcome.WARN,
-                0.8,
-                "atheris: package not installed — skipped",
-            )
+            return unavailable(self.name, "atheris: package not installed — skipped")
         fuzz_time = int((ctx.meta or {}).get("fuzz_time", _DEFAULT_FUZZ_TIME))
         rc, out, err = await _run(
             [
@@ -117,12 +106,7 @@ class AtherisGate:
         )
         combined = out + err
         if rc == -1:
-            return GateResult(
-                self.name,
-                GateOutcome.WARN,
-                0.8,
-                f"atheris: timed out (budget={fuzz_time}s)",
-            )
+            return unavailable(self.name, f"atheris: timed out (budget={fuzz_time}s)")
         # Match libFuzzer's own crash markers, not a bare "crash" substring —
         # the harness is invoked with -artifact_prefix=/tmp/atheris-crash-,
         # which libFuzzer echoes back in its startup banner and would always
@@ -160,15 +144,13 @@ class NiktoGate:
         if skip:
             return skip
         if not shutil.which("nikto"):
-            return GateResult(
-                self.name, GateOutcome.WARN, 0.8, "nikto not installed — skipped"
-            )
+            return unavailable(self.name, "nikto not installed — skipped")
         rc, out, _ = await _run(
             ["nikto", "-h", target, "-ask", "no", "-nointeractive", "-Format", "txt"],
             ctx.workdir,
         )
         if rc == -1:
-            return GateResult(self.name, GateOutcome.WARN, 0.8, "nikto: timed out")
+            return unavailable(self.name, "nikto: timed out")
         findings = [ln for ln in out.strip().splitlines() if ln.startswith("+ ")]
         if not findings:
             return GateResult(self.name, GateOutcome.PASS, 1.0, "nikto: no findings")
@@ -199,9 +181,7 @@ class SqlmapGate:
         if skip:
             return skip
         if not shutil.which("sqlmap"):
-            return GateResult(
-                self.name, GateOutcome.WARN, 0.8, "sqlmap not installed — skipped"
-            )
+            return unavailable(self.name, "sqlmap not installed — skipped")
         api = (ctx.meta or {}).get("api", target.rstrip("/") + "/api/v1")
         bearer = (ctx.meta or {}).get("bearer", "")
         cmd = [
@@ -222,7 +202,7 @@ class SqlmapGate:
             cmd += [f"--header=Authorization: Bearer {bearer}"]
         rc, out, err = await _run(cmd, ctx.workdir)
         if rc == -1:
-            return GateResult(self.name, GateOutcome.WARN, 0.8, "sqlmap: timed out")
+            return unavailable(self.name, "sqlmap: timed out")
         combined = out + err
         if re.search(r"(is vulnerable|parameter.*injectable)", combined, re.IGNORECASE):
             return GateResult(
@@ -248,9 +228,7 @@ class DalfoxGate:
         if skip:
             return skip
         if not shutil.which("dalfox"):
-            return GateResult(
-                self.name, GateOutcome.WARN, 0.8, "dalfox not installed — skipped"
-            )
+            return unavailable(self.name, "dalfox not installed — skipped")
         api = (ctx.meta or {}).get("api", target.rstrip("/") + "/api/v1")
         bearer = (ctx.meta or {}).get("bearer", "")
         cmd = [
@@ -265,7 +243,7 @@ class DalfoxGate:
             cmd += ["-H", f"Authorization: Bearer {bearer}"]
         rc, out, err = await _run(cmd, ctx.workdir)
         if rc == -1:
-            return GateResult(self.name, GateOutcome.WARN, 0.8, "dalfox: timed out")
+            return unavailable(self.name, "dalfox: timed out")
         combined = out + err
         vuln_lines = [
             ln for ln in combined.splitlines() if "[V]" in ln or "VULN" in ln.upper()

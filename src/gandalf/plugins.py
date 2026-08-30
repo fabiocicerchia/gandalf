@@ -87,9 +87,55 @@ def _tools_image_available() -> bool:
     return r.returncode == 0
 
 
+@lru_cache(maxsize=1)
+def tools_image_id() -> str:
+    """The built image's content id, or "".
+
+    The image tag is a moving target — `make tools` rebuilds `gandalf-tools:latest`
+    from whatever the upstream package indexes serve that day. The id is what
+    actually distinguishes one build from another, so it is the thing a report
+    has to carry if "it passes on my machine" is ever going to be answerable.
+    """
+    if not _tools_image_available():
+        return ""
+    r = subprocess.run(  # nosec B603 B607 - fixed docker argv, no shell
+        ["docker", "image", "inspect", "-f", "{{.Id}}", TOOLS_IMAGE],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
 def _via_image(binary: str) -> bool:
     """Whether a tool would run out of the image rather than off the host PATH."""
     return binary in IMAGE_TOOLS and _tools_image_available()
+
+
+# binary → "host" | "image", for every tool a gate actually invoked this run.
+# Two machines that resolve the same gate differently produce different findings
+# and no way to tell why; recorded here so the report can simply say which.
+_TOOL_SOURCE: dict[str, str] = {}
+
+
+def _record_tool(binary: str, source: str) -> None:
+    """First resolution wins — a tool resolves the same way all run long."""
+    _TOOL_SOURCE.setdefault(binary, source)
+
+
+def tool_sources() -> dict[str, str]:
+    """binary → where it ran, for the tools invoked through `run_tool` this run.
+
+    Gates that build their own `docker run` argv (kics, codeql) name their image
+    in their own summary and are not in here.
+    """
+    return dict(_TOOL_SOURCE)
+
+
+def reset_tool_sources() -> None:
+    """Clear the record. Process state, so a second run in one process (the
+    editor extension, the tests) must not inherit the first run's resolutions."""
+    _TOOL_SOURCE.clear()
 
 
 def tool_missing(binary: str) -> bool:
@@ -107,8 +153,12 @@ def _dockerize(cmd: list[str], workdir: str, name: str = "") -> list[str]:
     `name` is what makes the container killable on timeout — without it there is
     no handle to stop, only the client process, and stopping that stops nothing.
     """
-    if shutil.which(cmd[0]) or not _via_image(cmd[0]):
+    if shutil.which(cmd[0]):
+        _record_tool(cmd[0], "host")
         return cmd
+    if not _via_image(cmd[0]):
+        return cmd
+    _record_tool(cmd[0], "image")
     return [
         "docker",
         "run",
@@ -388,15 +438,56 @@ _DOCKER_UNAVAILABLE = re.compile(
 )
 
 
+def unavailable(name: str, summary: str) -> GateResult:
+    """A gate that produced no signal about the code: its tool is not installed,
+    it timed out, its judge was unreachable, or it had nothing in scope to look at.
+
+    Still amber and still 0.8, so every existing consumer sees what it saw before.
+    What is new is the `_unavailable` marker, set out-of-band the same way the
+    runner sets `_blocking` and `_duration` — the `Gate` protocol is unchanged and
+    `GateOutcome` gains no member, so gate files still move between this project
+    and ai-harness untouched.
+
+    It matters because "we could not check this" is not a quality signal, and
+    scoring it as one is wrong in both directions: 0.8 drags a clean repo down and
+    props a bad one up, and a host with no scanners installed lands on a red
+    scorecard that says nothing about the code. `report.aggregate` leaves marked
+    results out of the composite and the verdict; the report counts them instead.
+    """
+    r = GateResult(name, GateOutcome.WARN, 0.8, summary)
+    r._unavailable = True  # type: ignore[attr-defined]
+    return r
+
+
+def carry_over(src: GateResult, dst: GateResult) -> GateResult:
+    """Copy the out-of-band attributes from one result onto a rebuilt one.
+
+    suppress and severity both rebuild a GateResult to change its score, and both
+    used to name the attributes worth keeping. That list went stale every time one
+    was added: `_duration` was never in it, so every reweighted run wrote a null
+    duration into the JSON, and `_unavailable` had to be added to two call sites
+    the day it was introduced. Copy whatever is actually there instead — the
+    underscore prefix is exactly what distinguishes runner metadata from the
+    dataclass's own fields.
+    """
+    for key, value in vars(src).items():
+        if key.startswith("_"):
+            setattr(dst, key, value)
+    return dst
+
+
+def did_not_run(r: GateResult) -> bool:
+    """Whether this result came from `unavailable` — the reader for the marker,
+    so no caller has to know it is an underscore attribute."""
+    return bool(getattr(r, "_unavailable", False))
+
+
 def timeout_result(name: str, rc: int) -> GateResult | None:
     """WARN sentinel: the tool did not actually run (timeout, or a dockerized tool
     missing from the image). Never let that masquerade as a clean pass."""
     if rc == _TIMEOUT_RC:
-        return GateResult(
-            name,
-            GateOutcome.WARN,
-            0.8,
-            f"{name}: did not run (timeout or tool unavailable) — skipped",
+        return unavailable(
+            name, f"{name}: did not run (timeout or tool unavailable) — skipped"
         )
     return None
 
@@ -409,12 +500,39 @@ def missing_result(
     overrides the name shown in the message (e.g. the licenses gate runs trivy)."""
     if not tool_missing(binary):
         return None
-    return GateResult(
+    return unavailable(
         name,
-        GateOutcome.WARN,
-        0.8,
         f"{tool or binary} unavailable (no host binary or gandalf-tools image) — skipped",
     )
+
+
+# First line of `<tool> --version` is the version for nearly every scanner here;
+# the ones that disagree get "unknown" rather than a guess, which is still enough
+# to answer "did these two machines run the same thing?" (they did not).
+_VERSION_TIMEOUT = 30
+
+
+async def tool_version(binary: str, workdir: str) -> str:
+    """`<binary> --version`, routed the same way the gate's own calls were.
+
+    Through `run_tool`, so an image-resolved tool is asked inside the image — the
+    host may not even have the binary, and if it does, its version is not the one
+    that produced the findings.
+    """
+    rc, out, err = await run_tool([binary, "--version"], workdir, _VERSION_TIMEOUT)
+    text = (out or "").strip() or (err or "").strip()
+    if rc != 0 or not text:
+        return "unknown"
+    return text.splitlines()[0].strip()[:120]
+
+
+async def tool_versions(workdir: str) -> dict[str, str]:
+    """Version of every tool that ran this run, probed concurrently."""
+    names = sorted(_TOOL_SOURCE)
+    if not names:
+        return {}
+    got = await asyncio.gather(*(tool_version(n, workdir) for n in names))
+    return dict(zip(names, got))
 
 
 def _gate_dirs() -> list[Path]:
@@ -422,6 +540,11 @@ def _gate_dirs() -> list[Path]:
 
     The built-in directory first, then anything on GANDALF_GATES_PATH — which
     is how a project adds its own gate without vendoring gandalf.
+
+    GANDALF_GATES_PATH is a trust boundary: every `.py` in those directories is
+    imported, and module-level code runs at import time, before anything checks
+    whether the file defines a gate at all. Whoever can set that variable can
+    execute code as whatever user gandalf runs as. See docs/configuration.md.
     """
     dirs = [Path(__file__).parent / "gates"]
     for extra in filter(
@@ -453,7 +576,11 @@ def _load_module(path: Path):
 def discover_gates() -> list[Gate]:
     """Instantiate every Gate-shaped class found in the plugin dirs."""
     gates: dict[str, Gate] = {}
+    builtin = _gate_dirs()[0]
     for d in _gate_dirs():
+        external = d != builtin
+        if external:
+            debug.log(f"loading external gates from {d} (GANDALF_GATES_PATH)")
         for path in sorted(d.glob("*.py")):
             if path.name.startswith("_"):
                 continue
@@ -469,6 +596,16 @@ def discover_gates() -> list[Gate]:
                     continue
                 inst = obj()
                 if isinstance(inst, Gate):
+                    if external and inst.name in gates:
+                        # A plugin replacing a built-in is legitimate — it is how
+                        # you swap a scanner — but it must never be silent: a gate
+                        # named `gitleaks` that reports a clean pass is otherwise
+                        # indistinguishable from the real one in every output.
+                        print(
+                            f"gandalf: gate '{inst.name}' overridden by "
+                            f"{path} (GANDALF_GATES_PATH)",
+                            file=sys.stderr,
+                        )
                     gates[inst.name] = (
                         inst  # name wins on collision → override built-ins
                     )

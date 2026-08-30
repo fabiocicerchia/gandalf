@@ -12,7 +12,12 @@ import re
 from pathlib import Path
 
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.plugins import run_tool, timeout_result, tool_missing
+from gandalf.plugins import (
+    run_tool,
+    timeout_result,
+    tool_missing,
+    unavailable,
+)
 
 
 def _no_crate(ctx: GateContext) -> bool:
@@ -32,9 +37,7 @@ class RustBuildGate:
                 self.name, GateOutcome.PASS, 1.0, "rust: no crate (no Cargo.toml)"
             )
         if tool_missing("cargo"):
-            return GateResult(
-                self.name, GateOutcome.WARN, 0.8, "cargo not installed — skipped"
-            )
+            return unavailable(self.name, "cargo not installed — skipped")
         rc, _out, err = await run_tool(["cargo", "build"], ctx.workdir)
         if (to := timeout_result(self.name, rc)) is not None:
             return to
@@ -63,9 +66,7 @@ class ClippyGate:
                 self.name, GateOutcome.PASS, 1.0, "rust: no crate (no Cargo.toml)"
             )
         if tool_missing("cargo"):
-            return GateResult(
-                self.name, GateOutcome.WARN, 0.8, "cargo not installed — skipped"
-            )
+            return unavailable(self.name, "cargo not installed — skipped")
         rc, _out, err = await run_tool(
             ["cargo", "clippy", "--message-format=json"], ctx.workdir
         )
@@ -127,9 +128,7 @@ class CargoAuditGate:
                 self.name, GateOutcome.PASS, 1.0, "rust: no crate (no Cargo.toml)"
             )
         if tool_missing("cargo-audit"):
-            return GateResult(
-                self.name, GateOutcome.WARN, 0.8, "cargo-audit not installed — skipped"
-            )
+            return unavailable(self.name, "cargo-audit not installed — skipped")
         rc, out, _err = await run_tool(["cargo", "audit", "--json"], ctx.workdir)
         if (to := timeout_result(self.name, rc)) is not None:
             return to
@@ -162,9 +161,7 @@ class RustTestGate:
                 self.name, GateOutcome.PASS, 1.0, "rust: no crate (no Cargo.toml)"
             )
         if tool_missing("cargo"):
-            return GateResult(
-                self.name, GateOutcome.WARN, 0.8, "cargo not installed — skipped"
-            )
+            return unavailable(self.name, "cargo not installed — skipped")
         rc, out, err = await run_tool(["cargo", "test"], ctx.workdir)
         if (to := timeout_result(self.name, rc)) is not None:
             return to

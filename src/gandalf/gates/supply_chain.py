@@ -6,9 +6,11 @@ Ported from ai-harness. (gitleaks lives in secrets.py.)
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import json
 import re
 import shutil
+import sys
 from pathlib import Path
 
 from gandalf.base import GateContext, GateOutcome, GateResult
@@ -20,6 +22,7 @@ from gandalf.plugins import (
     missing_result,
     run_tool,
     timeout_result,
+    unavailable,
 )
 
 
@@ -53,9 +56,7 @@ class OsvGate:
         try:
             data = json.loads(out or "[]")
         except json.JSONDecodeError:
-            return GateResult(
-                self.name, GateOutcome.WARN, 0.8, "osv/pip-audit: unparsable output"
-            )
+            return unavailable(self.name, "osv/pip-audit: unparsable output")
         vulns = [
             v
             for item in (data if isinstance(data, list) else [])
@@ -88,9 +89,7 @@ class OsvScannerGate:
         try:
             data = json.loads(out or "{}")
         except json.JSONDecodeError:
-            return GateResult(
-                self.name, GateOutcome.WARN, 0.8, "osv-scanner: unparsable output"
-            )
+            return unavailable(self.name, "osv-scanner: unparsable output")
         results = data.get("results", [])
         vulns = [
             v
@@ -140,9 +139,7 @@ class TrivyGate:
         try:
             data = json.loads(out or "{}")
         except json.JSONDecodeError:
-            return GateResult(
-                self.name, GateOutcome.WARN, 0.8, "trivy: unparsable output"
-            )
+            return unavailable(self.name, "trivy: unparsable output")
         results = data.get("Results", [])
         vulns = [v for r in results for v in r.get("Vulnerabilities", []) or []]
         secrets = [s for r in results for s in r.get("Secrets", []) or []]
@@ -194,9 +191,7 @@ class CheckovGate:
             raw = json.loads(out or "{}")
             data = (raw[0] if raw else {}) if isinstance(raw, list) else raw
         except json.JSONDecodeError:
-            return GateResult(
-                self.name, GateOutcome.WARN, 0.8, "checkov: unparsable output"
-            )
+            return unavailable(self.name, "checkov: unparsable output")
         summary = data.get("summary", {})
         failed = summary.get("failed", 0)
         passed = summary.get("passed", 0)
@@ -237,11 +232,8 @@ class HadolintGate:
                 ["hadolint", "--format", "json", df], ctx.workdir
             )
             if rc == _TIMEOUT_RC:
-                return GateResult(
-                    self.name,
-                    GateOutcome.WARN,
-                    0.8,
-                    f"{self.name}: timed out on {df} — skipped",
+                return unavailable(
+                    self.name, f"{self.name}: timed out on {df} — skipped"
                 )
             try:
                 all_findings.extend(json.loads(out or "[]"))
@@ -281,18 +273,21 @@ class TestsGate:
         base = ["--tb=no", "-q", "--no-header"]
         for p in ignore_patterns(ctx.workdir):
             base += ["--ignore", p]
-        if (
+        configured = (
             (root / "pytest.ini").exists()
             or (root / "pyproject.toml").exists()
             or (root / "setup.cfg").exists()
-        ):
-            runner = ["python", "-m", "pytest", *base]
+        )
+        # A config file says the repo *uses* pytest, not that pytest is installed:
+        # `python -m pytest` then exits non-zero with "No module named pytest", which
+        # reads exactly like a failing suite. Ask the interpreter that would run it,
+        # and run it through sys.executable so the answer is about that interpreter.
+        if configured and importlib.util.find_spec("pytest") is not None:
+            runner = [sys.executable, "-m", "pytest", *base]
         elif shutil.which("pytest"):
             runner = ["pytest", *base]
         else:
-            return GateResult(
-                self.name, GateOutcome.WARN, 0.8, "tests: no pytest found — skipped"
-            )
+            return unavailable(self.name, "tests: pytest not installed — skipped")
         proc = await asyncio.create_subprocess_exec(
             *runner,
             cwd=ctx.workdir,
