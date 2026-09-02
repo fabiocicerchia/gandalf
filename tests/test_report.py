@@ -3,7 +3,7 @@ Run: pytest gandalf/test_report.py"""
 
 from __future__ import annotations
 
-from gandalf import report
+from gandalf import render_html, render_text, report
 from gandalf.base import GateOutcome, GateResult
 
 P, W, F = GateOutcome.PASS, GateOutcome.WARN, GateOutcome.FAIL
@@ -54,14 +54,14 @@ def _results():
 
 def test_render_terminal_smoke():
     v = report.aggregate(_results())
-    out = report.render_terminal("staged", _results(), v, {"summary": "hi"}, {})
+    out = render_text.render_terminal("staged", _results(), v, {"summary": "hi"}, {})
     assert "GANDALF" in out and "ruff" in out and "gitleaks" in out
     assert str(v.score) in out
 
 
 def test_render_html_smoke():
     v = report.aggregate(_results())
-    html = report.render_html(
+    html = render_html.render_html(
         "staged",
         _results(),
         v,
@@ -75,15 +75,15 @@ def test_render_html_smoke():
 
 
 def test_format_delta():
-    assert report._format_delta(None) == ""
-    assert report._format_delta(5) == " (+5 vs prev)"
-    assert report._format_delta(-3) == " (-3 vs prev)"
-    assert report._format_delta(0) == " (+0 vs prev)"
+    assert report.format_delta(None) == ""
+    assert report.format_delta(5) == " (+5 vs prev)"
+    assert report.format_delta(-3) == " (-3 vs prev)"
+    assert report.format_delta(0) == " (+0 vs prev)"
 
 
 def test_render_terminal_shows_delta():
     v = report.aggregate(_results())
-    out = report.render_terminal(
+    out = render_text.render_terminal(
         "staged", _results(), v, {"summary": "hi"}, {"score_delta": -7}
     )
     assert "(-7 vs prev)" in out
@@ -91,7 +91,7 @@ def test_render_terminal_shows_delta():
 
 def test_render_html_shows_delta():
     v = report.aggregate(_results())
-    html = report.render_html(
+    html = render_html.render_html(
         "staged", _results(), v, {"summary": "hi"}, {"score_delta": 4}
     )
     assert "(+4 vs prev)" in html
@@ -99,20 +99,20 @@ def test_render_html_shows_delta():
 
 def test_render_html_has_rag_filter_buttons():
     v = report.aggregate(_results())
-    out = report.render_html("staged", _results(), v, {"summary": "hi"})
+    out = render_html.render_html("staged", _results(), v, {"summary": "hi"})
     assert 'data-filter="fail"' in out
     assert 'data-filter="pass"' in out
     assert 'class="filter-btn active" data-filter="all"' in out
 
 
 def test_diff_html_empty_is_blank():
-    assert report._diff_html("") == ""
-    assert report._diff_html("   \n") == ""
+    assert render_html._diff_html("") == ""
+    assert render_html._diff_html("   \n") == ""
 
 
 def test_diff_html_colors_added_and_removed_lines():
     diff = "@@ -1,2 +1,2 @@\n-old line\n+new line\n context\n"
-    out = report._diff_html(diff)
+    out = render_html._diff_html(diff)
     assert '<span class="diff-hunk">@@ -1,2 +1,2 @@</span>' in out
     assert '<span class="diff-del">-old line</span>' in out
     assert '<span class="diff-add">+new line</span>' in out
@@ -121,14 +121,14 @@ def test_diff_html_colors_added_and_removed_lines():
 
 def test_diff_html_ignores_file_header_markers():
     diff = "--- a/x.py\n+++ b/x.py\n@@ -1 +1 @@\n-old\n+new\n"
-    out = report._diff_html(diff)
+    out = render_html._diff_html(diff)
     assert '<span class="diff-del">--- a/x.py</span>' not in out
     assert '<span class="diff-add">+++ b/x.py</span>' not in out
 
 
 def test_render_html_embeds_diff_view():
     v = report.aggregate(_results())
-    out = report.render_html(
+    out = render_html.render_html(
         "staged", _results(), v, {"summary": "hi"}, diff="+added line\n"
     )
     assert '<details class="diff-view">' in out and "added line" in out
@@ -136,7 +136,7 @@ def test_render_html_embeds_diff_view():
 
 def test_render_html_without_diff_omits_diff_view():
     v = report.aggregate(_results())
-    out = report.render_html("staged", _results(), v, {"summary": "hi"})
+    out = render_html.render_html("staged", _results(), v, {"summary": "hi"})
     assert '<details class="diff-view">' not in out
 
 

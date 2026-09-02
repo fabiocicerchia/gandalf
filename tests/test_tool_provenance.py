@@ -9,7 +9,8 @@ from __future__ import annotations
 import pytest
 
 from gandalf import plugins
-from gandalf.__main__ import _tool_report, _tools_line
+from gandalf.outputs import tool_report
+from gandalf.summary import _tools_line
 
 
 @pytest.fixture(autouse=True)
@@ -58,29 +59,29 @@ def test_reset_clears_process_state(monkeypatch):
 
 def test_report_names_the_image_only_when_one_was_used(monkeypatch):
     monkeypatch.setattr(plugins, "tool_sources", lambda: {"ruff": "host"})
-    assert "image" not in _tool_report("/tmp", False)
+    assert "image" not in tool_report("/tmp", False)
     monkeypatch.setattr(plugins, "tool_sources", lambda: {"trivy": "image"})
     monkeypatch.setattr(plugins, "tools_image_id", lambda: "sha256:deadbeef")
-    block = _tool_report("/tmp", False)
+    block = tool_report("/tmp", False)
     assert block["image"] == {"name": plugins.TOOLS_IMAGE, "id": "sha256:deadbeef"}
     assert block["resolved"]["trivy"] == {"source": "image"}
 
 
 def test_versions_are_opt_in(monkeypatch):
     monkeypatch.setattr(plugins, "tool_sources", lambda: {"ruff": "host"})
-    assert "version" not in _tool_report("/tmp", False)["resolved"]["ruff"]
+    assert "version" not in tool_report("/tmp", False)["resolved"]["ruff"]
 
     async def fake(workdir):
         return {"ruff": "ruff 0.15.8"}
 
     monkeypatch.setattr(plugins, "tool_versions", fake)
-    got = _tool_report("/tmp", True)["resolved"]["ruff"]
+    got = tool_report("/tmp", True)["resolved"]["ruff"]
     assert got == {"source": "host", "version": "ruff 0.15.8"}
 
 
 def test_no_tools_no_block(monkeypatch):
     monkeypatch.setattr(plugins, "tool_sources", dict)
-    assert _tool_report("/tmp", True) == {}
+    assert tool_report("/tmp", True) == {}
     assert _tools_line({}) == ""
 
 

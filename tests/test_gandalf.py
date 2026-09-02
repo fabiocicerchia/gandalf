@@ -9,7 +9,7 @@ import asyncio
 from gandalf import llm, skillgate, skills
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.plugins import discover_gates
-from gandalf.report import _CATEGORY, _GROUP_ORDER, aggregate
+from gandalf.report import _CATEGORY, GROUP_ORDER, aggregate
 from gandalf.scope import _classify
 
 P = GateOutcome.PASS
@@ -279,7 +279,7 @@ def test_llm_skill_gates_discovered():
         assert getattr(g, "blocking", False) is False  # advisory, never hard-red
         assert not getattr(g, "langs", None)  # generic: run on every change
         cat = _CATEGORY[name]
-        assert cat in _GROUP_ORDER, f"{cat} won't render in the scorecard"
+        assert cat in GROUP_ORDER, f"{cat} won't render in the scorecard"
 
 
 def test_skills_are_embedded():

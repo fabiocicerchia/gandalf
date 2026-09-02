@@ -4,7 +4,7 @@ that nobody could reproduce it without reading report.py. Show the addends.
 
 from __future__ import annotations
 
-from gandalf import report, severity
+from gandalf import render_text, report, severity
 from gandalf.base import GateOutcome, GateResult
 from gandalf.plugins import unavailable
 
@@ -16,7 +16,7 @@ def test_lists_every_counted_gate_with_its_contribution():
         GateResult("ruff", P, 1.0, "clean"),
         GateResult("mypy", W, 0.5, "2 errors"),
     ]
-    out = report.explain_score(results, report.aggregate(results))
+    out = render_text.explain_score(results, report.aggregate(results))
     assert "75/100" in out
     assert "ruff" in out and "mypy" in out
     # each of two gates contributes half of its score
@@ -26,7 +26,7 @@ def test_lists_every_counted_gate_with_its_contribution():
 
 def test_names_the_gates_left_out_and_why():
     results = [GateResult("ruff", P, 1.0, "clean"), unavailable("trivy", "missing")]
-    out = report.explain_score(results, report.aggregate(results))
+    out = render_text.explain_score(results, report.aggregate(results))
     assert "1 not counted (could not run): trivy" in out
     assert "1 gate(s) counted" in out
 
@@ -39,20 +39,20 @@ def test_shows_the_gates_own_score_when_severity_reweighted():
     )
     weighted = severity.reweight(r)
     assert weighted.score != r.score
-    out = report.explain_score([weighted], report.aggregate([weighted]))
+    out = render_text.explain_score([weighted], report.aggregate([weighted]))
     assert "gate scored 0.90" in out and "severity-weighted" in out
 
 
 def test_no_note_when_reweighting_changed_nothing():
     r = GateResult("ruff", W, 0.5, "2 issues", [{"message": "no severity here"}])
     same = severity.reweight(r)
-    out = report.explain_score([same], report.aggregate([same]))
+    out = render_text.explain_score([same], report.aggregate([same]))
     assert "severity-weighted" not in out
 
 
 def test_nothing_ran_says_so_rather_than_averaging_nothing():
     results = [unavailable("a", "x"), unavailable("b", "y")]
-    out = report.explain_score(results, report.aggregate(results))
+    out = render_text.explain_score(results, report.aggregate(results))
     assert "nothing to average" in out
     assert "gate(s) counted" not in out
 
@@ -65,6 +65,6 @@ def test_the_arithmetic_shown_is_the_arithmetic_used():
         unavailable("d", "missing"),
     ]
     v = report.aggregate(results)
-    out = report.explain_score(results, v)
+    out = render_text.explain_score(results, v)
     assert f"→ {v.score}/100" in out
     assert v.score == round((1.0 + 0.6 + 0.2) / 3 * 100)
