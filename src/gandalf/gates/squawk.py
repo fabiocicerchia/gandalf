@@ -3,6 +3,7 @@ dropped columns, missing concurrent indexes, …). Self-skips without .sql files
 Best on migration files; on non-migration SQL it degrades to WARN gracefully."""
 
 from __future__ import annotations
+
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.gates._toolchain import named, parsed, scored
 from gandalf.plugins import (

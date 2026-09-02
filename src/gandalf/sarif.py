@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import hashlib
 
-from .base import GateOutcome, GateResult
 from . import findings
+from .base import GateOutcome, GateResult
 from .report import fmt_finding
 from .suppress import fingerprint
 
