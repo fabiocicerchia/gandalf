@@ -29,7 +29,7 @@ Each item fired because a measurement crossed a threshold. The numbers and the e
 
 <sub>`ARCH-COCHANGE` · Change over time</sub>
 
-### Worth attention · 2 module(s) are more than 4× the median size (102 lines); the largest is 612 lines.
+### Worth attention · 1 module(s) are more than 4× the median size (112 lines); the largest is 558 lines.
 
 **Why it matters.** A file this far from the median is rarely one idea. It cannot be reviewed in one sitting, it produces merge conflicts between people working on unrelated things, and it hides its internal structure from every tool that works at file granularity — including this one, which sees it as a single node.
 
@@ -39,14 +39,13 @@ Each item fired because a measurement crossed a threshold. The numbers and the e
 
 <details><summary>Evidence</summary>
 
-- `src/gandalf/plugins.py` — 612 lines
 - `extensions/vscode/src/extension.ts` — 558 lines
 
 </details>
 
 <sub>`ARCH-GODFILE` · Size and shape</sub>
 
-### Minor · 1 of 702 imports (0%) point at something this tool could not find on disk.
+### Minor · 1 of 771 imports (0%) point at something this tool could not find on disk.
 
 **Why it matters.** Every conclusion below is drawn from the edges that did resolve. Unresolved local imports mean real dependencies are missing from the graph, so cycles may go undetected and coupling is understated. A map with unknown holes is more dangerous than no map, because it invites confidence.
 
@@ -92,10 +91,10 @@ Each item fired because a measurement crossed a threshold. The numbers and the e
 - `extensions/vscode/src/bench.ts` — 152 lines
 - `extensions/vscode/src/extension.ts` — 558 lines
 - `scripts/bench.py` — 376 lines
-- `scripts/chart.py` — 202 lines
-- `src/gandalf/gates/_toolchain.py` — 237 lines
+- `scripts/chart.py` — 209 lines
+- `src/gandalf/gates/_toolchain.py` — 280 lines
 - `src/gandalf/gates/bandit.py` — 56 lines
-- `src/gandalf/gates/build.py` — 59 lines
+- `src/gandalf/gates/build.py` — 62 lines
 
 </details>
 
@@ -225,7 +224,7 @@ The section above reasons about the import graph, where an edge either exists or
 <details><summary>Evidence</summary>
 
 - `extensions/vscode/src/exclude.ts:57` — `3 levels of loop nesting`
-- `src/gandalf/plugins.py:231` — `3 levels of loop nesting`
+- `src/gandalf/plugins.py:70` — `3 levels of loop nesting`
 
 </details>
 
@@ -241,7 +240,7 @@ The section above reasons about the import graph, where an edge either exists or
 
 <details><summary>Evidence</summary>
 
-- `src/gandalf/plugins.py:118` — `_TOOL_SOURCE: dict[str, str] = {}`
+- `src/gandalf/toolrun.py:111` — `_TOOL_SOURCE: dict[str, str] = {}`
 
 </details>
 
@@ -308,8 +307,8 @@ The section above reasons about the import graph, where an edge either exists or
 - `extensions/vscode/src/store.ts:152` — `.sort(`
 - `scripts/bench.py:121` — `sorted(`
 - `scripts/bench.py:128` — `sorted(`
-- `scripts/chart.py:145` — `.sort(`
-- `src/gandalf/__main__.py:124` — `sorted(`
+- `scripts/chart.py:152` — `.sort(`
+- `src/gandalf/__main__.py:125` — `sorted(`
 - `src/gandalf/cache.py:122` — `sorted(`
 
 </details>
@@ -334,7 +333,7 @@ The section above reasons about the import graph, where an edge either exists or
 
 </details>
 
-**Worth attention · MNT-COMPLEX** — 25 of 339 Python functions (7%) have a cyclomatic complexity of 12 or more; the highest is 50.
+**Worth attention · MNT-COMPLEX** — 6 of 401 Python functions (1%) have a cyclomatic complexity of 12 or more; the highest is 23.
 
 *Why it matters.* Complexity counts the independent paths through a function, which is also the number of test cases needed to cover it and the number of cases a reader must hold at once. Past about ten, reviewers stop simulating the function and start trusting it, which is where defects survive review.
 
@@ -344,18 +343,16 @@ The section above reasons about the import graph, where an edge either exists or
 
 <details><summary>Evidence</summary>
 
-- `src/gandalf/__main__.py:138` — `main` complexity 50, 234 lines, nesting 4
 - `src/gandalf/render_text.py:31` — `render_terminal` complexity 23, 73 lines, nesting 3
-- `src/gandalf/gates/supply_chain.py:114` — `run` complexity 21, 49 lines, nesting 1
 - `src/gandalf/pr_comments.py:133` — `build` complexity 19, 46 lines, nesting 4
-- `src/gandalf/gates/compliance.py:48` — `run` complexity 18, 53 lines, nesting 1
-- `src/gandalf/outputs.py:108` — `write_outputs` complexity 16, 58 lines, nesting 2
-- `src/gandalf/gates/scorecard.py:38` — `run` complexity 16, 46 lines, nesting 2
-- `src/gandalf/render_html.py:215` — `render_html` complexity 15, 112 lines, nesting 2
+- `src/gandalf/outputs.py:120` — `write_outputs` complexity 16, 60 lines, nesting 2
+- `src/gandalf/render_html.py:222` — `render_html` complexity 15, 112 lines, nesting 2
+- `src/gandalf/summary.py:49` — `print_summary` complexity 14, 59 lines, nesting 1
+- `src/gandalf/suggest.py:263` — `for_anchor` complexity 12, 36 lines, nesting 1
 
 </details>
 
-**Minor · MNT-LONGFUNC** — 4 of 339 Python functions (1%) are 80 lines or longer; the longest is 234.
+**Minor · MNT-LONGFUNC** — 4 of 401 Python functions (1%) are 80 lines or longer; the longest is 180.
 
 *Why it matters.* Length is a proxy for how much has to be understood before any part can be changed. A function that does not fit on a screen cannot be checked against its own beginning, and long functions accumulate local variables whose lifetimes overlap in ways nothing enforces.
 
@@ -365,14 +362,14 @@ The section above reasons about the import graph, where an edge either exists or
 
 <details><summary>Evidence</summary>
 
-- `src/gandalf/__main__.py:138` — `main`, 234 lines
-- `src/gandalf/cli.py:26` — `build_parser`, 180 lines
-- `src/gandalf/render_html.py:215` — `render_html`, 112 lines
-- `src/gandalf/gates/codeql.py:130` — `_analyze`, 88 lines
+- `src/gandalf/cli.py:27` — `build_parser`, 180 lines
+- `src/gandalf/render_html.py:222` — `render_html`, 112 lines
+- `src/gandalf/__main__.py:320` — `main`, 104 lines
+- `src/gandalf/gates/codeql.py:146` — `_analyze`, 88 lines
 
 </details>
 
-**Minor · MNT-PARAMS** — 10 of 339 Python functions (3%) take 6 or more parameters; the largest takes 14.
+**Minor · MNT-PARAMS** — 11 of 401 Python functions (3%) take 6 or more parameters; the largest takes 14.
 
 *Why it matters.* A long parameter list is usually several values that travel together and have no name. Callers must remember an order, positional mistakes between same-typed parameters type-check silently, and every new requirement adds another.
 
@@ -382,18 +379,18 @@ The section above reasons about the import graph, where an edge either exists or
 
 <details><summary>Evidence</summary>
 
-- `src/gandalf/summary.py:33` — `print_summary`, 14 parameters
-- `src/gandalf/outputs.py:48` — `build_payload`, 13 parameters
-- `src/gandalf/outputs.py:108` — `write_outputs`, 9 parameters
+- `src/gandalf/summary.py:49` — `print_summary`, 14 parameters
+- `src/gandalf/outputs.py:60` — `build_payload`, 13 parameters
+- `src/gandalf/outputs.py:120` — `write_outputs`, 9 parameters
 - `src/gandalf/skillgate.py:203` — `_prompt`, 7 parameters
-- `src/gandalf/__main__.py:38` — `_run_gates`, 6 parameters
+- `src/gandalf/__main__.py:39` — `_run_gates`, 6 parameters
 - `src/gandalf/pr_comments.py:181` — `review_payload`, 6 parameters
 
 </details>
 
 ### Readability
 
-**Worth attention · RDB-NESTING** — 10 of 339 Python functions (3%) nest control flow 4 levels or deeper.
+**Worth attention · RDB-NESTING** — 8 of 401 Python functions (2%) nest control flow 4 levels or deeper.
 
 *Why it matters.* Each level of nesting is a condition the reader must keep true in their head for everything inside it. Depth compounds: at four levels the reader is tracking four simultaneous invariants to understand one line. Nesting correlates with defects more strongly than length does.
 
@@ -403,12 +400,12 @@ The section above reasons about the import graph, where an edge either exists or
 
 <details><summary>Evidence</summary>
 
-- `src/gandalf/plugins.py:576` — `discover_gates`, depth 5
-- `src/gandalf/__main__.py:138` — `main`, depth 4
-- `src/gandalf/plugins.py:245` — `_compiled_ignores`, depth 4
+- `src/gandalf/ignores.py:82` — `_compiled_ignores`, depth 4
+- `src/gandalf/plugins.py:114` — `discover_gates`, depth 4
 - `src/gandalf/pr_comments.py:71` — `added_lines`, depth 4
 - `src/gandalf/pr_comments.py:133` — `build`, depth 4
 - `src/gandalf/render_html.py:78` — `_md_to_html`, depth 4
+- `src/gandalf/render_html.py:111` — `_diff_html`, depth 4
 
 </details>
 
@@ -423,7 +420,7 @@ What was read, and where every import went. Third-party means the target is expe
 | Language | Fidelity | Files | Imports | Internal | Third-party | Unaccounted |
 |---|---|---:|---:|---:|---:|---:|
 | JavaScript | structural | 2 | 5 | 1 | 4 | 0 |
-| Python | parsed | 68 | 623 | 104 | 519 | 0 |
+| Python | parsed | 73 | 692 | 138 | 554 | 0 |
 | Ruby | heuristic | 1 | 0 | 0 | 0 | 0 |
 | TypeScript | structural | 18 | 74 | 43 | 30 | **1** |
 
@@ -431,9 +428,9 @@ Unaccounted imports by language: TypeScript 1. Until that is zero, treat this gr
 
 ## Shape
 
-- 89 modules across 4 components
-- 118 internal import edges, 0 component couplings
-- 13875 lines
+- 94 modules across 4 components
+- 128 internal import edges, 0 component couplings
+- 14297 lines
 - propagation cost 0% — the share of other components an average component can reach through import paths
 
 ## Component graph
@@ -442,8 +439,8 @@ Unaccounted imports by language: TypeScript 1. Until that is zero, treat this gr
 graph LR
   _mdl_style[".mdl_style<br/><small>Ruby · 1 mod · 16 loc</small>"]
   extensions["extensions<br/><small>JavaScript/TypeScript · 20 mod · 3321 loc</small>"]
-  scripts["scripts<br/><small>Python · 2 mod · 578 loc</small>"]
-  src["src<br/><small>Python · 66 mod · 9960 loc</small>"]
+  scripts["scripts<br/><small>Python · 2 mod · 585 loc</small>"]
+  src["src<br/><small>Python · 71 mod · 10375 loc</small>"]
 ```
 
 Dashed edges came from heuristic scanners. Thick borders are in a cycle. Labels count import sites.
@@ -470,7 +467,7 @@ Components a route can touch by following imports, to a depth of four. This is t
 
 ## The nouns
 
-123 types declared: 23 inheritance and 19 composition relationships between types defined in this tree. Relationships to types declared elsewhere are omitted rather than guessed, so this is a lower bound. 89 types were read with a real parser; the rest come from declaration syntax, which is reliable for the declaration and weaker for the member lists.
+125 types declared: 23 inheritance and 21 composition relationships between types defined in this tree. Relationships to types declared elsewhere are omitted rather than guessed, so this is a lower bound. 91 types were read with a real parser; the rest come from declaration syntax, which is reliable for the declaration and weaker for the member lists.
 
 ### `src`
 
@@ -742,7 +739,10 @@ src.gandalf.__main__  (Python)
 │  ├─ src.gandalf.base  (Python)
 │  └─ src.gandalf.plugins  (Python)
 │     ├─ src.gandalf.base  (Python)
-│     └─ src.gandalf.debug  (Python)
+│     ├─ src.gandalf.debug  (Python)
+│     ├─ src.gandalf.ignores  (Python)
+│     ├─ src.gandalf.outcomes  (Python)
+│     └─ src.gandalf.toolrun  (Python)
 ├─ src.gandalf.cli  (Python)
 │  ├─ src.gandalf.cache  (Python)  ↑ shown above
 │  └─ src.gandalf.suppress  (Python)
@@ -759,14 +759,14 @@ src.gandalf.__main__  (Python)
    ├─ src.gandalf.badge  (Python)
    │  ├─ src.gandalf.base  (Python)
    │  └─ src.gandalf.report  (Python)
-   ├─ src.gandalf.findings  (Python)
+   ├─ src.gandalf.findings  (Python)  ↑ shown above
    ├─ src.gandalf.junit  (Python)
    │  ├─ src.gandalf.base  (Python)
    │  └─ src.gandalf.report  (Python)  ↑ shown above
    ├─ src.gandalf.plugins  (Python)  ↑ shown above
    ├─ src.gandalf.pr_comments  (Python)
    │  ├─ src.gandalf.base  (Python)
-   │  ├─ src.gandalf.findings  (Python)
+   │  ├─ src.gandalf.findings  (Python)  ↑ shown above
    │  ├─ src.gandalf.report  (Python)  ↑ shown above
    │  └─ src.gandalf.suggest  (Python)
    ├─ src.gandalf.render_html  (Python)
@@ -775,11 +775,12 @@ src.gandalf.__main__  (Python)
    │  ├─ src.gandalf.plugins  (Python)  ↑ shown above
    │  └─ src.gandalf.report  (Python)  ↑ shown above
    ├─ src.gandalf.report  (Python)  ↑ shown above
-   └─ src.gandalf.sarif  (Python)
-      ├─ src.gandalf.base  (Python)
-      ├─ src.gandalf.findings  (Python)
-      ├─ src.gandalf.report  (Python)  ↑ shown above
-      └─ src.gandalf.suppress  (Python)  ↑ shown above
+   ├─ src.gandalf.sarif  (Python)
+   │  ├─ src.gandalf.base  (Python)
+   │  ├─ src.gandalf.findings  (Python)  ↑ shown above
+   │  ├─ src.gandalf.report  (Python)  ↑ shown above
+   │  └─ src.gandalf.suppress  (Python)  ↑ shown above
+   └─ … 1 more
 └─ … 9 more
 ```
 
@@ -828,8 +829,8 @@ scripts.bench  (Python)
 |---|---|---:|---:|---:|---:|---:|
 | `.mdl_style` | Ruby | 1 | 16 | 0 | 0 | 0.0 |
 | `extensions` | JavaScript, TypeScript | 20 | 3321 | 0 | 0 | 0.0 |
-| `scripts` | Python | 2 | 578 | 0 | 0 | 0.0 |
-| `src` | Python | 66 | 9960 | 0 | 0 | 0.0 |
+| `scripts` | Python | 2 | 585 | 0 | 0 | 0.0 |
+| `src` | Python | 71 | 10375 | 0 | 0 | 0.0 |
 
 Instability is fan-out / (fan-in + fan-out). A component many things depend on that itself depends widely propagates change in both directions.
 
@@ -843,12 +844,12 @@ Third-party packages. Standard-library imports are counted separately below, bec
 
 | Package | Sites | Components | First site |
 |---|---:|---:|---|
-| `gandalf` | 265 | 2 | scripts/bench.py:36 |
+| `gandalf` | 289 | 2 | scripts/bench.py:36 |
 | `vscode` | 11 | 1 | extensions/vscode/src/config.ts:1 |
 | `./test/vscode-shim` | 1 | 1 | extensions/vscode/src/bench.ts:22 |
 | `chart` | 1 | 1 | scripts/bench.py:365 |
 
-36 standard-library modules imported; most used: `__future__` (66), `json` (28), `pathlib` (25), `os` (20), `re` (16), `asyncio` (10), `dataclasses` (10), `shutil` (10), `sys` (9), `fs` (7), `path` (6), `tempfile` (6).
+36 standard-library modules imported; most used: `__future__` (71), `pathlib` (26), `json` (23), `os` (21), `re` (18), `dataclasses` (13), `asyncio` (10), `shutil` (10), `sys` (9), `fs` (7), `datetime` (6), `path` (6).
 
 ## Churn against size
 
@@ -857,20 +858,20 @@ Most-changed files in the last 12 months. This is where any map you carry in you
 | File | Lines touched | LOC | Language |
 |---|---:|---:|---|
 | `src/gandalf/report.py` | 1987 | 235 | Python |
-| `src/gandalf/__main__.py` | 1575 | 375 | Python |
+| `src/gandalf/__main__.py` | 1925 | 427 | Python |
+| `src/gandalf/plugins.py` | 1287 | 137 | Python |
 | `extensions/vscode/src/parse.ts` | 778 | 402 | TypeScript |
-| `src/gandalf/plugins.py` | 682 | 612 | Python |
+| `src/gandalf/findings.py` | 692 | 324 | Python |
+| `src/gandalf/gates/supply_chain.py` | 620 | 312 | Python |
 | `extensions/vscode/src/extension.ts` | 576 | 558 | TypeScript |
 | `src/gandalf/pr_comments.py` | 524 | 436 | Python |
-| `src/gandalf/findings.py` | 521 | 473 | Python |
 | `extensions/vscode/src/runner.ts` | 510 | 452 | TypeScript |
-| `src/gandalf/gates/supply_chain.py` | 433 | 317 | Python |
-| `src/gandalf/gates/dynamic.py` | 415 | 259 | Python |
+| `src/gandalf/gates/dynamic.py` | 463 | 269 | Python |
 | `extensions/vscode/src/findingsView.ts` | 403 | 393 | TypeScript |
-| `scripts/bench.py` | 376 | 376 | Python |
+| `src/gandalf/sarif.py` | 392 | 190 | Python |
+| `scripts/bench.py` | 380 | 376 | Python |
+| `src/gandalf/render_html.py` | 367 | 333 | Python |
 | `src/gandalf/suggest.py` | 354 | 354 | Python |
-| `src/gandalf/sarif.py` | 349 | 181 | Python |
-| `src/gandalf/skillgate.py` | 328 | 244 | Python |
 
 ## Public surface
 
@@ -984,19 +985,20 @@ _Showing 40 of 78; `--full` lists them all._
 - const RIGHT:41
 - const ROW_GAP:44
 - const WIDTH:39
-- def render:139
+- def render:146
 
 </details>
 
-<details><summary><code>src</code> — 309 exported</summary>
+<details><summary><code>src</code> — 319 exported</summary>
 
 
-_Showing 40 of 309; `--full` lists them all._
+_Showing 40 of 319; `--full` lists them all._
 
 
 `src.gandalf.__main__`
 
-- def main:138
+- class Scored:274
+- def main:320
 
 `src.gandalf.badge`
 
@@ -1012,6 +1014,7 @@ _Showing 40 of 309; `--full` lists them all._
 
 `src.gandalf.cache`
 
+- class Plan:201
 - const ADVISORY_GATES:47
 - const ADVISORY_TTL:46
 - const CACHE_VERSION:38
@@ -1028,7 +1031,7 @@ _Showing 40 of 309; `--full` lists them all._
 `src.gandalf.cli`
 
 - const _DESCRIPTION:16
-- def build_parser:26
+- def build_parser:27
 
 `src.gandalf.config`
 
@@ -1044,19 +1047,17 @@ _Showing 40 of 309; `--full` lists them all._
 
 `src.gandalf.findings`
 
-- const _MESSAGE_LEVEL:154
-- const _TEXT_LOCATION:142
-- const _TEXT_PATH:147
-- def annotate:459
-- def annotate_all:472
-- def column:219
-- def fingerprint_keys:444
-- def first_int:176
-- def first_str:161
-- def line:214
-- def message:229
-- def message_level:255
-- def normalise:350
+- const _MESSAGE_LEVEL:151
+- def annotate:310
+- def annotate_all:323
+- def column:216
+- def first_int:173
+- def first_str:158
+- def line:211
+- def message:226
+- def message_level:252
+- def normalise:269
+- def path:206
 
 </details>
 

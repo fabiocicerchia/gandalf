@@ -17,9 +17,14 @@ runs them under bounded concurrency, then aggregates and renders the report.
   the `--stream` NDJSON feed.
 - **`outputs.py` / `summary.py`** — the JSON/HTML/SARIF/JUnit/badge artifacts,
   and the terminal footer.
-- **`plugins.py`** — auto-discovers `Gate` subclasses in `gates/` and provides
-  shared subprocess helpers (per-gate timeout budgets).
-- **`gates/`** — one file per gate (bandit, ruff, semgrep, codeql, licenses, …).
+- **`plugins.py`** — auto-discovers `Gate` subclasses in `gates/`, and is the
+  import surface a gate is written against: it re-exports `toolrun.py`
+  (resolve a tool on PATH or in the gandalf-tools image, run it under a
+  per-gate timeout budget, kill the container behind it), `ignores.py` (which
+  files a gate may look at) and `outcomes.py` (the results for a gate that
+  produced no signal).
+- **`gates/`** — one file per gate (bandit, ruff, semgrep, codeql, licenses, …),
+  over the shared readers in `gates/_toolchain.py`.
 - **`base.py`** — `Gate`, `GateContext`, `GateResult`, `GateOutcome`.
 - **`report.py`** — the RAG vocabulary, the composite score and the policy.
 - **`render_text.py` / `render_html.py` / `html_assets.py` / `sarif.py`** —
@@ -28,6 +33,9 @@ runs them under bounded concurrency, then aggregates and renders the report.
   `file:line`, carrying the tool's own fix as an applicable suggestion.
 - **`llm.py` / `skills.py` / `skillgate.py`** — LLM summary and skill-driven
   review gates (playbooks under a top-level `skills/`).
+- **`findings.py` / `locate.py` / `fingerprint.py`** — one owner for reading a
+  heterogeneous gate finding: the key lists, the `path:line:col` scraped out of
+  a message, and the deliberately frozen vocabulary suppression hashes with.
 - **`config.py` / `scope.py` / `suppress.py` / `severity.py`** — `.gandalf.toml`
   config, file classification, baseline/suppression, severity mapping.
 
