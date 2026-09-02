@@ -103,6 +103,28 @@ def render_terminal(
     return "\n".join(lines)
 
 
+def _score_table(counted: list[GateResult], verdict: Verdict) -> list[str]:
+    """The per-gate addends of the composite, and the mean they add up to."""
+    width = max(len(r.name) for r in counted)
+    lines = [f"  {_DIM}{'gate'.ljust(width)}   score   contributes{_RESET}"]
+    for r in sorted(counted, key=lambda r: (r.score, r.name)):
+        note = ""
+        raw = getattr(r, "_raw_score", None)
+        if raw is not None and round(raw, 3) != round(r.score, 3):
+            note = f"  {_DIM}(gate scored {raw:.2f}, severity-weighted){_RESET}"
+        emoji = RAG[r.outcome][0]
+        lines.append(
+            f"  {r.name.ljust(width)}  {r.score:5.2f}   "
+            f"{r.score / len(counted) * 100:9.1f}  {emoji}{note}"
+        )
+    lines.append(
+        f"  {_DIM}{'─' * (width + 24)}{_RESET}\n"
+        f"  {len(counted)} gate(s) counted · mean "
+        f"{sum(r.score for r in counted) / len(counted):.3f} → {verdict.score}/100"
+    )
+    return lines
+
+
 def explain_score(results: list[GateResult], verdict: Verdict) -> str:
     """Show how the composite was arrived at: every gate that counted, its score,
     and what it contributed.
@@ -121,23 +143,7 @@ def explain_score(results: list[GateResult], verdict: Verdict) -> str:
             f"  {_DIM}no gate produced a result — there is nothing to average{_RESET}"
         )
         return "\n".join(lines)
-    width = max(len(r.name) for r in counted)
-    lines.append(f"  {_DIM}{'gate'.ljust(width)}   score   contributes{_RESET}")
-    for r in sorted(counted, key=lambda r: (r.score, r.name)):
-        note = ""
-        raw = getattr(r, "_raw_score", None)
-        if raw is not None and round(raw, 3) != round(r.score, 3):
-            note = f"  {_DIM}(gate scored {raw:.2f}, severity-weighted){_RESET}"
-        emoji = RAG[r.outcome][0]
-        lines.append(
-            f"  {r.name.ljust(width)}  {r.score:5.2f}   "
-            f"{r.score / len(counted) * 100:9.1f}  {emoji}{note}"
-        )
-    lines.append(
-        f"  {_DIM}{'─' * (width + 24)}{_RESET}\n"
-        f"  {len(counted)} gate(s) counted · mean "
-        f"{sum(r.score for r in counted) / len(counted):.3f} → {verdict.score}/100"
-    )
+    lines += _score_table(counted, verdict)
     if skipped:
         names = ", ".join(sorted(r.name for r in skipped))
         lines.append(

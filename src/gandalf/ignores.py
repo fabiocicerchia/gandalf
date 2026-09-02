@@ -115,6 +115,11 @@ def _compiled_ignores(patterns: tuple[str, ...]):
     )
 
 
+def _under(p: str, prefixes: tuple[str, ...]) -> bool:
+    """Whether the path is one of these anchored paths, or sits inside one."""
+    return any(p == pre or p.startswith(pre + "/") for pre in prefixes)
+
+
 def is_ignored(rel: str, patterns: tuple[str, ...]) -> bool:
     """gitignore-ish match of a repo-relative path against the ignore patterns.
 
@@ -130,7 +135,7 @@ def is_ignored(rel: str, patterns: tuple[str, ...]) -> bool:
     segments = p.split("/")
     if names and not names.isdisjoint(segments):
         return True
-    if any(p == pre or p.startswith(pre + "/") for pre in prefixes):
+    if _under(p, prefixes):
         return True
     if path_re is not None and path_re.match(p):
         return True
@@ -145,6 +150,21 @@ def scannable_files(workdir: str) -> tuple[str, ...]:
     return tuple(f for f in tracked_files(workdir) if not is_ignored(f, pats))
 
 
+def _changed_in_scope(
+    ctx: GateContext, pats: tuple[str, ...], py_only: bool
+) -> list[str]:
+    """The change's own files that still exist and are not ignored. Deletions
+    and non-existent paths are dropped."""
+    root = Path(ctx.workdir)
+    return [
+        rel
+        for rel in ctx.changed_files or []
+        if (not py_only or rel.endswith(".py"))
+        and not is_ignored(rel, pats)
+        and (root / rel).is_file()
+    ]
+
+
 def _scan_targets(ctx: GateContext, *, py_only: bool = False) -> list[str]:
     """Files to scan: the change's own files (bounded runtime, scoring reflects
     the diff not pre-existing repo issues), falling back to the git-tracked tree
@@ -157,16 +177,7 @@ def _scan_targets(ctx: GateContext, *, py_only: bool = False) -> list[str]:
     Ignored paths (.gandalfignore, --exclude, the built-in defaults) are dropped
     from both, so an exclusion narrows what *every* gate reads rather than only
     the few that translate the list into their tool's own exclude flag."""
-    root = Path(ctx.workdir)
-    pats = ignore_patterns(ctx.workdir)
-    targets = []
-    for rel in ctx.changed_files or []:
-        if py_only and not rel.endswith(".py"):
-            continue
-        if is_ignored(rel, pats):
-            continue
-        if (root / rel).is_file():
-            targets.append(rel)
+    targets = _changed_in_scope(ctx, ignore_patterns(ctx.workdir), py_only)
     if targets:
         return targets
     tracked = scannable_files(ctx.workdir)

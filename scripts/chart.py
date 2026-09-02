@@ -70,6 +70,42 @@ def _row_height(row: dict) -> int:
     return BAR * 2 + PAIR_GAP if row.get("before") is not None else BAR
 
 
+def _row_svg(row: dict, ry: int, plot: int, ceiling: float, unit: str) -> list[str]:
+    """One row: its label, one or two bars, and the before/after factor."""
+    out = [
+        f'<text x="{GUTTER - 12}" y="{ry + _row_height(row) / 2 + 4:.1f}" '
+        f'class="label" text-anchor="end">{escape(row["label"])}</text>'
+    ]
+    if row.get("before") is not None:
+        bars = [
+            ("before", row["before"], ry),
+            ("after", row["after"], ry + BAR + PAIR_GAP),
+        ]
+    else:
+        bars = [("after", row["after"], ry)]
+    for series, value, by in bars:
+        # A 1px floor, so a genuinely negligible cost is visible as
+        # negligible rather than absent.
+        w = max(1.0, plot * value / ceiling)
+        out.append(
+            f'<rect x="{GUTTER}" y="{by}" width="{w:.1f}" height="{BAR}" '
+            f'rx="4" class="bar {series}"><title>{escape(row["label"])} — '
+            f"{series} {_fmt(value)} {escape(unit)}</title></rect>"
+        )
+        out.append(
+            f'<text x="{GUTTER + w + 8:.1f}" y="{by + BAR - 3}" class="value">'
+            f"{_fmt(value)}</text>"
+        )
+    if row.get("before") is not None and row["after"] > 0:
+        factor = row["before"] / row["after"]
+        if factor >= 1.15:
+            out.append(
+                f'<text x="{WIDTH - 2}" y="{ry + _row_height(row) / 2 + 4:.1f}" '
+                f'class="delta" text-anchor="end">{factor:.1f}x</text>'
+            )
+    return out
+
+
 def _panel(rows: list[dict], unit: str, title: str, top: int) -> tuple[list[str], int]:
     """One panel: a titled group of bars sharing a single axis."""
     out: list[str] = []
@@ -102,36 +138,7 @@ def _panel(rows: list[dict], unit: str, title: str, top: int) -> tuple[list[str]
         )
 
     for row, ry in body_rows:
-        out.append(
-            f'<text x="{GUTTER - 12}" y="{ry + _row_height(row) / 2 + 4:.1f}" '
-            f'class="label" text-anchor="end">{escape(row["label"])}</text>'
-        )
-        bars = []
-        if row.get("before") is not None:
-            bars.append(("before", row["before"], ry))
-            bars.append(("after", row["after"], ry + BAR + PAIR_GAP))
-        else:
-            bars.append(("after", row["after"], ry))
-        for series, value, by in bars:
-            # A 1px floor, so a genuinely negligible cost is visible as
-            # negligible rather than absent.
-            w = max(1.0, plot * value / ceiling)
-            out.append(
-                f'<rect x="{GUTTER}" y="{by}" width="{w:.1f}" height="{BAR}" '
-                f'rx="4" class="bar {series}"><title>{escape(row["label"])} — '
-                f"{series} {_fmt(value)} {escape(unit)}</title></rect>"
-            )
-            out.append(
-                f'<text x="{GUTTER + w + 8:.1f}" y="{by + BAR - 3}" class="value">'
-                f"{_fmt(value)}</text>"
-            )
-        if row.get("before") is not None and row["after"] > 0:
-            factor = row["before"] / row["after"]
-            if factor >= 1.15:
-                out.append(
-                    f'<text x="{WIDTH - 2}" y="{ry + _row_height(row) / 2 + 4:.1f}" '
-                    f'class="delta" text-anchor="end">{factor:.1f}x</text>'
-                )
+        out += _row_svg(row, ry, plot, ceiling, unit)
 
     return out, axis_bottom + 24
 

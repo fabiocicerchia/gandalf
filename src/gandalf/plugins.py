@@ -93,6 +93,24 @@ def _load_module(path: Path):
     return mod
 
 
+def _gates_in(mod) -> list[Gate]:
+    """Every Gate-shaped class the module itself defines, instantiated.
+
+    Classes it merely imported (GateResult, a shared base) are skipped — they
+    belong to whoever defined them.
+    """
+    found: list[Gate] = []
+    for _, obj in inspect.getmembers(mod, inspect.isclass):
+        if obj.__module__ != mod.__name__:
+            continue
+        if not all(hasattr(obj, attr) for attr in ("name", "blocking", "run")):
+            continue
+        inst = obj()
+        if isinstance(inst, Gate):
+            found.append(inst)
+    return found
+
+
 def discover_gates() -> list[Gate]:
     """Instantiate every Gate-shaped class found in the plugin dirs."""
     gates: dict[str, Gate] = {}
@@ -104,29 +122,16 @@ def discover_gates() -> list[Gate]:
         for path in sorted(d.glob("*.py")):
             if path.name.startswith("_"):
                 continue
-            mod = _load_module(path)
-            for _, obj in inspect.getmembers(mod, inspect.isclass):
-                if obj.__module__ != mod.__name__:
-                    continue  # skip imported symbols (GateResult, etc.)
-                if not (
-                    hasattr(obj, "name")
-                    and hasattr(obj, "blocking")
-                    and hasattr(obj, "run")
-                ):
-                    continue
-                inst = obj()
-                if isinstance(inst, Gate):
-                    if external and inst.name in gates:
-                        # A plugin replacing a built-in is legitimate — it is how
-                        # you swap a scanner — but it must never be silent: a gate
-                        # named `gitleaks` that reports a clean pass is otherwise
-                        # indistinguishable from the real one in every output.
-                        print(
-                            f"gandalf: gate '{inst.name}' overridden by "
-                            f"{path} (GANDALF_GATES_PATH)",
-                            file=sys.stderr,
-                        )
-                    gates[inst.name] = (
-                        inst  # name wins on collision → override built-ins
+            for inst in _gates_in(_load_module(path)):
+                if external and inst.name in gates:
+                    # A plugin replacing a built-in is legitimate — it is how you
+                    # swap a scanner — but it must never be silent: a gate named
+                    # `gitleaks` that reports a clean pass is otherwise
+                    # indistinguishable from the real one in every output.
+                    print(
+                        f"gandalf: gate '{inst.name}' overridden by "
+                        f"{path} (GANDALF_GATES_PATH)",
+                        file=sys.stderr,
                     )
+                gates[inst.name] = inst  # name wins on collision → override built-ins
     return list(gates.values())

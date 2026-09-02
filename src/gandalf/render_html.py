@@ -178,19 +178,34 @@ def _advice_section(advice: dict, key: str, title: str, accent: str) -> str:
     )
 
 
+def _plain_remediation(eyebrow: str, raw: str) -> str:
+    """The section when the LLM gave no per-gate structure: plain markdown, or
+    nothing at all — every gate green means omitting the section entirely
+    rather than printing a "No remediation needed." placeholder."""
+    if _NO_REMEDIATION.match(raw):
+        return ""
+    inner = _md_to_html(raw) if raw else _EMPTY_NOTE
+    return f'{eyebrow}<section class="summary accent-remediation">{inner}</section>'
+
+
+def _rem_gate_html(name: str, body: str, outcome) -> str:
+    """One gate's remediation block, labelled "name (RAG)"."""
+    cls = outcome.name.lower() if outcome else "warn"
+    word = RAG[outcome][3] if outcome else "WARN"
+    return (
+        f'<div class="rem-gate">{html.escape(name)} '
+        f'<span class="badge {cls}">{word}</span></div>'
+        f'<div class="rem-body">{_md_to_html(body)}</div>'
+    )
+
+
 def _remediation_html(advice: dict, outcome_of: dict, sev_order: dict) -> str:
     """The remediation section: gate blocks labelled "name (RAG)", failures
     first, or "" when there is nothing to fix."""
     eyebrow = '<div class="eyebrow">Remediation — fixes to raise the score</div>'
     groups = advice.get("remediation_groups") or []
-    raw = (advice.get("remediation") or "").strip()
-    if not groups:  # LLM gave no per-gate structure → plain markdown or a note
-        # Nothing to fix (every gate green) → omit the section entirely rather
-        # than printing a "No remediation needed." placeholder.
-        if _NO_REMEDIATION.match(raw):
-            return ""
-        inner = _md_to_html(raw) if raw else _EMPTY_NOTE
-        return f'{eyebrow}<section class="summary accent-remediation">{inner}</section>'
+    if not groups:
+        return _plain_remediation(eyebrow, (advice.get("remediation") or "").strip())
     # One block, gates labelled "name (RAG)"; failures first, then warnings.
     ordered = sorted(
         groups,
@@ -198,15 +213,9 @@ def _remediation_html(advice: dict, outcome_of: dict, sev_order: dict) -> str:
     )
     pre = (advice.get("remediation_pre") or "").strip()
     parts = [f'<div class="rem-pre">{_md_to_html(pre)}</div>'] if pre else []
-    for name, body in ordered:
-        outcome = outcome_of.get(name)
-        cls = outcome.name.lower() if outcome else "warn"
-        word = RAG[outcome][3] if outcome else "WARN"
-        parts.append(
-            f'<div class="rem-gate">{html.escape(name)} '
-            f'<span class="badge {cls}">{word}</span></div>'
-            f'<div class="rem-body">{_md_to_html(body)}</div>'
-        )
+    parts += [
+        _rem_gate_html(name, body, outcome_of.get(name)) for name, body in ordered
+    ]
     return f'{eyebrow}<section class="summary accent-remediation">{"".join(parts)}</section>'
 
 

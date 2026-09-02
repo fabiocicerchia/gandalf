@@ -8,27 +8,42 @@ from . import plugins, render_text
 from .base import GateOutcome
 
 
-def _tools_line(tools: dict) -> str:
-    """One-line provenance summary for the terminal footer."""
-    resolved = tools.get("resolved") or {}
-    if not resolved:
-        return ""
+def _image_part(tools: dict, image: int) -> str:
+    """`N from <image> (<id>)` — the image is named by content id where it has
+    one, since the tag is a moving target."""
+    img = tools.get("image") or {}
+    ident = (img.get("id") or "")[:19] or img.get("name", "")
+    return f"{image} from {img.get('name', 'image')} ({ident})"
+
+
+def _sources_line(tools: dict, resolved: dict) -> str:
+    """`Tools: N from PATH, M from <image>` — where this run's scanners came from."""
     host = sum(1 for v in resolved.values() if v["source"] == "host")
     image = sum(1 for v in resolved.values() if v["source"] == "image")
     parts = []
     if host:
         parts.append(f"{host} from PATH")
     if image:
-        img = tools.get("image") or {}
-        ident = (img.get("id") or "")[:19] or img.get("name", "")
-        parts.append(f"{image} from {img.get('name', 'image')} ({ident})")
-    line = f"Tools: {', '.join(parts)}"
+        parts.append(_image_part(tools, image))
+    return f"Tools: {', '.join(parts)}"
+
+
+def _versions_block(resolved: dict) -> str:
+    """One indented line per scanner that reported a version, or ''."""
     versioned = {n: v["version"] for n, v in resolved.items() if v.get("version")}
-    if versioned:
-        line += "\n" + "\n".join(
-            f"  {n} ({resolved[n]['source']}) {v}" for n, v in sorted(versioned.items())
-        )
-    return line
+    if not versioned:
+        return ""
+    return "\n" + "\n".join(
+        f"  {n} ({resolved[n]['source']}) {v}" for n, v in sorted(versioned.items())
+    )
+
+
+def _tools_line(tools: dict) -> str:
+    """One-line provenance summary for the terminal footer."""
+    resolved = tools.get("resolved") or {}
+    if not resolved:
+        return ""
+    return _sources_line(tools, resolved) + _versions_block(resolved)
 
 
 def print_summary(
