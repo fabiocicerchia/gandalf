@@ -33,9 +33,55 @@ export const Uri = {
   parse: (s: string) => ({ fsPath: s, toString: () => s }),
 };
 
+export class CancellationError extends Error {}
+
+export class CancellationTokenSource {
+  private handlers: (() => void)[] = [];
+  readonly token = {
+    isCancellationRequested: false,
+    onCancellationRequested: (h: () => void) => {
+      this.handlers.push(h);
+      return { dispose: () => undefined };
+    },
+  };
+
+  cancel(): void {
+    this.token.isCancellationRequested = true;
+    for (const h of [...this.handlers]) h();
+  }
+
+  dispose(): void {
+    this.handlers = [];
+  }
+}
+
+/**
+ * Configuration the extension will read, as `section -> key -> value`. A test
+ * sets what it needs; everything else falls through to the code's own defaults.
+ */
+export const configuration: Record<string, Record<string, unknown>> = {};
+
+/** Every listener the extension registered, by the API it registered against. */
+export const listeners: Record<string, ((e: never) => unknown)[]> = {};
+
+const listenerFor =
+  (name: string) =>
+  (handler: (e: never) => unknown): { dispose: () => void } => {
+    (listeners[name] ??= []).push(handler);
+    return {
+      dispose: () => (listeners[name] = (listeners[name] ?? []).filter((h) => h !== handler)),
+    };
+  };
+
 export const workspace = {
   workspaceFolders: [] as { uri: { fsPath: string; toString(): string }; name: string }[],
   getWorkspaceFolder: (_uri: unknown): unknown => undefined,
+  getConfiguration: (section: string, _scope?: unknown) => ({
+    get: <T>(key: string): T | undefined => configuration[section]?.[key] as T | undefined,
+  }),
+  onDidSaveTextDocument: listenerFor('onDidSaveTextDocument'),
+  onDidChangeConfiguration: listenerFor('onDidChangeConfiguration'),
+  onDidChangeWorkspaceFolders: listenerFor('onDidChangeWorkspaceFolders'),
 };
 
 // --- the findings pane -------------------------------------------------------
@@ -108,18 +154,173 @@ export const quickPick = {
   lastItems: [] as unknown[],
 };
 
+// --- chrome the extension paints ---------------------------------------------
+
+export enum StatusBarAlignment {
+  Left = 1,
+  Right = 2,
+}
+
+export enum ProgressLocation {
+  SourceControl = 1,
+  Window = 10,
+  Notification = 15,
+}
+
+export enum ViewColumn {
+  Active = -1,
+}
+
+/** Every modal the extension raised: what it said and what it offered. */
+export const notifications: { kind: string; message: string; actions: string[] }[] = [];
+/** The answer `showErrorMessage`/`showWarningMessage`/… returns next. */
+export const notificationAnswer = { value: undefined as unknown };
+
+const notify =
+  (kind: string) =>
+  (message: string, ...actions: unknown[]): Promise<unknown> => {
+    notifications.push({ kind, message, actions: actions.map(String) });
+    return Promise.resolve(notificationAnswer.value);
+  };
+
+/** Lines the extension logged, most recent last. */
+export const logLines: string[] = [];
+
+class FakeLogChannel {
+  readonly name = 'Gandalf';
+  private write = (level: string) => (message: string) => logLines.push(`${level} ${message}`);
+  trace = this.write('trace');
+  debug = this.write('debug');
+  info = this.write('info');
+  warn = this.write('warn');
+  error = (e: string | Error) => logLines.push(`error ${e instanceof Error ? e.message : e}`);
+  show(_preserveFocus?: boolean): void {
+    logLines.push('show');
+  }
+  dispose(): void {
+    logLines.length = 0;
+  }
+}
+
+export class FakeStatusBarItem {
+  text = '';
+  tooltip: unknown;
+  command: unknown;
+  name = '';
+  backgroundColor: unknown;
+  shown = 0;
+  disposed = 0;
+  show(): void {
+    this.shown += 1;
+  }
+  dispose(): void {
+    this.disposed += 1;
+  }
+}
+
+/** The status bar items, tree views and terminals the extension created. */
+export const created = {
+  statusBarItems: [] as FakeStatusBarItem[],
+  treeViews: [] as string[],
+  terminals: [] as { name: string; sent: string[] }[],
+};
+
 export const window = {
   activeTextEditor: undefined as { document: { uri: { fsPath: string; scheme: string } } } | undefined,
-  createTreeView: (_id: string, _opts: unknown): FakeTreeView => ({ dispose: () => undefined }),
+  state: { focused: true },
+  createTreeView: (id: string, _opts: unknown): FakeTreeView => {
+    created.treeViews.push(id);
+    return { dispose: () => undefined };
+  },
   showQuickPick: (items: unknown[], _opts?: unknown): Promise<unknown> => {
     quickPick.lastItems = items;
     return Promise.resolve(quickPick.answer);
   },
+  createStatusBarItem: (_alignment?: StatusBarAlignment, _priority?: number): FakeStatusBarItem => {
+    const item = new FakeStatusBarItem();
+    created.statusBarItems.push(item);
+    return item;
+  },
+  createOutputChannel: (_name: string, _opts?: unknown) => new FakeLogChannel(),
+  createTerminal: (opts: string | { name: string }) => {
+    const terminal = { name: typeof opts === 'string' ? opts : opts.name, sent: [] as string[] };
+    created.terminals.push(terminal);
+    return {
+      show: (_preserveFocus?: boolean) => undefined,
+      sendText: (text: string) => terminal.sent.push(text),
+      dispose: () => undefined,
+    };
+  },
+  createWebviewPanel: (_type: string, _title: string, _column: unknown, _opts: unknown) => {
+    throw new Error('vscode-shim: no webview in these tests');
+  },
+  withProgress: <T>(
+    _opts: unknown,
+    task: (
+      progress: { report(v: { message?: string; increment?: number }): void },
+      token: CancellationTokenSource['token'],
+    ) => Thenable<T>,
+  ): Thenable<T> => task({ report: () => undefined }, new CancellationTokenSource().token),
+  showErrorMessage: notify('error'),
+  showWarningMessage: notify('warning'),
+  showInformationMessage: notify('information'),
+  showSaveDialog: (_opts: unknown): Promise<unknown> => Promise.resolve(undefined),
+  onDidChangeActiveTextEditor: listenerFor('onDidChangeActiveTextEditor'),
 };
 
+/** Command id -> the handler activate() registered for it. */
+export const registeredCommands = new Map<string, (...args: unknown[]) => unknown>();
+/** Commands the extension asked the editor to run, with their arguments. */
+export const executedCommands: { id: string; args: unknown[] }[] = [];
+
 export const commands = {
-  executeCommand: (..._args: unknown[]): Promise<undefined> => Promise.resolve(undefined),
+  executeCommand: (id: string, ...args: unknown[]): Promise<undefined> => {
+    executedCommands.push({ id, args });
+    return Promise.resolve(undefined);
+  },
+  registerCommand: (id: string, handler: (...args: unknown[]) => unknown) => {
+    registeredCommands.set(id, handler);
+    return { dispose: () => registeredCommands.delete(id) };
+  },
 };
+
+/** External URLs the extension asked the editor to open. */
+export const openedExternal: string[] = [];
+
+export const env = {
+  openExternal: (uri: { toString(): string }): Promise<boolean> => {
+    openedExternal.push(uri.toString());
+    return Promise.resolve(true);
+  },
+  clipboard: {
+    text: '',
+    writeText: (text: string): Promise<void> => {
+      env.clipboard.text = text;
+      return Promise.resolve();
+    },
+  },
+};
+
+/** Put every recorder back to empty, so one test cannot read another's traffic. */
+export function resetShim(): void {
+  for (const key of Object.keys(configuration)) delete configuration[key];
+  for (const key of Object.keys(listeners)) delete listeners[key];
+  registeredCommands.clear();
+  diagnosticCollections.length = 0;
+  notifications.length = 0;
+  executedCommands.length = 0;
+  openedExternal.length = 0;
+  logLines.length = 0;
+  created.statusBarItems.length = 0;
+  created.treeViews.length = 0;
+  created.terminals.length = 0;
+  notificationAnswer.value = undefined;
+  quickPick.answer = undefined;
+  quickPick.lastItems = [];
+  workspace.workspaceFolders = [];
+  window.activeTextEditor = undefined;
+  env.clipboard.text = '';
+}
 
 // --- diagnostics -------------------------------------------------------------
 

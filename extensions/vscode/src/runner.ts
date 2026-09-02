@@ -317,7 +317,7 @@ export async function resolveLauncher(folder: vscode.WorkspaceFolder, s: Setting
   return launcher;
 }
 
-function buildArgs(req: RunRequest, s: Settings, l: Launcher): string[] {
+export function buildArgs(req: RunRequest, s: Settings, l: Launcher): string[] {
   const args = [...l.args];
   const supports = (flag: string) => l.flags.has(flag);
 
