@@ -309,6 +309,44 @@ def relpath(p: str, root: str = "") -> str:
     return out.lstrip("/").removeprefix("./")
 
 
+def _place_from_prose(
+    p: str, ln: int, col: int, text: str, root: str
+) -> tuple[str, int, int, str]:
+    """Recover `path:line:col` from a message that carries it in prose, and take
+    the recovered prefix back off the message.
+
+    Gates that hand back a raw tool line (mypy, tsc, codeql) have no location
+    fields at all. Returns the inputs unchanged when there is nothing to scrape.
+    """
+    tp, tl, tc = text_location(text)
+    if not tp or not _on_disk(tp, root):
+        return p, ln, col, text
+    scraped_path = not p
+    if scraped_path:
+        p = tp
+    if not ln and tp == p:
+        ln, col = tl, (col or tc)
+    if not scraped_path:
+        return p, ln, col, text
+    # The location has its own fields now, so a message that merely repeats it
+    # in front is shorter without it.
+    head = text[: text.index(tp)] + tp
+    if ln:
+        head = f"{head}:{ln}" if f"{tp}:{ln}" in text else head
+    if text.startswith(head):
+        text = text[len(head) :].lstrip(" \t:-")
+    return p, ln, col, text
+
+
+def _path_in_prose(text: str, root: str) -> str:
+    """The first bare path in a message that names a file actually on disk, or
+    '' — the last resort for a finding with no location fields at all."""
+    for candidate in _TEXT_PATH.findall(text):
+        if _on_disk(candidate, root):
+            return candidate
+    return ""
+
+
 def normalise(f: object, root: str = "") -> dict:
     """Everything above, as one dict.
 
@@ -332,34 +370,12 @@ def normalise(f: object, root: str = "") -> dict:
     if not text and p:
         text, p = p, ""
 
-    # Gates that hand back a raw tool line (mypy, tsc, codeql) carry their
-    # location only in the prose.
     if not p or not ln:
-        tp, tl, tc = text_location(text)
-        if tp and not _on_disk(tp, root):
-            tp, tl, tc = "", 0, 0
-        if tp:
-            scraped_path = not p
-            if scraped_path:
-                p = tp
-            if not ln and tp == p:
-                ln, col = tl, (col or tc)
-            # The location has its own fields now, so a message that merely
-            # repeats it in front is shorter without it.
-            if scraped_path:
-                head = text[: text.index(tp)] + tp
-                if ln:
-                    head = f"{head}:{ln}" if f"{tp}:{ln}" in text else head
-                if text.startswith(head):
-                    text = text[len(head) :].lstrip(" \t:-")
-
+        p, ln, col, text = _place_from_prose(p, ln, col, text, root)
     # Still unplaced: a bare path somewhere in the text. The message is left
     # whole — for these gates the sentence is the finding.
     if not p:
-        for candidate in _TEXT_PATH.findall(text):
-            if _on_disk(candidate, root):
-                p = candidate
-                break
+        p = _path_in_prose(text, root)
 
     return {
         "path": relpath(p, root),
