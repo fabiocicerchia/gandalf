@@ -149,6 +149,23 @@ function M.parse_progress(raw)
   }
 end
 
+--- The last progress redraw among these segments, and everything that was not
+--- one -- which is what an error report quotes.
+local function sift(segments)
+  local progress, noise = nil, {}
+  for _, segment in ipairs(segments) do
+    if segment:match('%S') then
+      local parsed = M.parse_progress(segment)
+      if parsed then
+        progress = parsed
+      else
+        noise[#noise + 1] = (segment:gsub(ANSI, ''))
+      end
+    end
+  end
+  return progress, #noise > 0 and (table.concat(noise, '\n') .. '\n') or ''
+end
+
 --- A stderr reader. Redraws are separated by `\r` with no trailing newline, so
 --- only delimited segments are parsed; anything that is not a progress line is
 --- handed back as noise for the error path.
@@ -163,19 +180,7 @@ function M.progress_parser()
         segments[#segments + 1] = segment
       end
       tail = buffer:match('([^\r\n]*)$') or ''
-
-      local progress, noise = nil, {}
-      for _, segment in ipairs(segments) do
-        if segment:match('%S') then
-          local parsed = M.parse_progress(segment)
-          if parsed then
-            progress = parsed
-          else
-            noise[#noise + 1] = (segment:gsub(ANSI, ''))
-          end
-        end
-      end
-      return progress, #noise > 0 and (table.concat(noise, '\n') .. '\n') or ''
+      return sift(segments)
     end,
     flush = function()
       local rest = tail
