@@ -8,6 +8,7 @@
 -- Never blocks: vim.system with a callback, per-gate results read off stdout as
 -- they arrive, and everything that touches the editor inside vim.schedule.
 
+local capabilities = require('gandalf.capabilities')
 local core = require('gandalf.core')
 local state = require('gandalf.state')
 local ui = require('gandalf.ui')
@@ -164,7 +165,13 @@ function M.run(opts, cancel)
   local root = M.root()
   local argv = core.scan_argv(
     cfg,
-    vim.tbl_extend('force', opts, { out_dir = report_dir(), stream = cfg.scan.stream })
+    vim.tbl_extend('force', opts, {
+      out_dir = report_dir(),
+      stream = cfg.scan.stream,
+      -- Probed once per command: an older gandalf rejects an unknown flag with
+      -- exit 2, so passing one blindly fails the scan instead of degrading it.
+      flags = capabilities.of(cfg.cmd),
+    })
   )
   local cmd = vim.list_extend(vim.list_slice(cfg.cmd, 1, #cfg.cmd), argv)
   state.log('scan (%s): %s', opts.reason or 'command', table.concat(cmd, ' '))

@@ -184,6 +184,14 @@ scanner-tools image, and the endpoint the judge gates call. Deliberately not a
 tool-by-tool inventory: gandalf answers that per gate on every scan, and a copy
 of its tool list here would only drift.
 
+The scan path asks the same question for itself. `--help` is run once per
+`cmd` and remembered, and the optional flags -- `--out-dir`, `--no-trend`,
+`--cache`, `--stream`, `--exclude` -- are withheld from a build that did not
+report them. gandalf's own argument parser rejects an unknown flag with exit
+2, so passing one to an older build fails the scan outright rather than
+running it without that flag. If the probe cannot run at all, nothing is
+withheld, which is what the plugin did before it existed.
+
 ==============================================================================
 9. DIFFERENCES FROM THE VS CODE EXTENSION                 *gandalf-differences*
 

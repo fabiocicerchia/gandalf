@@ -5,6 +5,13 @@
 
 local M = {}
 
+--- Whether this build takes `flag`, per the capability set the caller probed.
+--- `opts.flags` nil means nobody asked, and an unasked question gates nothing --
+--- the behaviour this plugin had before the probe existed.
+local function supports(opts, flag)
+  return opts.flags == nil or opts.flags[flag] == true
+end
+
 local function append(argv, ...)
   for _, value in ipairs({ ... }) do
     argv[#argv + 1] = value
@@ -31,13 +38,13 @@ local function output_args(cfg, opts)
   -- A one-file scorecard is not a report anyone wants, and the HTML is not
   -- rendered here in any case.
   append(argv, '--no-html')
-  if opts.out_dir then
+  if opts.out_dir and supports(opts, '--out-dir') then
     append(argv, '--out-dir', opts.out_dir)
   end
   -- Editor scans stay out of the trend log: it is meant to be per commit, and a
   -- scan per save would swamp it. Scanning a named commit is the exception --
   -- that is exactly one entry for exactly one commit, which is what the log is.
-  if opts.kind ~= 'commit' then
+  if opts.kind ~= 'commit' and supports(opts, '--no-trend') then
     append(argv, '--no-trend')
   end
   return argv
@@ -55,10 +62,10 @@ local function run_args(cfg, opts)
   -- The cache is keyed per gate on a hash of the whole scanned file set, so a
   -- one-file scan would overwrite the workspace entries with a one-file hash
   -- and make the next full scan a complete miss.
-  if cfg.scan.use_cache and opts.kind == 'workspace' then
+  if cfg.scan.use_cache and opts.kind == 'workspace' and supports(opts, '--cache') then
     append(argv, '--cache')
   end
-  if opts.stream then
+  if opts.stream and supports(opts, '--stream') then
     append(argv, '--stream')
   end
   return argv
@@ -75,8 +82,10 @@ function M.scan_argv(cfg, opts)
     end
   end
   -- Repeated rather than joined: a path may legitimately contain a comma.
-  for _, pattern in ipairs(cfg.exclude) do
-    append(argv, '--exclude', pattern)
+  if supports(opts, '--exclude') then
+    for _, pattern in ipairs(cfg.exclude) do
+      append(argv, '--exclude', pattern)
+    end
   end
   -- Last, so what the user asked for wins.
   for _, extra in ipairs(cfg.extra_args) do
