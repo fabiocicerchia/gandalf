@@ -9,11 +9,10 @@ Each item fired because a measurement crossed a threshold. The numbers and the e
 | | count |
 |---|---:|
 | Serious | 1 |
-| Worth attention | 1 |
 | Minor | 3 |
 | Notes | 1 |
 
-### Serious · 1 component pair(s) are repeatedly changed in the same commit despite having no import between them.
+### Serious · 2 component pair(s) are repeatedly changed in the same commit despite having no import between them.
 
 **Why it matters.** This is coupling the import graph cannot see, and it is often the coupling that actually hurts. Two components that must change together are coupled through something — a wire format, a database column, a duplicated constant, an assumption — and because nothing links them in code, nothing warns the person who changes only one.
 
@@ -23,29 +22,14 @@ Each item fired because a measurement crossed a threshold. The numbers and the e
 
 <details><summary>Evidence</summary>
 
+- `scripts` and `src` — 4 commits together, no import
 - `extensions` and `src` — 4 commits together, no import
 
 </details>
 
 <sub>`ARCH-COCHANGE` · Change over time</sub>
 
-### Worth attention · 1 module(s) are more than 4× the median size (112 lines); the largest is 558 lines.
-
-**Why it matters.** A file this far from the median is rarely one idea. It cannot be reviewed in one sitting, it produces merge conflicts between people working on unrelated things, and it hides its internal structure from every tool that works at file granularity — including this one, which sees it as a single node.
-
-**What usually causes it.** Accretion. Each addition was small and reasonable, and no single commit was the one that made it too large.
-
-**What to do.** Split along the lines its own imports suggest: the groups of functions that share dependencies are usually the natural modules. Do it before it becomes the file everyone avoids.
-
-<details><summary>Evidence</summary>
-
-- `extensions/vscode/src/extension.ts` — 558 lines
-
-</details>
-
-<sub>`ARCH-GODFILE` · Size and shape</sub>
-
-### Minor · 1 of 771 imports (0%) point at something this tool could not find on disk.
+### Minor · 1 of 811 imports (0%) point at something this tool could not find on disk.
 
 **Why it matters.** Every conclusion below is drawn from the edges that did resolve. Unresolved local imports mean real dependencies are missing from the graph, so cycles may go undetected and coupling is understated. A map with unknown holes is more dangerous than no map, because it invites confidence.
 
@@ -71,7 +55,7 @@ Each item fired because a measurement crossed a threshold. The numbers and the e
 
 <details><summary>Evidence</summary>
 
-- `extensions` — abstractness 0.32, instability 0.0, distance 0.68
+- `extensions` — abstractness 0.29, instability 0.0, distance 0.71
 
 </details>
 
@@ -89,9 +73,9 @@ Each item fired because a measurement crossed a threshold. The numbers and the e
 
 - `extensions/vscode/esbuild.mjs` — 61 lines
 - `extensions/vscode/src/bench.ts` — 152 lines
-- `extensions/vscode/src/extension.ts` — 558 lines
+- `extensions/vscode/src/extension.ts` — 48 lines
 - `scripts/bench.py` — 376 lines
-- `scripts/chart.py` — 209 lines
+- `scripts/chart.py` — 211 lines
 - `src/gandalf/gates/_toolchain.py` — 280 lines
 - `src/gandalf/gates/bandit.py` — 56 lines
 - `src/gandalf/gates/build.py` — 62 lines
@@ -125,7 +109,7 @@ The section above reasons about the import graph, where an edge either exists or
 
 ### Security
 
-**Serious · SEC-EVAL** — 8 occurrence(s) across 2 file(s).
+**Serious · SEC-EVAL** — 8 occurrence(s) across 4 file(s).
 
 *Why it matters.* Evaluating a string as code means the set of things this program can do is not fixed at build time. If any part of that string is influenced by input, the answer is 'anything the process can do'. It also defeats every other tool in the pipeline: type checkers, linters, and this one cannot see through it.
 
@@ -135,16 +119,16 @@ The section above reasons about the import graph, where an edge either exists or
 
 <details><summary>Evidence</summary>
 
+- `extensions/vscode/src/exec.ts:69` — `exec(`
+- `extensions/vscode/src/launcher.ts:108` — `exec(`
 - `extensions/vscode/src/progress.ts:42` — `exec(`
 - `extensions/vscode/src/progress.ts:53` — `exec(`
-- `extensions/vscode/src/runner.ts:138` — `exec(`
-- `extensions/vscode/src/runner.ts:252` — `exec(`
-- `extensions/vscode/src/runner.ts:383` — `exec(`
-- `extensions/vscode/src/runner.ts:419` — `exec(`
+- `extensions/vscode/src/runner.ts:80` — `exec(`
+- `extensions/vscode/src/runner.ts:116` — `exec(`
 
 </details>
 
-**Serious · SEC-SHELL** — 114 occurrence(s) across 14 file(s).
+**Serious · SEC-SHELL** — 115 occurrence(s) across 19 file(s).
 
 *Why it matters.* Handing a string to a shell means the shell parses it: quoting, globbing, pipes, and semicolons all apply. Any input that reaches that string can add another command. This is command injection, and it is one of the oldest and most reliably exploited defects there is.
 
@@ -194,7 +178,7 @@ The section above reasons about the import graph, where an edge either exists or
 
 </details>
 
-**Worth attention · PERF-SYNCIO** — 13 occurrence(s) across 7 file(s).
+**Worth attention · PERF-SYNCIO** — 13 occurrence(s) across 8 file(s).
 
 *Why it matters.* Synchronous I/O blocks the event loop, which in a single-threaded runtime means every other request waits, not just this one. Throughput collapses under concurrency even though each individual operation looks fast.
 
@@ -294,7 +278,7 @@ The section above reasons about the import graph, where an edge either exists or
 
 </details>
 
-**Worth attention · ALGO-SORTLOOP** — 12 occurrence(s) across 10 file(s).
+**Worth attention · ALGO-SORTLOOP** — 13 occurrence(s) across 11 file(s).
 
 *Why it matters.* Sorting inside a loop repeats an n log n operation on data that has usually not changed, or has changed in a way that could be maintained incrementally. The total cost is a factor of n above what the work requires.
 
@@ -304,18 +288,18 @@ The section above reasons about the import graph, where an edge either exists or
 
 <details><summary>Evidence</summary>
 
+- `extensions/vscode/src/parse.ts:412` — `.sort(`
 - `extensions/vscode/src/store.ts:152` — `.sort(`
 - `scripts/bench.py:121` — `sorted(`
 - `scripts/bench.py:128` — `sorted(`
-- `scripts/chart.py:152` — `.sort(`
+- `scripts/chart.py:154` — `.sort(`
 - `src/gandalf/__main__.py:125` — `sorted(`
-- `src/gandalf/cache.py:122` — `sorted(`
 
 </details>
 
 ### Maintainability
 
-**Worth attention · MNT-SWALLOW** — 5 occurrence(s) across 4 file(s).
+**Worth attention · MNT-SWALLOW** — 4 occurrence(s) across 4 file(s).
 
 *Why it matters.* An empty handler converts a failure into a silent wrong answer. The program continues in a state its author did not anticipate, and the eventual symptom appears somewhere unrelated with no trace of the original cause. Debugging time for these is measured in days.
 
@@ -325,11 +309,10 @@ The section above reasons about the import graph, where an edge either exists or
 
 <details><summary>Evidence</summary>
 
-- `extensions/vscode/src/extension.ts:433` — `catch {`
+- `extensions/vscode/src/exec.ts:52` — `catch {                                      }`
 - `extensions/vscode/src/history.ts:44` — `catch {`
+- `extensions/vscode/src/launcher.ts:98` — `catch {                                  }`
 - `extensions/vscode/src/parse.ts:214` — `catch {`
-- `extensions/vscode/src/runner.ts:130` — `catch {                                  }`
-- `extensions/vscode/src/runner.ts:194` — `catch {                                              }`
 
 </details>
 
@@ -345,7 +328,7 @@ The section above reasons about the import graph, where an edge either exists or
 
 - `src/gandalf/render_text.py:31` — `render_terminal` complexity 23, 73 lines, nesting 3
 - `src/gandalf/pr_comments.py:133` — `build` complexity 19, 46 lines, nesting 4
-- `src/gandalf/outputs.py:120` — `write_outputs` complexity 16, 60 lines, nesting 2
+- `src/gandalf/outputs.py:119` — `write_outputs` complexity 16, 60 lines, nesting 2
 - `src/gandalf/render_html.py:222` — `render_html` complexity 15, 112 lines, nesting 2
 - `src/gandalf/summary.py:49` — `print_summary` complexity 14, 59 lines, nesting 1
 - `src/gandalf/suggest.py:263` — `for_anchor` complexity 12, 36 lines, nesting 1
@@ -380,8 +363,8 @@ The section above reasons about the import graph, where an edge either exists or
 <details><summary>Evidence</summary>
 
 - `src/gandalf/summary.py:49` — `print_summary`, 14 parameters
-- `src/gandalf/outputs.py:60` — `build_payload`, 13 parameters
-- `src/gandalf/outputs.py:120` — `write_outputs`, 9 parameters
+- `src/gandalf/outputs.py:59` — `build_payload`, 13 parameters
+- `src/gandalf/outputs.py:119` — `write_outputs`, 9 parameters
 - `src/gandalf/skillgate.py:203` — `_prompt`, 7 parameters
 - `src/gandalf/__main__.py:39` — `_run_gates`, 6 parameters
 - `src/gandalf/pr_comments.py:181` — `review_payload`, 6 parameters
@@ -422,15 +405,15 @@ What was read, and where every import went. Third-party means the target is expe
 | JavaScript | structural | 2 | 5 | 1 | 4 | 0 |
 | Python | parsed | 73 | 692 | 138 | 554 | 0 |
 | Ruby | heuristic | 1 | 0 | 0 | 0 | 0 |
-| TypeScript | structural | 18 | 74 | 43 | 30 | **1** |
+| TypeScript | structural | 26 | 114 | 71 | 42 | **1** |
 
 Unaccounted imports by language: TypeScript 1. Until that is zero, treat this graph as a lower bound on coupling.
 
 ## Shape
 
-- 94 modules across 4 components
-- 128 internal import edges, 0 component couplings
-- 14297 lines
+- 102 modules across 4 components
+- 156 internal import edges, 0 component couplings
+- 14674 lines
 - propagation cost 0% — the share of other components an average component can reach through import paths
 
 ## Component graph
@@ -438,9 +421,9 @@ Unaccounted imports by language: TypeScript 1. Until that is zero, treat this gr
 ```mermaid
 graph LR
   _mdl_style[".mdl_style<br/><small>Ruby · 1 mod · 16 loc</small>"]
-  extensions["extensions<br/><small>JavaScript/TypeScript · 20 mod · 3321 loc</small>"]
-  scripts["scripts<br/><small>Python · 2 mod · 585 loc</small>"]
-  src["src<br/><small>Python · 71 mod · 10375 loc</small>"]
+  extensions["extensions<br/><small>JavaScript/TypeScript · 28 mod · 3697 loc</small>"]
+  scripts["scripts<br/><small>Python · 2 mod · 587 loc</small>"]
+  src["src<br/><small>Python · 71 mod · 10374 loc</small>"]
 ```
 
 Dashed edges came from heuristic scanners. Thick borders are in a cycle. Labels count import sites.
@@ -460,14 +443,14 @@ Components a route can touch by following imports, to a depth of four. This is t
 | Entry | Handler | Components reached |
 |---|---|---:|
 | `ADDEVENTLISTENER click` | `extensions/vscode/src/report.ts:25` | 0  |
-| `ON close` | `extensions/vscode/src/runner.ts:244` | 0  |
-| `ON data` | `extensions/vscode/src/runner.ts:225` | 0  |
-| `ON error` | `extensions/vscode/src/runner.ts:239` | 0  |
-| `ON exit` | `extensions/vscode/src/runner.ts:243` | 0  |
+| `ON close` | `extensions/vscode/src/exec.ts:139` | 0  |
+| `ON data` | `extensions/vscode/src/exec.ts:120` | 0  |
+| `ON error` | `extensions/vscode/src/exec.ts:134` | 0  |
+| `ON exit` | `extensions/vscode/src/exec.ts:138` | 0  |
 
 ## The nouns
 
-125 types declared: 23 inheritance and 21 composition relationships between types defined in this tree. Relationships to types declared elsewhere are omitted rather than guessed, so this is a lower bound. 91 types were read with a real parser; the rest come from declaration syntax, which is reliable for the declaration and weaker for the member lists.
+131 types declared: 23 inheritance and 25 composition relationships between types defined in this tree. Relationships to types declared elsewhere are omitted rather than guessed, so this is a lower bound. 91 types were read with a real parser; the rest come from declaration syntax, which is reliable for the declaration and weaker for the member lists.
 
 ### `src`
 
@@ -590,18 +573,23 @@ classDiagram
 
 ```mermaid
 classDiagram
+  class Check {
+    <<interface>>
+    +ok: boolean
+    +text: string
+  }
+  class Diagnosis {
+    <<interface>>
+    +checks: Check[]
+    +missing: GandalfNotFoundError
+    +docker: string
+    +hasImage: boolean
+    +git: string
+  }
   class DiagnosticGroup {
     <<interface>>
     +findings: Finding[]
     +settings: Settings
-  }
-  class FileNode {
-    <<interface>>
-    +kind
-    +id: string
-    +label: string
-    +uri: vscode.Uri
-    +children: FindingNode[]
   }
   class Finding {
     <<interface>>
@@ -634,6 +622,9 @@ classDiagram
     +pickFilters(0)
     +… 13 more methods
   }
+  class GandalfNotFoundError {
+    <<extensions.vscode.src.launcher>>
+  }
   class GateEvent {
     <<interface>>
     +event
@@ -641,26 +632,10 @@ classDiagram
     +total: number
   }
   class Job {
-    <<interface>>
-    +folder: vscode.WorkspaceFolder
-    +kind: ScanKind
-    +relPath: string
-    +absPath: string
-    +commit: string
-    +llm: boolean
-    +… 3 more fields
-  }
-  class LastRun {
-    <<interface>>
-    +scope: string
-    +verdict: Snapshot[
-    +score: number
-    +at: number
-    +durationMs: number
+    <<extensions.vscode.src.scheduler>>
   }
   class Model {
-    <<interface>>
-    +roots: Node[]
+    <<extensions.vscode.src.findingsView>>
   }
   class Payload {
     <<interface>>
@@ -684,6 +659,34 @@ classDiagram
     +category: string
     +… 2 more fields
   }
+  class Scheduler {
+    +timer: NodeJS.Timeout
+    +sweep: NodeJS.Timeout
+    +pending: Job
+    +active
+    +chain: Promise<void>
+    +schedule(1)
+    +runNow(1)
+    +cancel(0)
+    +cancelJob(1)
+    +arm(1)
+    +… 3 more methods
+  }
+  class Session {
+    +findingsView: FindingsView
+    +scheduler: Scheduler
+    +scanning: string|undefined
+    +folder: job.folder,
+    +kind: job.kind,
+    +relPath: job.relPath,
+    +… 24 more fields
+    +constructor(1)
+    +disposables(0)
+    +settingsFor(1)
+    +primaryFolder(0)
+    +paint(0)
+    +… 10 more methods
+  }
   class Settings {
     <<extensions.vscode.src.config>>
   }
@@ -698,20 +701,23 @@ classDiagram
     +… 2 more fields
   }
   RawGate <|-- GateEvent
+  Diagnosis *-- Check : checks
+  Diagnosis *-- GandalfNotFoundError : missing
   DiagnosticGroup *-- Finding : findings
   DiagnosticGroup *-- Settings : settings
-  FileNode *-- FindingNode : children
   FindingNode *-- Finding : finding
   FindingsView *-- Finding : allFindings
   FindingsView *-- Model : model
-  LastRun *-- Snapshot : verdict
   Payload *-- RawGate : gates
   RawGate *-- RawFinding : findings
+  Scheduler *-- Job : pending
+  Session *-- FindingsView : findingsView
+  Session *-- Scheduler : scheduler
   Snapshot *-- Finding : findings
   Snapshot *-- Payload : payload
 ```
 
-**Declared but never implemented in this tree:** `Check`, `Commit`, `DiagnosticGroup`, `FileNode`, `Finding`, `FindingNode`, `Gate`, `GateEvent`. Either the implementations live outside this tree, or the abstraction has no second case yet and the indirection is not paying for itself.
+**Declared but never implemented in this tree:** `Check`, `Commit`, `Diagnosis`, `DiagnosticGroup`, `ExecOptions`, `ExecResult`, `FileNode`, `Finding`. Either the implementations live outside this tree, or the abstraction has no second case yet and the indirection is not paying for itself.
 
 ## Dependency matrix
 
@@ -784,43 +790,16 @@ src.gandalf.__main__  (Python)
 └─ … 9 more
 ```
 
-**extensions/vscode/src/extension.ts**
-
-```
-extensions.vscode.src.extension  (TypeScript)
-├─ extensions.vscode.src.config  (TypeScript)
-│  └─ extensions.vscode.src.types  (TypeScript)
-├─ extensions.vscode.src.diagnostics  (TypeScript)
-│  ├─ extensions.vscode.src.config  (TypeScript)  ↑ shown above
-│  ├─ extensions.vscode.src.parse  (TypeScript)
-│  │  └─ extensions.vscode.src.types  (TypeScript)
-│  └─ extensions.vscode.src.types  (TypeScript)
-├─ extensions.vscode.src.doctor  (TypeScript)
-│  ├─ extensions.vscode.src.config  (TypeScript)  ↑ shown above
-│  ├─ extensions.vscode.src.log  (TypeScript)
-│  └─ extensions.vscode.src.runner  (TypeScript)
-│     ├─ extensions.vscode.src.config  (TypeScript)  ↑ shown above
-│     ├─ extensions.vscode.src.events  (TypeScript)
-│     ├─ extensions.vscode.src.log  (TypeScript)
-│     ├─ extensions.vscode.src.progress  (TypeScript)
-│     └─ extensions.vscode.src.types  (TypeScript)
-├─ extensions.vscode.src.exclude  (TypeScript)
-├─ extensions.vscode.src.findingsView  (TypeScript)
-│  ├─ extensions.vscode.src.parse  (TypeScript)  ↑ shown above
-│  ├─ extensions.vscode.src.store  (TypeScript)
-│  │  ├─ extensions.vscode.src.parse  (TypeScript)  ↑ shown above
-│  │  └─ extensions.vscode.src.types  (TypeScript)
-│  └─ extensions.vscode.src.types  (TypeScript)
-├─ extensions.vscode.src.history  (TypeScript)
-├─ extensions.vscode.src.log  (TypeScript)
-└─ extensions.vscode.src.parse  (TypeScript)  ↑ shown above
-└─ … 7 more
-```
-
 **scripts/bench.py**
 
 ```
 scripts.bench  (Python)
+```
+
+**src/gandalf/gates/supply_chain.py**
+
+```
+src.gandalf.gates.supply_chain  (Python)
 ```
 
 ## Coupling
@@ -828,9 +807,9 @@ scripts.bench  (Python)
 | Component | Languages | Modules | LOC | Fan-in | Fan-out | Instability |
 |---|---|---:|---:|---:|---:|---:|
 | `.mdl_style` | Ruby | 1 | 16 | 0 | 0 | 0.0 |
-| `extensions` | JavaScript, TypeScript | 20 | 3321 | 0 | 0 | 0.0 |
-| `scripts` | Python | 2 | 585 | 0 | 0 | 0.0 |
-| `src` | Python | 71 | 10375 | 0 | 0 | 0.0 |
+| `extensions` | JavaScript, TypeScript | 28 | 3697 | 0 | 0 | 0.0 |
+| `scripts` | Python | 2 | 587 | 0 | 0 | 0.0 |
+| `src` | Python | 71 | 10374 | 0 | 0 | 0.0 |
 
 Instability is fan-out / (fan-in + fan-out). A component many things depend on that itself depends widely propagates change in both directions.
 
@@ -845,11 +824,11 @@ Third-party packages. Standard-library imports are counted separately below, bec
 | Package | Sites | Components | First site |
 |---|---:|---:|---|
 | `gandalf` | 289 | 2 | scripts/bench.py:36 |
-| `vscode` | 11 | 1 | extensions/vscode/src/config.ts:1 |
+| `vscode` | 18 | 1 | extensions/vscode/src/argv.ts:9 |
 | `./test/vscode-shim` | 1 | 1 | extensions/vscode/src/bench.ts:22 |
 | `chart` | 1 | 1 | scripts/bench.py:365 |
 
-36 standard-library modules imported; most used: `__future__` (71), `pathlib` (26), `json` (23), `os` (21), `re` (18), `dataclasses` (13), `asyncio` (10), `shutil` (10), `sys` (9), `fs` (7), `datetime` (6), `path` (6).
+36 standard-library modules imported; most used: `__future__` (71), `pathlib` (26), `json` (23), `os` (21), `re` (18), `dataclasses` (13), `asyncio` (10), `fs` (10), `shutil` (10), `sys` (9), `path` (8), `datetime` (6).
 
 ## Churn against size
 
@@ -860,26 +839,39 @@ Most-changed files in the last 12 months. This is where any map you carry in you
 | `src/gandalf/report.py` | 1987 | 235 | Python |
 | `src/gandalf/__main__.py` | 1925 | 427 | Python |
 | `src/gandalf/plugins.py` | 1287 | 137 | Python |
-| `extensions/vscode/src/parse.ts` | 778 | 402 | TypeScript |
+| `extensions/vscode/src/extension.ts` | 1156 | 48 | TypeScript |
+| `extensions/vscode/src/runner.ts` | 873 | 147 | TypeScript |
+| `extensions/vscode/src/parse.ts` | 789 | 413 | TypeScript |
 | `src/gandalf/findings.py` | 692 | 324 | Python |
 | `src/gandalf/gates/supply_chain.py` | 620 | 312 | Python |
-| `extensions/vscode/src/extension.ts` | 576 | 558 | TypeScript |
 | `src/gandalf/pr_comments.py` | 524 | 436 | Python |
-| `extensions/vscode/src/runner.ts` | 510 | 452 | TypeScript |
 | `src/gandalf/gates/dynamic.py` | 463 | 269 | Python |
 | `extensions/vscode/src/findingsView.ts` | 403 | 393 | TypeScript |
 | `src/gandalf/sarif.py` | 392 | 190 | Python |
 | `scripts/bench.py` | 380 | 376 | Python |
 | `src/gandalf/render_html.py` | 367 | 333 | Python |
-| `src/gandalf/suggest.py` | 354 | 354 | Python |
+| `extensions/vscode/src/session.ts` | 365 | 365 | TypeScript |
 
 ## Public surface
 
-<details><summary><code>extensions</code> — 78 exported</summary>
+<details><summary><code>extensions</code> — 93 exported</summary>
 
 
-_Showing 40 of 78; `--full` lists them all._
+_Showing 40 of 93; `--full` lists them all._
 
+
+`extensions.vscode.src.argv`
+
+- function buildArgs:82
+- interface RunRequest:15
+
+`extensions.vscode.src.coalescer`
+
+- class Coalescer:11
+
+`extensions.vscode.src.commands`
+
+- function commandHandlers:26
 
 `extensions.vscode.src.config`
 
@@ -895,12 +887,12 @@ _Showing 40 of 78; `--full` lists them all._
 
 `extensions.vscode.src.doctor`
 
-- function buildToolsImage:115
-- function runDoctor:41
+- function buildToolsImage:159
+- function runDoctor:138
 
 `extensions.vscode.src.events`
 
-- class EventParser:60
+- class EventParser:76
 - interface GateEvent:20
 - interface StartEvent:14
 - type StreamEvent:26
@@ -912,10 +904,20 @@ _Showing 40 of 78; `--full` lists them all._
 - function expandBraces:22
 - function toGandalfPattern:38
 
+`extensions.vscode.src.exec`
+
+- function exec:68
+- interface ExecOptions:15
+- interface ExecResult:28
+
 `extensions.vscode.src.extension`
 
-- function activate:33
-- function deactivate:555
+- function activate:34
+- function deactivate:45
+
+`extensions.vscode.src.failures`
+
+- class FailureNotifier:16
 
 `extensions.vscode.src.findingsView`
 
@@ -931,25 +933,14 @@ _Showing 40 of 78; `--full` lists them all._
 - interface Commit:19
 - interface TrendEntry:1
 
-`extensions.vscode.src.log`
+`extensions.vscode.src.launcher`
 
-- function disposeLog:9
-- function log:4
-
-`extensions.vscode.src.parse`
-
-- const LEVELS:74
-- const LEVEL_LABEL:85
-- const LEVEL_RANK:77
-- const SEVERITIES:93
-- const SEVERITY_LABEL:98
-- const SEVERITY_RANK:95
-- const VERDICT_WORD:96
-- function compareFindings:342
-- function gateStatus:256
-- function gatesByStatus:375
-- function normalize:365
-- function normalizeGate:282
+- class GandalfNotFoundError:18
+- const INSTALL_COMMAND:20
+- function expand:74
+- function findOnPath:88
+- function promptInstall:49
+- function resetLauncherCache:45
 
 </details>
 
@@ -985,7 +976,7 @@ _Showing 40 of 78; `--full` lists them all._
 - const RIGHT:41
 - const ROW_GAP:44
 - const WIDTH:39
-- def render:146
+- def render:148
 
 </details>
 

@@ -8,7 +8,7 @@
     "extensions": {
       "fan_in": 0,
       "fan_out": 0,
-      "modules": 20
+      "modules": 28
     },
     "scripts": {
       "fan_in": 0,

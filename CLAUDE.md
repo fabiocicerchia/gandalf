@@ -56,7 +56,15 @@ make ext-publish # ...and publish it to both marketplaces (normally CI's job)
   The stdlib-only rule is about gandalf itself — the extension has dev-only npm
   dependencies and ships no runtime ones. It drives gandalf purely through the
   CLI and the JSON report, so don't couple it to internals. `npm run typecheck &&
-  npm test` there before committing changes to it.
+  npm test` there before committing changes to it. `activate()` builds a
+  `Session` and registers the command table in `commands.ts`; `runner.ts`
+  re-exports `exec.ts`, `launcher.ts` and `argv.ts`, so `./runner` stays the
+  spelling every consumer uses. Both are covered by `node --test` against
+  `src/test/vscode-shim.ts`, which records and returns and never decides.
+- `extensions/nvim/` is the Neovim plugin. `core/` is the ported logic and
+  contains no `vim.` call, so it runs under plain Lua; `core.lua` re-exports it
+  the way `plugins.py` re-exports its helpers. `make test NVIM=nvim` there
+  before committing changes to it — plenary is fetched by the `deps` target.
 - Update docs/ and examples/ with behavior changes.
 - Never commit secrets; CI runs gitleaks. Keep `.env` out of git.
 

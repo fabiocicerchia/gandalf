@@ -437,7 +437,7 @@ different gate set while you work.
 ```sh
 npm install
 npm run typecheck # tsc --noEmit
-npm test          # normalizer unit tests (node --test, no framework)
+npm test          # unit tests (node --test, no framework)
 npm run build     # bundle to dist/ with esbuild
 npm run watch     # rebuild on change; F5 in VS Code launches an Extension Host
 npm run package   # .vsix
@@ -448,6 +448,27 @@ stays useful against any gandalf checkout. `src/parse.ts` is the one piece that
 has to understand gate output; its key lists mirror `gandalf/report.py`,
 `gandalf/sarif.py` and `gandalf/suppress.py`, and it is covered by unit tests
 with fixtures taken from real gate output.
+
+One job per module:
+
+| Module | What it is |
+|---|---|
+| `extension.ts` | `activate` and `deactivate`: build the session, register, start |
+| `session.ts` | the components, the state they share, and running one scan |
+| `commands.ts` | every contributed command, in one table |
+| `runner.ts` | one gandalf run, end to end; re-exports `exec`/`launcher`/`argv` |
+| `exec.ts` | a child process, and killing its whole group |
+| `launcher.ts` | where gandalf is, and what flags this build takes |
+| `argv.ts` | the command line: scope, output, run, excludes |
+| `parse.ts` | gandalf's report → the normalized `Finding` |
+| `events.ts` · `progress.ts` | `--stream` events and the progress line |
+| `findingsView.ts` · `diagnostics.ts` · `status.ts` · `report.ts` | what the user sees |
+| `store.ts` · `scheduler.ts` · `history.ts` · `exclude.ts` · `doctor.ts` | the rest |
+
+`src/test/vscode-shim.ts` is enough of the editor API to run all of that under
+`node --test` — including `activate`, which is held to the command ids
+`package.json` contributes. It records and returns; it never decides anything,
+because a shim with behaviour of its own stops telling you about the code.
 
 ## Releasing
 
