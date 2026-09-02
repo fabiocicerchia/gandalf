@@ -20,13 +20,20 @@ So: one module answers those questions, and every surface asks it. A key list
 that lives in one place can still be wrong, but it can no longer be wrong in one
 surface and right in another.
 
-``fingerprint_keys()`` is the deliberate exception — see the comment on it.
+``fingerprint.py`` is the deliberate exception — see its module docstring.
 """
 
 from __future__ import annotations
 
-import os
 import re
+
+from .fingerprint import fingerprint_keys  # noqa: F401 — findings.* is the surface
+from .locate import (  # noqa: F401 — findings.* is the surface
+    path_in_prose,
+    place_from_prose,
+    relpath,
+    text_location,
+)
 
 # Preference order, first truthy wins. Supersets of what the individual call
 # sites used to carry, so a finding any surface could place is now placeable by
@@ -136,16 +143,6 @@ _NORMAL: dict[str, str] = {
 }
 
 LEVELS: tuple[str, ...] = ("critical", "high", "medium", "low", "info", "unknown")
-
-# `src/a.py:12:` or `src/a.py:12:5:` inside a message — the gates that hand back
-# a raw tool line (mypy, tsc, codeql) carry their location nowhere else.
-_TEXT_LOCATION = re.compile(
-    r"(?:^|[\s(\[\"'])([\w.@+-]+(?:[/\\][\w.@+-]+)*\.\w{1,12}):(\d+)(?::(\d+))?"
-)
-# A bare path with no line — the format gate's "Would reformat: src/x.py". Needs
-# a separator to match, so an ordinary word with a dot in it is not a candidate.
-_TEXT_PATH = re.compile(r"[\w.@+-]+(?:[/\\][\w.@+-]+)+\.\w{1,12}")
-
 
 # A leading `[HIGH]` — how the kics and licenses gates report severity, folding
 # it into the message rather than into a key. Only a bracket whose content is a
@@ -269,84 +266,6 @@ def url(f: object) -> str:
     return first_str(f, URL_KEYS)
 
 
-def text_location(text: str) -> tuple[str, int, int]:
-    """`(path, line, column)` scraped from a message, for the gates that carry
-    their location only in prose. `('', 0, 0)` when there is nothing to scrape.
-    A bogus parse costs the caller nothing — it checks the path exists."""
-    hit = _TEXT_LOCATION.search(text or "")
-    if not hit:
-        return "", 0, 0
-    return hit[1], int(hit[2]), int(hit[3]) if hit[3] else 0
-
-
-def _on_disk(candidate: str, root: str) -> bool:
-    """Whether a scraped path names a file that is actually there.
-
-    Prose looks like a path more often than you would think ("see docs/api.md"),
-    and a finding anchored to a file that does not exist is worse than one left
-    unanchored. Without a root there is nothing to check against, so the scrape
-    is taken at face value — which is what unit tests want and what a caller
-    outside a checkout gets.
-    """
-    if not root:
-        return True
-    return os.path.isfile(os.path.join(root, relpath(candidate, root)))
-
-
-def relpath(p: str, root: str = "") -> str:
-    """A tool-reported path made repo-relative.
-
-    Tools run either on the host (paths already relative to the worktree) or
-    inside the tools image, which mounts the repo at a fixed prefix — so an
-    absolute path has to have that prefix taken off before it means anything to
-    anyone else.
-    """
-    out = (p or "").strip().replace("\\", "/")
-    if root:
-        r = root.replace("\\", "/").rstrip("/")
-        if r and out.startswith(r):
-            out = out[len(r) :]
-    return out.lstrip("/").removeprefix("./")
-
-
-def _place_from_prose(
-    p: str, ln: int, col: int, text: str, root: str
-) -> tuple[str, int, int, str]:
-    """Recover `path:line:col` from a message that carries it in prose, and take
-    the recovered prefix back off the message.
-
-    Gates that hand back a raw tool line (mypy, tsc, codeql) have no location
-    fields at all. Returns the inputs unchanged when there is nothing to scrape.
-    """
-    tp, tl, tc = text_location(text)
-    if not tp or not _on_disk(tp, root):
-        return p, ln, col, text
-    scraped_path = not p
-    if scraped_path:
-        p = tp
-    if not ln and tp == p:
-        ln, col = tl, (col or tc)
-    if not scraped_path:
-        return p, ln, col, text
-    # The location has its own fields now, so a message that merely repeats it
-    # in front is shorter without it.
-    head = text[: text.index(tp)] + tp
-    if ln:
-        head = f"{head}:{ln}" if f"{tp}:{ln}" in text else head
-    if text.startswith(head):
-        text = text[len(head) :].lstrip(" \t:-")
-    return p, ln, col, text
-
-
-def _path_in_prose(text: str, root: str) -> str:
-    """The first bare path in a message that names a file actually on disk, or
-    '' — the last resort for a finding with no location fields at all."""
-    for candidate in _TEXT_PATH.findall(text):
-        if _on_disk(candidate, root):
-            return candidate
-    return ""
-
-
 def normalise(f: object, root: str = "") -> dict:
     """Everything above, as one dict.
 
@@ -371,11 +290,11 @@ def normalise(f: object, root: str = "") -> dict:
         text, p = p, ""
 
     if not p or not ln:
-        p, ln, col, text = _place_from_prose(p, ln, col, text, root)
+        p, ln, col, text = place_from_prose(p, ln, col, text, root)
     # Still unplaced: a bare path somewhere in the text. The message is left
     # whole — for these gates the sentence is the finding.
     if not p:
-        p = _path_in_prose(text, root)
+        p = path_in_prose(text, root)
 
     return {
         "path": relpath(p, root),
@@ -386,74 +305,6 @@ def normalise(f: object, root: str = "") -> dict:
         "severity": sev,
         "url": url(f),
     }
-
-
-# --- frozen vocabulary -------------------------------------------------------
-
-# Suppression fingerprints are hashes of these fields, and a baseline file is a
-# list of those hashes sitting in someone's repository. Widening the key lists
-# above would change what a finding hashes to and silently un-accept every
-# finding in every committed .gandalf-baseline.json — the tool would go loud
-# again on exactly the findings a team had agreed to live with.
-#
-# So fingerprints keep the vocabulary they were computed with. This is the one
-# place where "the lists disagree" is a decision rather than an accident, and it
-# is why it lives here next to the lists it deliberately differs from.
-#
-# Do not edit these without a baseline format version and a migration.
-_FP_PATH_KEYS: tuple[str, ...] = ("path", "filename", "file", "file_path")
-_FP_RULE_KEYS: tuple[str, ...] = (
-    "rule_id",
-    "check_id",
-    "RuleID",
-    "test_id",
-    "code",
-    "check_name",
-    "QueryName",
-    "VulnerabilityID",
-    "id",
-    "rule",
-)
-_FP_MESSAGE_KEYS: tuple[str, ...] = (
-    "message",
-    "issue_text",
-    "description",
-    "Description",
-    "finding",
-    "typo",
-    "missing",
-)
-
-
-def _first_truthy(f: object, keys: tuple[str, ...]) -> str:
-    """The or-chain the suppression helpers used, preserved exactly.
-
-    Deliberately not `first_str`: that one strips whitespace and skips bools,
-    and either difference would move a hash. A fingerprint helper may only
-    change when the baseline format does.
-    """
-    if not _is_mapping(f):
-        return ""
-    for k in keys:
-        v = f.get(k)  # type: ignore[union-attr]
-        if v:
-            return str(v)
-    return ""
-
-
-def fingerprint_keys(f: object) -> tuple[str, str, str]:
-    """`(path, rule, message)` as suppression hashes them. Frozen — see above.
-
-    A non-dict finding has no fields to read, and its whole string form is the
-    only thing there is to identify it by — which is what `_message` did.
-    """
-    if not _is_mapping(f):
-        return "", "", str(f)
-    return (
-        _first_truthy(f, _FP_PATH_KEYS),
-        _first_truthy(f, _FP_RULE_KEYS),
-        _first_truthy(f, _FP_MESSAGE_KEYS),
-    )
 
 
 def annotate(f: object, root: str = "") -> object:
