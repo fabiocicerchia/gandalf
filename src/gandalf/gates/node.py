@@ -14,6 +14,7 @@ from pathlib import Path
 from gandalf import suggest
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.findings import relpath
+from gandalf.gates._toolchain import merged, parsed, scored
 from gandalf.plugins import (
     run_tool,
     timeout_result,
@@ -26,10 +27,30 @@ def _no_pkg(ctx: GateContext) -> bool:
     return not (Path(ctx.workdir) / "package.json").exists()
 
 
+def _item(m: dict, rel: str) -> dict:
+    """One eslint message, in the keys the report, SARIF and the PR comments
+    all read."""
+    return {
+        "path": rel,
+        "line": m.get("line") or 0,
+        "column": m.get("column") or 0,
+        "rule_id": m.get("ruleId") or "eslint",
+        "message": m.get("message", ""),
+        "severity": "error" if m.get("severity") == 2 else "warning",
+    }
+
+
+def _fix_range(m: dict) -> list | None:
+    """The character-offset span of the rule's own autofix, when it has one."""
+    fix = m.get("fix") if isinstance(m.get("fix"), dict) else {}
+    rng = fix.get("range")
+    return rng if isinstance(rng, list) and len(rng) == 2 else None
+
+
 def _messages(results: list, workdir: str) -> list[dict]:
-    """eslint's per-message findings, flattened to the keys the report, SARIF
-    and the PR comments all read — and, for a rule eslint knows how to fix, a
-    `_fix` block so the pull request can carry the fix as a suggestion.
+    """eslint's per-message findings, flattened — and, for a rule eslint knows
+    how to fix, a `_fix` block so the pull request can carry the fix as a
+    suggestion.
 
     eslint reports a fix as a pair of character offsets into the file. Nothing
     downstream speaks offsets, so the translation happens here, once, where the
@@ -44,24 +65,24 @@ def _messages(results: list, workdir: str) -> list[dict]:
         for m in res.get("messages") or []:
             if not isinstance(m, dict):
                 continue
-            item = {
-                "path": rel,
-                "line": m.get("line") or 0,
-                "column": m.get("column") or 0,
-                "rule_id": m.get("ruleId") or "eslint",
-                "message": m.get("message", ""),
-                "severity": "error" if m.get("severity") == 2 else "warning",
-            }
-            fix = m.get("fix") if isinstance(m.get("fix"), dict) else {}
-            rng = fix.get("range")
-            if isinstance(rng, list) and len(rng) == 2:
+            item = _item(m, rel)
+            rng = _fix_range(m)
+            if rng:
                 if source is None:  # read once per file, only if a fix needs it
                     source = _read(workdir, rel)
-                edit = suggest.utf16_edit(source, rng[0], rng[1], fix.get("text"))
+                edit = suggest.utf16_edit(source, rng[0], rng[1], m["fix"].get("text"))
                 if edit:
                     item["_fix"] = {"edits": [edit]}
             out.append(item)
     return out
+
+
+def _eslint_counts(results: list) -> tuple[int, int]:
+    """(errors, warnings) across eslint's per-file results."""
+    return (
+        sum(r.get("errorCount", 0) for r in results),
+        sum(r.get("warningCount", 0) for r in results),
+    )
 
 
 def _read(workdir: str, rel: str) -> str:
@@ -91,23 +112,19 @@ class EslintGate:
             return unavailable(
                 self.name, "eslint: not installed in project (npm i eslint) — skipped"
             )
-        try:
-            results = json.loads(out)
-        except json.JSONDecodeError:
+        results = parsed(out, "")
+        if results is None:
             return unavailable(self.name, "eslint: not configured in project — skipped")
-        errors = sum(r.get("errorCount", 0) for r in results)
-        warns = sum(r.get("warningCount", 0) for r in results)
+        errors, warns = _eslint_counts(results)
         total = errors + warns
         if total == 0:
             return GateResult(self.name, GateOutcome.PASS, 1.0, "eslint: clean")
-        score = max(0.0, 1.0 - min(total, 10) / 10)
-        outcome = GateOutcome.FAIL if errors > 0 else GateOutcome.WARN
-        return GateResult(
+        return scored(
             self.name,
-            outcome,
-            score,
+            total,
             f"eslint: {errors} error(s), {warns} warning(s)",
             _messages(results, ctx.workdir),
+            fail=errors > 0,
         )
 
     async def fix(self, ctx: GateContext) -> tuple[bool, str]:
@@ -137,7 +154,7 @@ class TscGate:
         )
         if (to := timeout_result(self.name, rc)) is not None:
             return to
-        combined = (out or "") + (err or "")
+        combined = merged(out, err)
         n = combined.count("error TS")
         if rc == 0:
             return GateResult(self.name, GateOutcome.PASS, 1.0, "tsc: no type errors")
@@ -147,11 +164,14 @@ class TscGate:
                 self.name,
                 "tsc: could not run (not installed or misconfigured) — skipped",
             )
-        score = max(0.0, 1.0 - min(n, 20) / 20)
-        outcome = GateOutcome.FAIL if n > 10 else GateOutcome.WARN
         tail = "\n".join(ln for ln in combined.splitlines() if "error TS" in ln)[:1000]
-        return GateResult(
-            self.name, outcome, score, f"tsc: {n} type error(s)", [{"errors": tail}]
+        return scored(
+            self.name,
+            n,
+            f"tsc: {n} type error(s)",
+            [{"errors": tail}],
+            fail=n > 10,
+            cap=20,
         )
 
 

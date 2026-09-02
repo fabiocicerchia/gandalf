@@ -10,12 +10,21 @@ import tempfile
 from pathlib import Path
 
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.gates._toolchain import named
+from gandalf.gates._toolchain import named, nonblank, scored
 from gandalf.plugins import missing_result, run_tool, timeout_result, tool_missing
 
 # What codespell must not read. One list, so `--fix` corrects exactly the files
 # the gate scored — a fixer with a wider reach would rewrite vendored trees.
 _CODESPELL_SKIP = "*.lock,*.min.js,.git,.venv,node_modules,llama.cpp,reports,*.svg"
+
+
+def _yamllint_config(workdir: str) -> list[str]:
+    """Honor a repo's own yamllint config if it ships one (auto-discovered from
+    the workdir); otherwise fall back to the built-in relaxed preset."""
+    own = (".yamllint", ".yamllint.yaml", ".yamllint.yml")
+    if any((Path(workdir) / c).is_file() for c in own):
+        return []
+    return ["-d", "relaxed"]
 
 
 def _spellable(ctx: GateContext) -> list[str]:
@@ -114,20 +123,18 @@ class ActionlintGate:
         rc, out, _ = await run_tool(["actionlint", "-oneline"], ctx.workdir)
         if (to := timeout_result(self.name, rc)) is not None:
             return to
-        issues = [ln for ln in (out or "").splitlines() if ln.strip()]
+        issues = nonblank(out)
         n = len(issues)
         if n == 0:
             return GateResult(
                 self.name, GateOutcome.PASS, 1.0, "actionlint: workflows clean"
             )
-        score = max(0.0, 1.0 - min(n, 10) / 10)
-        outcome = GateOutcome.FAIL if n > 3 else GateOutcome.WARN
-        return GateResult(
+        return scored(
             self.name,
-            outcome,
-            score,
+            n,
             f"actionlint: {n} issue(s)",
             [{"issue": i} for i in issues],
+            fail=n > 3,
         )
 
 
@@ -144,21 +151,15 @@ class YamllintGate:
             return GateResult(
                 self.name, GateOutcome.PASS, 1.0, "yamllint: no YAML files"
             )
-        # Honor a repo's own yamllint config if it ships one (auto-discovered from
-        # the workdir); otherwise fall back to the built-in relaxed preset.
-        has_cfg = any(
-            (Path(ctx.workdir) / c).is_file()
-            for c in (".yamllint", ".yamllint.yaml", ".yamllint.yml")
-        )
-        cfg = [] if has_cfg else ["-d", "relaxed"]
         rc, out, _ = await run_tool(
-            ["yamllint", "-f", "parsable", *cfg, *yamls], ctx.workdir
+            ["yamllint", "-f", "parsable", *_yamllint_config(ctx.workdir), *yamls],
+            ctx.workdir,
         )
         if (to := timeout_result(self.name, rc)) is not None:
             return to
-        lines = [ln for ln in (out or "").splitlines() if ln.strip()]
-        errors = [ln for ln in lines if "[error]" in ln]
-        n = len(lines)
+        issues = nonblank(out)
+        errors = [ln for ln in issues if "[error]" in ln]
+        n = len(issues)
         if n == 0:
             return GateResult(
                 self.name,
@@ -166,14 +167,12 @@ class YamllintGate:
                 1.0,
                 f"yamllint: {len(yamls)} file(s) clean",
             )
-        score = max(0.0, 1.0 - min(n, 10) / 10)
-        outcome = GateOutcome.FAIL if errors else GateOutcome.WARN
-        return GateResult(
+        return scored(
             self.name,
-            outcome,
-            score,
+            n,
             f"yamllint: {n} issue(s), {len(errors)} error(s)",
-            [{"issue": ln} for ln in lines],
+            [{"issue": ln} for ln in issues],
+            fail=bool(errors),
         )
 
 

@@ -32,6 +32,7 @@ import shutil
 import tempfile
 
 from gandalf.base import GateContext, GateOutcome, GateResult
+from gandalf.gates._toolchain import scored
 from gandalf.plugins import (
     run_tool,
     timeout_result,
@@ -54,6 +55,19 @@ _LANG_MAP = {
 }
 
 
+def _codeql_langs(changed_files: list[str] | None) -> list[str]:
+    """The CodeQL language ids to analyze.
+
+    Whole-tree scope classifies to nothing, so fall back to the languages CodeQL
+    can build here (all of them) — the per-language create simply produces an
+    empty DB for a language with no sources.
+    """
+    detected = _classify(changed_files) if changed_files else None
+    return sorted(
+        {_LANG_MAP[t] for t in (detected or set(_LANG_MAP)) if t in _LANG_MAP}
+    )
+
+
 class CodeqlGate:
     name = "codeql"
     blocking = False
@@ -66,13 +80,7 @@ class CodeqlGate:
                 self.name, "codeql unavailable (no host binary and no docker) — skipped"
             )
 
-        detected = _classify(ctx.changed_files) if ctx.changed_files else None
-        # Whole-tree scope: _classify of changed_files is empty, so fall back to the
-        # languages CodeQL can build here (all of them) — the per-language create
-        # simply produces an empty DB for a language with no sources.
-        cq_langs = sorted(
-            {_LANG_MAP[t] for t in (detected or set(_LANG_MAP)) if t in _LANG_MAP}
-        )
+        cq_langs = _codeql_langs(ctx.changed_files)
         if not cq_langs:
             return GateResult(
                 self.name,
@@ -82,26 +90,10 @@ class CodeqlGate:
             )
 
         work = tempfile.mkdtemp(prefix="gandalf-codeql-")
-        ran: list[str] = []  # languages that produced a SARIF we could read
-        findings: list[dict] = []
-        errors = warnings = 0
         try:
-            for lang in cq_langs:
-                sarif = os.path.join(work, f"{lang}.sarif")
-                if not await self._analyze(ctx, work, lang, sarif, have_host):
-                    continue
-                try:
-                    # Small local SARIF read right after the subprocess
-                    # completes — not worth a thread hop.
-                    with open(sarif, errors="replace") as fh:  # noqa: ASYNC230
-                        data = json.load(fh)
-                except (OSError, json.JSONDecodeError):
-                    continue
-                ran.append(lang)
-                e, w, f = _parse_sarif(data)
-                errors += e
-                warnings += w
-                findings.extend(f)
+            ran, errors, warnings, findings = await self._collect(
+                ctx, work, cq_langs, have_host
+            )
         finally:
             shutil.rmtree(work, ignore_errors=True)
 
@@ -117,15 +109,39 @@ class CodeqlGate:
             return GateResult(
                 self.name, GateOutcome.PASS, 1.0, f"codeql ({langs_txt}): clean"
             )
-        score = max(0.0, 1.0 - min(n, 10) / 10)
-        outcome = GateOutcome.FAIL if errors > 0 or n > 5 else GateOutcome.WARN
-        return GateResult(
+        return scored(
             self.name,
-            outcome,
-            score,
+            n,
             f"codeql ({langs_txt}): {errors} error, {warnings} warning finding(s)",
             findings[:100],
+            fail=errors > 0 or n > 5,
         )
+
+    async def _collect(
+        self, ctx: GateContext, work: str, cq_langs: list[str], have_host: bool
+    ) -> tuple[list[str], int, int, list[dict]]:
+        """Analyze each language in turn → (languages that produced a SARIF we
+        could read, error count, warning count, findings)."""
+        ran: list[str] = []
+        findings: list[dict] = []
+        errors = warnings = 0
+        for lang in cq_langs:
+            sarif = os.path.join(work, f"{lang}.sarif")
+            if not await self._analyze(ctx, work, lang, sarif, have_host):
+                continue
+            try:
+                # Small local SARIF read right after the subprocess completes —
+                # not worth a thread hop.
+                with open(sarif, errors="replace") as fh:  # noqa: ASYNC230
+                    data = json.load(fh)
+            except (OSError, json.JSONDecodeError):
+                continue
+            ran.append(lang)
+            e, w, f = _parse_sarif(data)
+            errors += e
+            warnings += w
+            findings.extend(f)
+        return ran, errors, warnings, findings
 
     async def _analyze(
         self, ctx: GateContext, work: str, lang: str, sarif: str, have_host: bool

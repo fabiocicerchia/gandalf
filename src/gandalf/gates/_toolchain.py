@@ -8,6 +8,11 @@ twenty copies of the same eight lines. So the answers live here once, and a gate
 file carries only what actually differs: the marker files, the binary, the
 command, and how to read its output.
 
+`parsed` and `scored` are the two steps *every* gate shares, ecosystem or not:
+read the tool's JSON, then turn a finding count into a score. They live here
+rather than in plugins.py because they are the gate author's vocabulary, not the
+runner's.
+
 Underscore-prefixed on purpose: plugins.discover_gates skips `_*.py`, so the base
 class here is never mistaken for a gate of its own.
 """
@@ -16,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import fnmatch
+import json
 import re
 from pathlib import Path
 
@@ -93,6 +99,45 @@ def tail(text: str, lines: int = 5) -> str:
     return "\n".join((text or "").strip().splitlines()[-lines:])
 
 
+def merged(out: str | None, err: str | None) -> str:
+    """A tool's two streams as one text — several report on either or both."""
+    return (out or "") + (err or "")
+
+
+def nonblank(out: str | None) -> list[str]:
+    """A tool's non-blank output lines."""
+    return [ln for ln in (out or "").splitlines() if ln.strip()]
+
+
+def parsed(out: str, empty: str = "{}"):
+    """A tool's JSON stdout, or None when it did not emit JSON at all.
+
+    None rather than an empty document, because "the scanner printed something
+    we cannot read" is not "the scanner found nothing" — every caller turns it
+    into `unavailable`, and an empty document would score as a clean pass.
+    """
+    try:
+        return json.loads(out or empty)
+    except json.JSONDecodeError:
+        return None
+
+
+def scored(
+    gate: str,
+    n: int,
+    summary: str,
+    findings: list[dict] | None = None,
+    *,
+    fail: bool,
+    cap: int = 10,
+) -> GateResult:
+    """The tail every counting gate shares: a score that bottoms out at `cap`
+    findings, and the caller's own red/amber call."""
+    score = max(0.0, 1.0 - min(n, cap) / cap)
+    outcome = GateOutcome.FAIL if fail else GateOutcome.WARN
+    return GateResult(gate, outcome, score, summary, findings or [])
+
+
 def counted(
     gate: str,
     n: int,
@@ -106,9 +151,7 @@ def counted(
     a handful is amber, more than that is red, and ten is as bad as it gets."""
     if n <= 0:
         return GateResult(gate, GateOutcome.PASS, 1.0, f"{label}: clean")
-    score = max(0.0, 1.0 - min(n, 10) / 10)
-    outcome = GateOutcome.WARN if n <= warn_max else GateOutcome.FAIL
-    return GateResult(gate, outcome, score, f"{label}: {n} {noun}", findings or [])
+    return scored(gate, n, f"{label}: {n} {noun}", findings, fail=n > warn_max)
 
 
 async def exit_code(

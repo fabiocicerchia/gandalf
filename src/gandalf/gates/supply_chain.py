@@ -7,14 +7,13 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
-import json
 import re
 import shutil
 import sys
 from pathlib import Path
 
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.gates._toolchain import named
+from gandalf.gates._toolchain import named, parsed, scored
 from gandalf.plugins import (
     _TIMEOUT_RC,
     communicate,
@@ -24,6 +23,59 @@ from gandalf.plugins import (
     timeout_result,
     unavailable,
 )
+
+
+def _flat(results: list[dict], key: str) -> list[dict]:
+    """One kind of finding, flattened across a scanner's per-target results."""
+    return [item for r in results for item in r.get(key) or []]
+
+
+def _checkov_report(out: str) -> dict | None:
+    """checkov's report object. It emits a bare object, or a list of them — one
+    per framework — when the tree has more than one; the first is the summary
+    every caller here reads. None when the output is not JSON at all."""
+    raw = parsed(out)
+    if raw is None:
+        return None
+    if isinstance(raw, list):
+        return raw[0] if raw else {}
+    return raw
+
+
+async def _hadolint_findings(
+    dockerfiles: list[str], workdir: str
+) -> tuple[list[dict], str]:
+    """Every Dockerfile's hadolint findings, and the file it timed out on ("" if
+    none). A file whose output will not parse contributes nothing rather than
+    sinking the whole gate."""
+    found: list[dict] = []
+    for df in dockerfiles:
+        # workdir-relative so the path resolves inside the container mount too.
+        rc, out, _ = await run_tool(["hadolint", "--format", "json", df], workdir)
+        if rc == _TIMEOUT_RC:
+            return found, df
+        if (items := parsed(out, "[]")) is not None:
+            found.extend(items)
+    return found, ""
+
+
+def _pytest_runner(root: Path, base: list[str]) -> list[str] | None:
+    """The argv that runs this repo's pytest suite, or None when pytest is not
+    installed for the interpreter that would run it.
+
+    A config file says the repo *uses* pytest, not that pytest is installed:
+    `python -m pytest` then exits non-zero with "No module named pytest", which
+    reads exactly like a failing suite. Ask the interpreter that would run it,
+    and run it through sys.executable so the answer is about that interpreter.
+    """
+    configured = any(
+        (root / f).exists() for f in ("pytest.ini", "pyproject.toml", "setup.cfg")
+    )
+    if configured and importlib.util.find_spec("pytest") is not None:
+        return [sys.executable, "-m", "pytest", *base]
+    if shutil.which("pytest"):
+        return ["pytest", *base]
+    return None
 
 
 class OsvGate:
@@ -36,42 +88,23 @@ class OsvGate:
     async def run(self, ctx: GateContext) -> GateResult:
         if (m := missing_result(self.name, "pip-audit")) is not None:
             return m
-        req_files = named(ctx, "requirements*.txt")
-        if not req_files:
-            rc, out, _ = await run_tool(["pip-audit", "--format", "json"], ctx.workdir)
-        else:
+        argv = ["pip-audit", "--format", "json"]
+        if req_files := named(ctx, "requirements*.txt"):
             # workdir-relative so the path resolves both on host and inside the container mount.
-            rc, out, _ = await run_tool(
-                [
-                    "pip-audit",
-                    "-r",
-                    req_files[0],
-                    "--format",
-                    "json",
-                ],
-                ctx.workdir,
-            )
+            argv = ["pip-audit", "-r", req_files[0], "--format", "json"]
+        rc, out, _ = await run_tool(argv, ctx.workdir)
         if (to := timeout_result(self.name, rc)) is not None:
             return to
-        try:
-            data = json.loads(out or "[]")
-        except json.JSONDecodeError:
+        data = parsed(out, "[]")
+        if data is None:
             return unavailable(self.name, "osv/pip-audit: unparsable output")
-        vulns = [
-            v
-            for item in (data if isinstance(data, list) else [])
-            for v in item.get("vulns", [])
-        ]
+        vulns = _flat(data if isinstance(data, list) else [], "vulns")
         n = len(vulns)
         if n == 0:
             return GateResult(
                 self.name, GateOutcome.PASS, 1.0, "osv: no known vulnerabilities"
             )
-        score = max(0.0, 1.0 - min(n, 10) / 10)
-        outcome = GateOutcome.FAIL if n >= 3 else GateOutcome.WARN
-        return GateResult(
-            self.name, outcome, score, f"osv: {n} vulnerability(ies)", vulns
-        )
+        return scored(self.name, n, f"osv: {n} vulnerability(ies)", vulns, fail=n >= 3)
 
 
 class OsvScannerGate:
@@ -86,24 +119,15 @@ class OsvScannerGate:
         )
         if (to := timeout_result(self.name, rc)) is not None:
             return to
-        try:
-            data = json.loads(out or "{}")
-        except json.JSONDecodeError:
+        data = parsed(out)
+        if data is None:
             return unavailable(self.name, "osv-scanner: unparsable output")
-        results = data.get("results", [])
-        vulns = [
-            v
-            for r in results
-            for pkg in r.get("packages", [])
-            for v in pkg.get("vulnerabilities", [])
-        ]
+        vulns = _flat(_flat(data.get("results", []), "packages"), "vulnerabilities")
         n = len(vulns)
         if n == 0:
             return GateResult(self.name, GateOutcome.PASS, 1.0, "osv-scanner: clean")
-        score = max(0.0, 1.0 - min(n, 10) / 10)
-        outcome = GateOutcome.FAIL if n >= 3 else GateOutcome.WARN
-        return GateResult(
-            self.name, outcome, score, f"osv-scanner: {n} vulnerability(ies)", vulns
+        return scored(
+            self.name, n, f"osv-scanner: {n} vulnerability(ies)", vulns, fail=n >= 3
         )
 
 
@@ -136,29 +160,24 @@ class TrivyGate:
         )
         if (to := timeout_result(self.name, rc)) is not None:
             return to
-        try:
-            data = json.loads(out or "{}")
-        except json.JSONDecodeError:
+        data = parsed(out)
+        if data is None:
             return unavailable(self.name, "trivy: unparsable output")
         results = data.get("Results", [])
-        vulns = [v for r in results for v in r.get("Vulnerabilities", []) or []]
-        secrets = [s for r in results for s in r.get("Secrets", []) or []]
-        misconfigs = [m for r in results for m in r.get("Misconfigurations", []) or []]
-        licenses = [lic for r in results for lic in r.get("Licenses", []) or []]
+        vulns = _flat(results, "Vulnerabilities")
+        secrets = _flat(results, "Secrets")
+        misconfigs = _flat(results, "Misconfigurations")
+        licenses = _flat(results, "Licenses")
         n_v, n_s, n_m, n_l = len(vulns), len(secrets), len(misconfigs), len(licenses)
         total = n_v + n_s + n_m + n_l
         if total == 0:
             return GateResult(self.name, GateOutcome.PASS, 1.0, "trivy: clean")
-        score = max(0.0, 1.0 - min(total, 10) / 10)
-        outcome = (
-            GateOutcome.FAIL if n_s > 0 or n_v >= 5 or n_m >= 5 else GateOutcome.WARN
-        )
-        return GateResult(
+        return scored(
             self.name,
-            outcome,
-            score,
+            total,
             f"trivy: {n_v} vuln(s), {n_s} secret(s), {n_m} misconfig(s), {n_l} license(s)",
-            (vulns + secrets + misconfigs + licenses),
+            vulns + secrets + misconfigs + licenses,
+            fail=n_s > 0 or n_v >= 5 or n_m >= 5,
         )
 
 
@@ -187,10 +206,8 @@ class CheckovGate:
         )
         if (to := timeout_result(self.name, rc)) is not None:
             return to
-        try:
-            raw = json.loads(out or "{}")
-            data = (raw[0] if raw else {}) if isinstance(raw, list) else raw
-        except json.JSONDecodeError:
+        data = _checkov_report(out)
+        if data is None:
             return unavailable(self.name, "checkov: unparsable output")
         summary = data.get("summary", {})
         failed = summary.get("failed", 0)
@@ -200,15 +217,16 @@ class CheckovGate:
             return GateResult(
                 self.name, GateOutcome.PASS, 1.0, f"checkov: {passed} check(s) passed"
             )
+        # checkov scores by the share of checks that passed, not by finding count,
+        # so it builds its own GateResult rather than going through `scored`.
         score = max(0.0, passed / total) if total else 0.0
         outcome = GateOutcome.FAIL if failed >= 5 else GateOutcome.WARN
-        failed_checks = data.get("results", {}).get("failed_checks", [])
         return GateResult(
             self.name,
             outcome,
             score,
             f"checkov: {failed} failed / {total} checks",
-            failed_checks,
+            data.get("results", {}).get("failed_checks", []),
         )
 
 
@@ -225,20 +243,11 @@ class HadolintGate:
             return GateResult(
                 self.name, GateOutcome.PASS, 1.0, "hadolint: no Dockerfiles found"
             )
-        all_findings: list[dict] = []
-        for df in dockerfiles:
-            # workdir-relative so the path resolves inside the container mount too.
-            rc, out, _ = await run_tool(
-                ["hadolint", "--format", "json", df], ctx.workdir
+        all_findings, timed_out = await _hadolint_findings(dockerfiles, ctx.workdir)
+        if timed_out:
+            return unavailable(
+                self.name, f"{self.name}: timed out on {timed_out} — skipped"
             )
-            if rc == _TIMEOUT_RC:
-                return unavailable(
-                    self.name, f"{self.name}: timed out on {df} — skipped"
-                )
-            try:
-                all_findings.extend(json.loads(out or "[]"))
-            except json.JSONDecodeError:
-                pass
         n = len(all_findings)
         if n == 0:
             return GateResult(
@@ -248,14 +257,12 @@ class HadolintGate:
                 f"hadolint: {len(dockerfiles)} Dockerfile(s) clean",
             )
         errors = sum(1 for f in all_findings if f.get("level") == "error")
-        score = max(0.0, 1.0 - min(n, 10) / 10)
-        outcome = GateOutcome.FAIL if errors > 0 else GateOutcome.WARN
-        return GateResult(
+        return scored(
             self.name,
-            outcome,
-            score,
+            n,
             f"hadolint: {n} issue(s) in {len(dockerfiles)} Dockerfile(s)",
             all_findings,
+            fail=errors > 0,
         )
 
 
@@ -273,20 +280,8 @@ class TestsGate:
         base = ["--tb=no", "-q", "--no-header"]
         for p in ignore_patterns(ctx.workdir):
             base += ["--ignore", p]
-        configured = (
-            (root / "pytest.ini").exists()
-            or (root / "pyproject.toml").exists()
-            or (root / "setup.cfg").exists()
-        )
-        # A config file says the repo *uses* pytest, not that pytest is installed:
-        # `python -m pytest` then exits non-zero with "No module named pytest", which
-        # reads exactly like a failing suite. Ask the interpreter that would run it,
-        # and run it through sys.executable so the answer is about that interpreter.
-        if configured and importlib.util.find_spec("pytest") is not None:
-            runner = [sys.executable, "-m", "pytest", *base]
-        elif shutil.which("pytest"):
-            runner = ["pytest", *base]
-        else:
+        runner = _pytest_runner(root, base)
+        if runner is None:
             return unavailable(self.name, "tests: pytest not installed — skipped")
         proc = await asyncio.create_subprocess_exec(
             *runner,
