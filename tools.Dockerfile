@@ -2,7 +2,7 @@
 # Build:  make tools   (or: docker build -t gandalf-tools -f gandalf/tools.Dockerfile gandalf)
 # gandalf runs each tool atomically as `docker run --rm gandalf-tools <tool> ...`
 # when the binary isn't on the host PATH. Pinned for reproducibility — bump freely.
-FROM python:3.14-slim@sha256:ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9885476e7df5a4
+FROM python:3.14-slim@sha256:cad9a2c871761c413caa6fdd6441c783451e740a48aaeba60ae62a8b53525ef6
 
 # OCI labels — org.opencontainers.image.source links the ghcr package to this repo
 # (so it inherits repo visibility and the built-in GITHUB_TOKEN can pull it).
