@@ -308,9 +308,13 @@ describe('score over time', function()
   end
 
   it('offers the commits git log reported, newest first', function()
-    -- The suite runs inside the gandalf checkout, so `git log` has real commits.
+    -- Compared against git rather than assuming a deep checkout: CI clones with
+    -- fetch-depth 1, so "more than one commit" fails there for a reason that has
+    -- nothing to do with the picker.
+    local expected = vim.fn.systemlist('git log --format=%h -n 50')
     local picker = history()
-    assert.is_true(#picker.items > 1)
+    assert.equals(#expected, #picker.items)
+    assert.equals(expected[1], picker.items[1].short)
     assert.is_truthy(picker.items[1].short:match('^%x+$'))
   end)
 
