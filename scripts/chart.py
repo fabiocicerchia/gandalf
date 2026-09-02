@@ -73,8 +73,10 @@ def _row_height(row: dict) -> int:
 def _row_svg(row: dict, ry: int, plot: int, ceiling: float, unit: str) -> list[str]:
     """One row: its label, one or two bars, and the before/after factor."""
     out = [
-        f'<text x="{GUTTER - 12}" y="{ry + _row_height(row) / 2 + 4:.1f}" '
-        f'class="label" text-anchor="end">{escape(row["label"])}</text>'
+        (
+            f'<text x="{GUTTER - 12}" y="{ry + _row_height(row) / 2 + 4:.1f}" '
+            f'class="label" text-anchor="end">{escape(row["label"])}</text>'
+        )
     ]
     if row.get("before") is not None:
         bars = [

@@ -8,9 +8,8 @@ import dataclasses
 import json
 import os
 import sys
-from pathlib import Path
-
 from datetime import datetime, timezone
+from pathlib import Path
 
 from . import badge, junit, plugins, pr_comments, render_html, report, sarif, scope
 from . import findings as gfindings
