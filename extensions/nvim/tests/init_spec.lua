@@ -308,14 +308,16 @@ describe('score over time', function()
   end
 
   it('offers the commits git log reported, newest first', function()
-    -- Compared against git rather than assuming a deep checkout: CI clones with
-    -- fetch-depth 1, so "more than one commit" fails there for a reason that has
-    -- nothing to do with the picker.
-    local expected = vim.fn.systemlist('git log --format=%h -n 50')
+    -- Asserted as a newest-first prefix of git's own output. Not "more than one
+    -- commit": CI clones with fetch-depth 1. Not a fixed count either: the cap
+    -- lives in commands.lua, and a test that repeats it only proves it can copy.
+    local expected = vim.fn.systemlist('git log --format=%h')
     local picker = history()
-    assert.equals(#expected, #picker.items)
-    assert.equals(expected[1], picker.items[1].short)
-    assert.is_truthy(picker.items[1].short:match('^%x+$'))
+    assert.is_true(#picker.items > 0)
+    assert.is_true(#picker.items <= #expected)
+    for i, item in ipairs(picker.items) do
+      assert.equals(expected[i], item.short)
+    end
   end)
 
   it('says nothing has been scanned when the trend log is empty', function()
