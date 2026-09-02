@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from gandalf import plugins
+from gandalf import plugins, toolrun
 from gandalf.outputs import tool_report
 from gandalf.summary import _tools_line
 
@@ -21,38 +21,38 @@ def _clean():
 
 
 def test_host_resolution_is_recorded(monkeypatch):
-    monkeypatch.setattr(plugins.shutil, "which", lambda b: "/usr/bin/" + b)
-    plugins._dockerize(["ruff", "check"], "/tmp")
+    monkeypatch.setattr(toolrun.shutil, "which", lambda b: "/usr/bin/" + b)
+    toolrun._dockerize(["ruff", "check"], "/tmp")
     assert plugins.tool_sources() == {"ruff": "host"}
 
 
 def test_image_resolution_is_recorded(monkeypatch):
-    monkeypatch.setattr(plugins.shutil, "which", lambda b: None)
-    monkeypatch.setattr(plugins, "_via_image", lambda b: True)
-    cmd = plugins._dockerize(["trivy", "fs", "."], "/tmp")
+    monkeypatch.setattr(toolrun.shutil, "which", lambda b: None)
+    monkeypatch.setattr(toolrun, "_via_image", lambda b: True)
+    cmd = toolrun._dockerize(["trivy", "fs", "."], "/tmp")
     assert cmd[0] == "docker"
     assert plugins.tool_sources() == {"trivy": "image"}
 
 
 def test_an_unresolvable_tool_is_not_claimed_to_have_run(monkeypatch):
-    monkeypatch.setattr(plugins.shutil, "which", lambda b: None)
-    monkeypatch.setattr(plugins, "_via_image", lambda b: False)
-    plugins._dockerize(["nope"], "/tmp")
+    monkeypatch.setattr(toolrun.shutil, "which", lambda b: None)
+    monkeypatch.setattr(toolrun, "_via_image", lambda b: False)
+    toolrun._dockerize(["nope"], "/tmp")
     assert plugins.tool_sources() == {}
 
 
 def test_first_resolution_wins(monkeypatch):
-    monkeypatch.setattr(plugins.shutil, "which", lambda b: "/usr/bin/" + b)
-    plugins._dockerize(["ruff"], "/tmp")
-    monkeypatch.setattr(plugins.shutil, "which", lambda b: None)
-    monkeypatch.setattr(plugins, "_via_image", lambda b: True)
-    plugins._dockerize(["ruff"], "/tmp")
+    monkeypatch.setattr(toolrun.shutil, "which", lambda b: "/usr/bin/" + b)
+    toolrun._dockerize(["ruff"], "/tmp")
+    monkeypatch.setattr(toolrun.shutil, "which", lambda b: None)
+    monkeypatch.setattr(toolrun, "_via_image", lambda b: True)
+    toolrun._dockerize(["ruff"], "/tmp")
     assert plugins.tool_sources()["ruff"] == "host"
 
 
 def test_reset_clears_process_state(monkeypatch):
-    monkeypatch.setattr(plugins.shutil, "which", lambda b: "/usr/bin/" + b)
-    plugins._dockerize(["ruff"], "/tmp")
+    monkeypatch.setattr(toolrun.shutil, "which", lambda b: "/usr/bin/" + b)
+    toolrun._dockerize(["ruff"], "/tmp")
     plugins.reset_tool_sources()
     assert plugins.tool_sources() == {}
 

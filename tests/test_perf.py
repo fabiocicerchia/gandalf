@@ -16,8 +16,8 @@ import subprocess
 import time
 
 from gandalf import plugins, scope
+from gandalf.ignores import _compiled_ignores
 from gandalf.plugins import (
-    _compiled_ignores,
     ignore_patterns,
     is_ignored,
     scannable_files,

@@ -34,7 +34,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from gandalf import findings as gfindings  # noqa: E402
-from gandalf import plugins, scope  # noqa: E402
+from gandalf import ignores, plugins, scope  # noqa: E402
 
 # Big enough that the numbers mean something, small enough that `make bench`
 # stays a coffee-free operation.
@@ -77,7 +77,7 @@ def bench_tree_filter() -> dict:
     """The exclusion filter, applied to every path in the tree on every scan."""
     pats = plugins.ignore_patterns(".") + ("*.min.js", "src/generated", "vendor")
     paths = [f"src/pkg{i % 200}/mod{i}.py" for i in range(TREE_PATHS)]
-    plugins._compiled_ignores.cache_clear()
+    ignores._compiled_ignores.cache_clear()
 
     def run():
         return [p for p in paths if not plugins.is_ignored(p, pats)]
