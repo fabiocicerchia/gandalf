@@ -19,6 +19,7 @@ import contextlib
 import os
 import sys
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -135,6 +136,187 @@ def _build_advice(args, sc, results, verdict, prog) -> dict:
     )
 
 
+def _apply_excludes(args, cfg) -> None:
+    """Set the process-wide exclusions before any gate resolves its file list,
+    so every gate sees the same scope.
+
+    Always set, even when empty: this is process state, and a second run in the
+    same process (the editor extension) must not inherit the first one's
+    exclusions. Tool resolutions are process state for the same reason.
+    """
+    excludes = list(args.exclude or []) + [
+        str(x) for x in (cfg.data.get("exclude") or [])
+    ]
+    plugins.set_extra_ignores(excludes)
+    plugins.reset_tool_sources()
+    if excludes:
+        debug.log(f"excluding {len(excludes)} extra pattern(s): {', '.join(excludes)}")
+
+
+def _select_gates(cfg) -> tuple[list, list, str]:
+    """(gates to run, gates the config disabled, error message).
+
+    A non-empty message means there is nothing to run. Config selection
+    (only/skip) happens here, before the language filtering in `_active_gates`.
+    """
+    gates = discover_gates()
+    if not gates:
+        return [], [], "no gates discovered"
+    gates, disabled = cfg.select(gates)
+    if not gates:
+        return [], [], "all gates disabled by config selection"
+    return gates, disabled, ""
+
+
+def _fix_mode(args) -> bool:
+    """Whether --fix applies. It cannot under --commit: that runs in a throwaway
+    worktree, so anything fixed there is discarded with it."""
+    if args.fix and args.commit:
+        print("--fix ignored for --commit (throwaway worktree)", file=sys.stderr)
+        return False
+    return bool(args.fix)
+
+
+def _progress(no_llm: bool, do_fix: bool) -> Progress:
+    """One stage per phase this run will actually go through."""
+    return Progress((3 if no_llm else 4) + (1 if do_fix else 0))
+
+
+def _active_gates(gates: list, detected: set) -> tuple[list, list[str]]:
+    """(gates worth running here, names of the ones skipped).
+
+    Only gates relevant to the languages in scope, plus the generic (untagged)
+    ones — so a Go change doesn't trigger eslint/mypy, etc.
+    """
+    active = [
+        g for g in gates if not getattr(g, "langs", None) or (set(g.langs) & detected)
+    ]
+    return active, [g.name for g in gates if g not in active]
+
+
+def _gate_context(args, cfg, sc, detected: set, do_fix: bool) -> GateContext:
+    """The context every gate is handed."""
+    return GateContext(
+        repo=sc.workdir,
+        workdir=sc.workdir,
+        changed_files=sc.changed_files,
+        meta={
+            "diff": sc.diff,
+            "target": args.target or "",
+            "allow_remote": args.allow_remote,
+            "languages": sorted(detected),
+            "title": args.title or "",
+            "body": args.body or "",
+            "fix": do_fix,  # a gate may run its tool differently under --fix
+            "config": cfg,
+        },
+    )
+
+
+def _cache_plan(args, sc) -> gcache.Plan:
+    """The result cache for this run, or an inert plan.
+
+    --target, --title and --body change what a gate reports without changing a
+    file, and the content hash cannot see them — so they disable the cache.
+    """
+    if args.cache is None or args.target or args.title or args.body:
+        return gcache.Plan()
+    path = str(Path(scope.repo_root()) / args.cache)
+    file_hash = gcache.content_hash(
+        sc.workdir,
+        gcache.target_files(sc.workdir, sc.changed_files),
+        salt=gcache.toolchain_salt(),
+    )
+    return gcache.Plan(path, gcache.load(path), file_hash)
+
+
+def _stream(args, cfg, n_gates: int, sc) -> GateStream | None:
+    """The --stream reporter, or None.
+
+    Its suppressor is built here and deliberately not reused for the report:
+    that one runs after --write-baseline and must load what that just wrote.
+    """
+    if not args.stream:
+        return None
+    return GateStream(
+        n_gates,
+        sc.label,
+        suppress.build(cfg.section("suppress"), _baseline_path(args.baseline)),
+        sc.workdir,
+    )
+
+
+def _log_slowest(results) -> None:
+    """The five slowest gates, under --debug."""
+    if not debug.enabled():
+        return
+    slowest = sorted(results, key=lambda r: getattr(r, "_duration", 0.0), reverse=True)[
+        :5
+    ]
+    debug.log(
+        "slowest gates: "
+        + ", ".join(f"{r.name} {getattr(r, '_duration', 0.0):.2f}s" for r in slowest)
+    )
+
+
+def _write_baseline(args, results) -> None:
+    """--write-baseline: accept everything this run found, so only new findings
+    can fail the next one."""
+    if args.write_baseline is None:
+        return
+    bpath = str(Path(scope.repo_root()) / args.write_baseline)
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    n = suppress.write_baseline(bpath, results, generated_at=stamp)
+    print(f"Wrote baseline: {bpath} ({n} finding(s))")
+
+
+@dataclass(frozen=True)
+class Scored:
+    """A run after the policy has had its say: the results as they will be
+    reported, the composite they add up to, and the pass/fail call."""
+
+    results: list
+    verdict: report.Verdict
+    policy: report.Policy
+    passed: bool
+    reason: str
+
+
+def _score(args, cfg, results) -> Scored:
+    """Suppress, reweight, aggregate, decide — in that order.
+
+    Suppression comes first so a legacy repo's known issues don't fail the gate;
+    only new findings can. Severity weighting comes after it, so muted findings
+    don't count toward the weight.
+    """
+    sup = suppress.build(cfg.section("suppress"), _baseline_path(args.baseline))
+    if sup.active:
+        results = [sup.apply(r) for r in results]
+    if args.severity_weight or cfg.section("severity").get("weight"):
+        results = [severity.reweight(r) for r in results]
+    verdict = report.aggregate(results)
+    policy = report.Policy.from_config(
+        cfg.section("verdict"), args.fail_on, args.min_score
+    )
+    passed, reason = report.decide(verdict, policy)
+    return Scored(results, verdict, policy, passed, reason)
+
+
+def _meta_line(args, sc, verdict, generated_at: str) -> dict:
+    """The report header block — and, on the way, this run's trend entry."""
+    trend_path = str(Path(scope.repo_root()) / gtrend.DEFAULT_TREND)
+    commit_short = sc.commit.get("short", "")
+    previous = gtrend.previous_score(trend_path, commit_short)
+    if commit_short and not args.no_trend:
+        gtrend.record(trend_path, commit_short, verdict.score, generated_at)
+    return {
+        "generated_at": generated_at,
+        "commit": sc.commit,
+        "score_delta": None if previous is None else verdict.score - previous,
+        "workdir": sc.workdir,  # lets sarif.to_sarif rebase paths repo-relative
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run gandalf and return the process exit status.
 
@@ -148,101 +330,32 @@ def main(argv: list[str] | None = None) -> int:
 
     cfg = gconfig.load(scope.repo_root(), args.config)
     debug.log(f"config: {cfg.path or '(defaults)'}")
+    _apply_excludes(args, cfg)
 
-    # Before any gate resolves its file list, so every gate sees the same scope.
-    excludes = list(args.exclude or []) + [
-        str(x) for x in (cfg.data.get("exclude") or [])
-    ]
-    # Always set, even when empty: this is process state, and a second run in
-    # the same process must not inherit the first one's exclusions.
-    plugins.set_extra_ignores(excludes)
-    # Same reason: tool resolutions are process state, and a second run in one
-    # process (the editor extension) must not report the first run's tools.
-    plugins.reset_tool_sources()
-    if excludes:
-        debug.log(f"excluding {len(excludes)} extra pattern(s): {', '.join(excludes)}")
-
-    gates = discover_gates()
-    if not gates:
-        print("no gates discovered", file=sys.stderr)
-        return 2
-    # Config gate selection (only/skip) happens before language filtering below.
-    gates, disabled = cfg.select(gates)
-    if not gates:
-        print("all gates disabled by config selection", file=sys.stderr)
+    gates, disabled, problem = _select_gates(cfg)
+    if problem:
+        print(problem, file=sys.stderr)
         return 2
 
-    do_fix = args.fix and not args.commit
-    if args.fix and args.commit:
-        print("--fix ignored for --commit (throwaway worktree)", file=sys.stderr)
-    prog = Progress((3 if args.no_llm else 4) + (1 if do_fix else 0))
+    do_fix = _fix_mode(args)
+    prog = _progress(args.no_llm, do_fix)
     prog.stage("Resolving scope")
     with scope.resolve(args.commit, args.staged, args.path) as sc:
-        # Only run gates relevant to the languages in scope, plus the generic
-        # (untagged) ones. So a Go change doesn't trigger eslint/mypy, etc.
         detected = scope.languages(sc.workdir, sc.changed_files)
-        active = [
-            g
-            for g in gates
-            if not getattr(g, "langs", None) or (set(g.langs) & detected)
-        ]
-        skipped = [g.name for g in gates if g not in active]
+        active, skipped = _active_gates(gates, detected)
+        ctx = _gate_context(args, cfg, sc, detected, do_fix)
 
-        meta = {
-            "diff": sc.diff,
-            "target": args.target or "",
-            "allow_remote": args.allow_remote,
-            "languages": sorted(detected),
-            "title": args.title or "",
-            "body": args.body or "",
-            "fix": do_fix,  # a gate may run its tool differently under --fix
-            "config": cfg,
-        }
-        ctx = GateContext(
-            repo=sc.workdir,
-            workdir=sc.workdir,
-            changed_files=sc.changed_files,
-            meta=meta,
-        )
         fixes = []
         if do_fix:
             prog.stage("Applying fixes")
             fixes = asyncio.run(run_fixers(active, ctx))
 
-        cache_path = None
-        cache_data: dict = {}
-        file_hash = ""
-        to_run = active
-        if args.cache is not None and not (args.target or args.title or args.body):
-            cache_path = str(Path(scope.repo_root()) / args.cache)
-            cache_data = gcache.load(cache_path)
-            file_hash = gcache.content_hash(
-                sc.workdir,
-                gcache.target_files(sc.workdir, sc.changed_files),
-                salt=gcache.toolchain_salt(),
-            )
-            to_run = [
-                g
-                for g in active
-                if gcache.get(cache_data, g.name, file_hash, gcache.max_age(g)) is None
-            ]
-
+        plan = _cache_plan(args, sc)
+        to_run = plan.pending(active)
         limit = _resolve_concurrency(args.concurrency, cfg)
         debug.log(f"running {len(to_run)} gate(s), concurrency={limit or 'unbounded'}")
         prog.stage(f"Running {len(to_run)} gates")
-        # A stream-only suppressor, read now so streamed findings match what the
-        # report will show. Built separately from the one below on purpose: that
-        # one runs after --write-baseline, and must keep loading what it wrote.
-        stream = (
-            GateStream(
-                len(active),
-                sc.label,
-                suppress.build(cfg.section("suppress"), _baseline_path(args.baseline)),
-                sc.workdir,
-            )
-            if args.stream
-            else None
-        )
+        stream = _stream(args, cfg, len(active), sc)
         fresh = asyncio.run(
             _run_gates(
                 to_run,
@@ -253,78 +366,22 @@ def main(argv: list[str] | None = None) -> int:
                 on_result=stream.gate if stream else None,
             )
         )
+        results, cached = plan.merge(fresh, active, to_run)
+        if stream:  # cache hits never ran, so nothing has reported them yet
+            for r in cached:
+                stream.gate(r)
 
-        if cache_path is not None:
-            for r in fresh:
-                gcache.put(cache_data, r.name, file_hash, r)
-            gcache.save(cache_path, cache_data)
-            cached = [
-                gcache.get(cache_data, g.name, file_hash, gcache.max_age(g))
-                for g in active
-                if g not in to_run
-            ]
-            by_name = {r.name: r for r in fresh + cached}
-            results = [by_name[g.name] for g in active]
-            if stream:  # cache hits never ran, so nothing has reported them yet
-                for r in cached:
-                    stream.gate(r)
-        else:
-            results = fresh
-
-        if debug.enabled():
-            slowest = sorted(
-                results, key=lambda r: getattr(r, "_duration", 0.0), reverse=True
-            )[:5]
-            debug.log(
-                "slowest gates: "
-                + ", ".join(
-                    f"{r.name} {getattr(r, '_duration', 0.0):.2f}s" for r in slowest
-                )
-            )
-
-        if args.write_baseline is not None:
-            bpath = str(Path(scope.repo_root()) / args.write_baseline)
-            stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-            n = suppress.write_baseline(bpath, results, generated_at=stamp)
-            print(f"Wrote baseline: {bpath} ({n} finding(s))")
-
-        # Suppress accepted/baselined findings before scoring, so a legacy repo's
-        # known issues don't fail the gate — only new findings can. Resolved again
-        # here rather than reused from the --stream suppressor above: this runs
-        # after --write-baseline, and must load what that just wrote.
-        sup = suppress.build(cfg.section("suppress"), _baseline_path(args.baseline))
-        if sup.active:
-            results = [sup.apply(r) for r in results]
-
-        # Severity-weight scores (after suppression, so muted findings don't count).
-        if args.severity_weight or cfg.section("severity").get("weight"):
-            results = [severity.reweight(r) for r in results]
-
-        verdict = report.aggregate(results)
-
-        policy = report.Policy.from_config(
-            cfg.section("verdict"), args.fail_on, args.min_score
-        )
-        passed, reason = report.decide(verdict, policy)
+        _log_slowest(results)
+        _write_baseline(args, results)
+        scored = _score(args, cfg, results)
+        results, verdict, passed = scored.results, scored.verdict, scored.passed
 
         advice = _build_advice(args, sc, results, verdict, prog)
 
         prog.stage("Writing reports")
         prog.finish()  # end the single progress line before the scorecard prints
         generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-        trend_path = str(Path(scope.repo_root()) / gtrend.DEFAULT_TREND)
-        commit_short = sc.commit.get("short", "")
-        score_delta = gtrend.previous_score(trend_path, commit_short)
-        if score_delta is not None:
-            score_delta = verdict.score - score_delta
-        if commit_short and not args.no_trend:
-            gtrend.record(trend_path, commit_short, verdict.score, generated_at)
-        meta_line = {
-            "generated_at": generated_at,
-            "commit": sc.commit,
-            "score_delta": score_delta,
-            "workdir": sc.workdir,  # lets sarif.to_sarif rebase paths repo-relative
-        }
+        meta_line = _meta_line(args, sc, verdict, generated_at)
         tools = outputs.tool_report(sc.workdir, args.tool_versions)
         gsummary.print_summary(
             sc,
@@ -338,25 +395,20 @@ def main(argv: list[str] | None = None) -> int:
             fixes,
             cfg,
             passed,
-            reason,
+            scored.reason,
             tools,
             args.explain_score,
         )
 
-        out_dir = (
-            Path(args.out_dir) if args.out_dir else Path(scope.repo_root()) / "reports"
-        )
-        out_dir.mkdir(parents=True, exist_ok=True)
-        ts = datetime.now(tz=timezone.utc).strftime("%Y%m%d-%H%M%S")
-        stem = f"gandalf-{sc.label.replace('/', '_')}-{ts}"
+        out_dir, stem = outputs.destination(args, sc)
         payload = outputs.build_payload(
             sc,
             generated_at,
             detected,
             verdict,
             passed,
-            policy,
-            reason,
+            scored.policy,
+            scored.reason,
             advice,
             skipped,
             disabled,

@@ -23,7 +23,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-from dataclasses import asdict
+from dataclasses import asdict, dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
@@ -195,3 +195,49 @@ def put(cache: dict, gate_name: str, file_hash: str, result: GateResult) -> None
         "ts": time.time(),
         "result": asdict(result),
     }
+
+
+@dataclass
+class Plan:
+    """What this run may skip, and how the skipped results come back.
+
+    An inert Plan — no path — is what a run gets when the cache cannot apply:
+    the content hash cannot see --target, --title or --body, and those change
+    what a gate reports without changing a file. Every method then behaves as
+    if nothing were cached, so the caller has no branch to write.
+    """
+
+    path: str | None = None
+    data: dict = field(default_factory=dict)
+    file_hash: str = ""
+
+    def pending(self, active: list) -> list:
+        """The gates with no live cache entry — all of them when caching is off."""
+        if self.path is None:
+            return active
+        return [
+            g
+            for g in active
+            if get(self.data, g.name, self.file_hash, max_age(g)) is None
+        ]
+
+    def merge(
+        self, fresh: list[GateResult], active: list, ran: list
+    ) -> tuple[list, list]:
+        """Store what just ran → (every result in `active` order, the cached ones).
+
+        The cached ones come back separately because they never ran, so nothing
+        has reported them yet — --stream still has to.
+        """
+        if self.path is None:
+            return fresh, []
+        for r in fresh:
+            put(self.data, r.name, self.file_hash, r)
+        save(self.path, self.data)
+        cached = [
+            get(self.data, g.name, self.file_hash, max_age(g))
+            for g in active
+            if g not in ran
+        ]
+        by_name = {r.name: r for r in fresh + cached}
+        return [by_name[g.name] for g in active], cached

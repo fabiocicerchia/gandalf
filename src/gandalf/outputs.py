@@ -10,8 +10,21 @@ import os
 import sys
 from pathlib import Path
 
-from . import badge, junit, plugins, pr_comments, render_html, report, sarif
+from datetime import datetime, timezone
+
+from . import badge, junit, plugins, pr_comments, render_html, report, sarif, scope
 from . import findings as gfindings
+
+
+def destination(args, sc) -> tuple[Path, str]:
+    """Where this run's artifacts go: the directory (created) and the file stem
+    every one of them shares."""
+    out_dir = (
+        Path(args.out_dir) if args.out_dir else Path(scope.repo_root()) / "reports"
+    )
+    out_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now(tz=timezone.utc).strftime("%Y%m%d-%H%M%S")
+    return out_dir, f"gandalf-{sc.label.replace('/', '_')}-{ts}"
 
 
 def tool_report(workdir: str, probe_versions: bool) -> dict:
