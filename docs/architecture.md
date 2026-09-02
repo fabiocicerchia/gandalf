@@ -11,12 +11,19 @@ runs them under bounded concurrency, then aggregates and renders the report.
 
 ## Components
 
-- **`__main__.py`** — CLI, scope resolution, concurrency, orchestration.
+- **`__main__.py`** — the run: scope resolution, concurrency, orchestration.
+- **`cli.py`** — the flag table, readable without running anything.
+- **`fixers.py` / `stream.py`** — `--fix` (and what it actually rewrote) and
+  the `--stream` NDJSON feed.
+- **`outputs.py` / `summary.py`** — the JSON/HTML/SARIF/JUnit/badge artifacts,
+  and the terminal footer.
 - **`plugins.py`** — auto-discovers `Gate` subclasses in `gates/` and provides
   shared subprocess helpers (per-gate timeout budgets).
 - **`gates/`** — one file per gate (bandit, ruff, semgrep, codeql, licenses, …).
 - **`base.py`** — `Gate`, `GateContext`, `GateResult`, `GateOutcome`.
-- **`report.py` / `sarif.py`** — RAG aggregation, terminal/HTML/SARIF output.
+- **`report.py`** — the RAG vocabulary, the composite score and the policy.
+- **`render_text.py` / `render_html.py` / `html_assets.py` / `sarif.py`** —
+  the drawing, kept apart from the scoring.
 - **`pr_comments.py` / `suggest.py`** — GitHub review comments anchored at
   `file:line`, carrying the tool's own fix as an applicable suggestion.
 - **`llm.py` / `skills.py` / `skillgate.py`** — LLM summary and skill-driven
