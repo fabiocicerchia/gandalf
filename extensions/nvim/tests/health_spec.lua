@@ -7,6 +7,11 @@
 
 local health = require('gandalf.health')
 
+--- Stand-ins for the gandalf CLI, resolved rather than hard-coded so the specs
+--- do not depend on where this machine keeps its coreutils.
+local ECHO = vim.fn.exepath('echo')
+local ABSENT = vim.fs.joinpath(vim.fn.tempname(), 'no-such-gandalf')
+
 local recorded = {}
 
 local function record(kind)
@@ -50,26 +55,26 @@ end
 
 describe('the gandalf command', function()
   it('says how to fix it when the command is not executable', function()
-    local report = check_with({ '/nonexistent/gandalf' })
-    assert.is_truthy(report:match('error: `/nonexistent/gandalf` is not executable'))
+    local report = check_with({ ABSENT })
+    assert.is_truthy(report:match('error: `' .. vim.pesc(ABSENT) .. '` is not executable'))
     assert.is_truthy(report:match('make install'))
     assert.is_truthy(report:match('PYTHONPATH'))
   end)
 
   it('does not take any runnable command for gandalf', function()
-    local report = check_with({ '/bin/echo' })
+    local report = check_with({ ECHO })
     assert.is_truthy(report:match('ran, but does not look like gandalf'))
     assert.is_falsy(report:match('runs\n'))
   end)
 
   it('accepts a build that identifies itself, and reports what it can stream', function()
-    local report = check_with({ '/bin/echo', 'gandalf --stream' })
-    assert.is_truthy(report:match('ok: `/bin/echo gandalf %-%-stream` runs'))
+    local report = check_with({ ECHO, 'gandalf --stream' })
+    assert.is_truthy(report:match('ok: `' .. vim.pesc(ECHO) .. ' gandalf %-%-stream` runs'))
     assert.is_truthy(report:match('ok: this build supports %-%-stream'))
   end)
 
   it('warns that findings will only arrive at the end when the build has no --stream', function()
-    local report = check_with({ '/bin/echo', 'gandalf 0.1.0' })
+    local report = check_with({ ECHO, 'gandalf 0.1.0' })
     assert.is_truthy(report:match('runs'))
     assert.is_truthy(report:match('warn: this build has no %-%-stream support'))
     assert.is_truthy(report:match('only appear when the whole run finishes'))
@@ -78,20 +83,20 @@ end)
 
 describe('the environment', function()
   it('opens the section and states the Neovim it is judging', function()
-    local report = check_with({ '/bin/echo', 'gandalf' })
+    local report = check_with({ ECHO, 'gandalf' })
     assert.equals('start', recorded[1].kind)
     assert.equals('gandalf', recorded[1].message)
     assert.is_truthy(report:match('ok: Neovim '))
   end)
 
   it('names the project root it resolved, because that is what gandalf will scan', function()
-    check_with({ '/bin/echo', 'gandalf' })
+    check_with({ ECHO, 'gandalf' })
     local root = require('gandalf').root()
     assert.is_truthy(text():find('info: project root: ' .. root, 1, true))
   end)
 
   it('confirms a git repository, since gandalf resolves its scope from one', function()
     -- The suite runs inside the gandalf checkout, so this is the repository case.
-    assert.is_truthy(check_with({ '/bin/echo', 'gandalf' }):match('ok: git repository'))
+    assert.is_truthy(check_with({ ECHO, 'gandalf' }):match('ok: git repository'))
   end)
 end)

@@ -7,12 +7,19 @@
  * anywhere but the argv itself. So the argv is what is asserted.
  */
 import * as assert from 'node:assert/strict';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { describe, it } from 'node:test';
 
 import { Settings } from '../config';
 import { buildArgs, Launcher, RunRequest, ScanKind } from '../runner';
 
 const ALL_FLAGS = ['--out-dir', '--no-trend', '--cache', '--concurrency', '--path', '--stream', '--exclude'];
+
+// Nothing is read or written here, but the paths are still built rather than
+// spelled: a literal `/repo` is a test that only runs on one kind of machine.
+const REPO = path.join(os.tmpdir(), 'gandalf-argv-repo');
+const OUT = path.join(REPO, 'out');
 
 const launcher = (flags: string[] = ALL_FLAGS): Launcher => ({
   command: 'python3',
@@ -44,11 +51,11 @@ const settings = (over: Partial<Settings> = {}): Settings => ({
 });
 
 const request = (kind: ScanKind, over: Partial<RunRequest> = {}): RunRequest => ({
-  folder: { uri: { fsPath: '/repo' }, name: 'repo', index: 0 } as never,
+  folder: { uri: { fsPath: REPO }, name: 'repo', index: 0 } as never,
   kind,
   llm: false,
   html: kind !== 'file',
-  outDir: '/out',
+  outDir: OUT,
   excludes: [],
   reason: 'test',
   ...over,
@@ -107,8 +114,7 @@ describe('the gandalf command line', () => {
 
   it('expands a ~ in the config path, which argparse would not', () => {
     const args = buildArgs(request('workspace'), settings({ configPath: '~/x/.gandalf.toml' }), launcher());
-    assert.ok(valueAfter(args, '--config')?.startsWith('/'));
-    assert.ok(valueAfter(args, '--config')?.endsWith('/x/.gandalf.toml'));
+    assert.equal(valueAfter(args, '--config'), path.join(os.homedir(), 'x', '.gandalf.toml'));
   });
 
   it('passes a concurrency only when one was chosen', () => {

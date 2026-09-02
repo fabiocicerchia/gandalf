@@ -8,6 +8,10 @@
 
 local gandalf = require('gandalf')
 
+--- Resolved rather than hard-coded, so the specs do not depend on where this
+--- machine keeps its shell.
+local SH = vim.fn.exepath('sh')
+
 local dir
 
 local function write(name, lines)
@@ -53,7 +57,7 @@ local GATE_EVENT = '{"event":"gate","name":"ruff","outcome":"warn","index":1,"to
 --- the report it wrote.
 local function fake_cli(report_path)
   return {
-    '/bin/sh',
+    SH,
     write('gandalf.sh', {
       "printf '%s\\n' '{\"event\":\"start\",\"scope\":\"working tree\",\"gates\":2}'",
       ("printf '%%s\\n' '%s'"):format(GATE_EVENT),
@@ -161,7 +165,7 @@ describe('a completed scan', function()
 
   it('logs the command it ran and the verdict it got', function()
     assert.is_true(scan())
-    assert.is_truthy(log_since():match('scan %(command%): /bin/sh .* %-%-no%-html'))
+    assert.is_truthy(log_since():match('scan %(command%): ' .. vim.pesc(SH) .. ' .* %-%-no%-html'))
     assert.is_truthy(log_since():match('done: pass 88/100, 1 finding%(s%)'))
   end)
 end)
@@ -178,7 +182,7 @@ describe('a scan that produced nothing', function()
 
   it('fails the run when no report line was printed', function()
     -- Exit 1 is a red verdict, which is normal. No report at all is not.
-    setup({ '/bin/sh', write('quiet.sh', { "echo 'gandalf: exploded' >&2", 'exit 1' }) })
+    setup({ SH, write('quiet.sh', { "echo 'gandalf: exploded' >&2", 'exit 1' }) })
     assert.is_false(scan())
     assert.is_truthy(log_since():match('gandalf produced no report %(exit 1%)'))
     assert.is_truthy(log_since():match('gandalf: exploded'))
@@ -186,15 +190,16 @@ describe('a scan that produced nothing', function()
 
   it('fails the run when the report it named is not readable JSON', function()
     local broken = write('broken.json', { 'not json' })
-    setup({ '/bin/sh', write('broken.sh', { ("printf '%%s\\n' 'JSON report: %s'"):format(broken) }) })
+    setup({ SH, write('broken.sh', { ("printf '%%s\\n' 'JSON report: %s'"):format(broken) }) })
     assert.is_false(scan())
     assert.is_truthy(log_since():match('could not read the report gandalf wrote at ' .. vim.pesc(broken)))
   end)
 
   it('says the command could not be run at all', function()
-    setup({ '/nonexistent/gandalf' })
+    local absent = vim.fs.joinpath(dir, 'no-such-gandalf')
+    setup({ absent })
     assert.is_false(scan())
-    assert.is_truthy(log_since():match('could not run /nonexistent/gandalf'))
+    assert.is_truthy(log_since():find('could not run ' .. absent, 1, true))
   end)
 end)
 
@@ -222,7 +227,7 @@ describe('the scan policy', function()
   --- A stand-in that records its own pid, so a preempted run can be shown dead.
   local function slow_cli()
     local pids = vim.fs.joinpath(dir, 'pids')
-    return { '/bin/sh', write('slow.sh', { ('echo $$ >> %s'):format(pids), 'sleep 5' }) }, pids
+    return { SH, write('slow.sh', { ('echo $$ >> %s'):format(pids), 'sleep 5' }) }, pids
   end
 
   local function started_pids(path)
@@ -266,7 +271,7 @@ describe('the scan policy', function()
   end)
 
   it('cancelling clears the run without failing it', function()
-    setup({ '/bin/sh', write('slow.sh', { 'sleep 5' }) })
+    setup({ SH, write('slow.sh', { 'sleep 5' }) })
     gandalf.scan({ kind = 'workspace', manual = true, on_done = function() end })
     gandalf.cancel({ quiet = true })
     assert.is_false(gandalf.is_scanning())
@@ -280,7 +285,7 @@ describe('score over time', function()
   before_each(function()
     dir = vim.fn.tempname()
     vim.fn.mkdir(dir, 'p')
-    setup({ '/bin/echo' })
+    setup({ vim.fn.exepath('echo') })
     real_select = vim.ui.select
     offered = nil
     vim.ui.select = function(items, opts, on_choice)
