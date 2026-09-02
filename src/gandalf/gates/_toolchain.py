@@ -143,6 +143,15 @@ async def exit_code(
     )
 
 
+async def _check_one(
+    rel: str, argv: list[str], workdir: str, limit: asyncio.Semaphore
+) -> tuple[str, int, str]:
+    """Run the per-file checker over one file → (path, exit code, output)."""
+    async with limit:
+        rc, out, err = await run_tool([*argv, rel], workdir)
+        return rel, rc, (out or "") + (err or "")
+
+
 async def per_file(
     gate: str,
     argv: list[str],
@@ -162,13 +171,9 @@ async def per_file(
         return GateResult(gate, GateOutcome.PASS, 1.0, f"{label}: no files in scope")
     capped = files[:MAX_SYNTAX_FILES]
     limit = asyncio.Semaphore(_PARALLEL)
-
-    async def one(rel: str) -> tuple[str, int, str]:
-        async with limit:
-            rc, out, err = await run_tool([*argv, rel], ctx.workdir)
-            return rel, rc, (out or "") + (err or "")
-
-    results = await asyncio.gather(*(one(rel) for rel in capped))
+    results = await asyncio.gather(
+        *(_check_one(rel, argv, ctx.workdir, limit) for rel in capped)
+    )
     broken = [(rel, txt) for rel, rc, txt in results if rc not in (0, _TIMEOUT_RC)]
     scanned = f"{len(capped)} file(s)" + (
         f" (of {len(files)}, capped)" if len(files) > len(capped) else ""

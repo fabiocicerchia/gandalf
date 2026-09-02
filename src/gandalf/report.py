@@ -442,73 +442,81 @@ def _remediation_text(advice: dict, outcome_of: dict, sev_order: dict) -> str:
     return "\n\n".join(blocks)
 
 
+def _md_inline(s: str) -> str:
+    """Inline markdown → HTML: code, links, bold, italic. Escaped first, so a
+    finding that contains `<script>` stays text."""
+    s = html.escape(s)
+    s = re.sub(r"`([^`]+)`", r"<code>\1</code>", s)
+    s = re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", r'<a href="\2">\1</a>', s)
+    s = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", s)
+    s = re.sub(r"(?<!\w)\*([^*]+)\*(?!\w)", r"<em>\1</em>", s)
+    s = re.sub(r"(?<!\w)_([^_]+)_(?!\w)", r"<em>\1</em>", s)
+    return s
+
+
+class _MdBlocks:
+    """The block-level state `_md_to_html` carries between lines: the rendered
+    output so far, the paragraph being collected, and the open list."""
+
+    def __init__(self) -> None:
+        self.out: list[str] = []
+        self.para: list[str] = []
+        self.items: list[str] = []
+        self.otype = ""
+
+    def flush_para(self) -> None:
+        if self.para:
+            self.out.append("<p>" + _md_inline(" ".join(self.para)) + "</p>")
+            self.para.clear()
+
+    def flush_list(self) -> None:
+        if self.items:
+            self.out.append(
+                f"<{self.otype}>"
+                + "".join(f"<li>{_md_inline(i)}</li>" for i in self.items)
+                + f"</{self.otype}>"
+            )
+            self.items.clear()
+            self.otype = ""
+
+    def open_list(self, kind: str, item: str) -> None:
+        if self.otype and self.otype != kind:
+            self.flush_list()
+        self.otype = kind
+        self.items.append(item)
+
+
 def _md_to_html(text: str) -> str:
     """Tiny, dependency-free markdown → HTML for the LLM summary: headings, bold,
     italic, inline code, links, and un/ordered lists. Everything is HTML-escaped
     before our own tags go in."""
-
-    def inline(s: str) -> str:
-        s = html.escape(s)
-        s = re.sub(r"`([^`]+)`", r"<code>\1</code>", s)
-        s = re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", r'<a href="\2">\1</a>', s)
-        s = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", s)
-        s = re.sub(r"(?<!\w)\*([^*]+)\*(?!\w)", r"<em>\1</em>", s)
-        s = re.sub(r"(?<!\w)_([^_]+)_(?!\w)", r"<em>\1</em>", s)
-        return s
-
-    out: list[str] = []
-    para: list[str] = []
-    items: list[str] = []
-    otype = ""
-
-    def flush_para() -> None:
-        if para:
-            out.append("<p>" + inline(" ".join(para)) + "</p>")
-            para.clear()
-
-    def flush_list() -> None:
-        nonlocal otype
-        if items:
-            out.append(
-                f"<{otype}>"
-                + "".join(f"<li>{inline(i)}</li>" for i in items)
-                + f"</{otype}>"
-            )
-            items.clear()
-            otype = ""
-
+    b = _MdBlocks()
     for raw in text.splitlines():
         line = raw.rstrip()
         if not line.strip():
-            flush_para()
-            flush_list()
+            b.flush_para()
+            b.flush_list()
             continue
         h = re.match(r"(#{1,6})\s+(.*)", line)
         ul = re.match(r"\s*[-*+]\s+(.*)", line)
         ol = re.match(r"\s*\d+\.\s+(.*)", line)
         if h:
-            flush_para()
-            flush_list()
+            b.flush_para()
+            b.flush_list()
             lvl = min(len(h.group(1)), 6)
-            out.append(f"<h{lvl}>{inline(h.group(2))}</h{lvl}>")
+            b.out.append(f"<h{lvl}>{_md_inline(h.group(2))}</h{lvl}>")
         elif ul:
-            flush_para()
-            if otype and otype != "ul":
-                flush_list()
-            otype = "ul"
-            items.append(ul.group(1))
+            b.flush_para()
+            b.open_list("ul", ul.group(1))
         elif ol:
-            flush_para()
-            if otype and otype != "ol":
-                flush_list()
-            otype = "ol"
-            items.append(ol.group(1))
+            b.flush_para()
+            b.open_list("ol", ol.group(1))
         else:
-            flush_list()
-            para.append(line.strip())
-    flush_para()
-    flush_list()
-    return "\n".join(out) or "<p>(no summary)</p>"
+            b.flush_list()
+            b.para.append(line.strip())
+    b.flush_para()
+    b.flush_list()
+    return "\n".join(b.out) or "<p>(no summary)</p>"
 
 
 def _diff_html(diff: str, limit: int = 20000) -> str:
@@ -687,6 +695,82 @@ _JS = """
 """
 
 
+_HTML_SEV = {GateOutcome.PASS: 0, GateOutcome.WARN: 1, GateOutcome.FAIL: 2}
+
+
+def _gate_row(r: GateResult) -> str:
+    """One `<tr>` of the gate table, carrying the data- attributes the page's
+    sort and filter controls read."""
+    emoji, _, _, word = _RAG[r.outcome]
+    cls = r.outcome.name.lower()
+    if did_not_run(r):
+        emoji, word = _SKIP_EMOJI, "NOT RUN"
+    detail = html.escape(r.summary)
+    if r.findings:
+        items = "".join(f"<li>{html.escape(fmt_finding(f))}</li>" for f in r.findings)
+        detail += (
+            f"<details><summary>{len(r.findings)} finding"
+            f"{'s' if len(r.findings) != 1 else ''}</summary>"
+            f'<ul class="findings">{items}</ul></details>'
+        )
+    pill = (
+        '<span class="pill">blocking</span>' if getattr(r, "_blocking", False) else ""
+    )
+    category = html.escape(category_of(r))
+    return (
+        f'<tr class="{cls}" data-gate="{html.escape(r.name)}" '
+        f'data-rag="{_HTML_SEV[r.outcome]}" data-cat="{category}">'
+        f'<td class="emoji">{emoji}</td>'
+        f"<td><strong>{html.escape(r.name)}</strong>{pill}</td>"
+        f'<td class="cat-cell">{category}</td>'
+        f'<td class="rag {cls}">{word}</td>'
+        f'<td class="cell-detail">{detail}</td></tr>'
+    )
+
+
+def _advice_section(advice: dict, key: str, title: str, accent: str) -> str:
+    """One titled LLM section, or the placeholder note when the model said
+    nothing for it."""
+    body = (advice.get(key) or "").strip()
+    inner = _md_to_html(body) if body else _EMPTY_NOTE
+    return (
+        f'<div class="eyebrow">{title}</div>'
+        f'<section class="summary {accent}">{inner}</section>'
+    )
+
+
+def _remediation_html(advice: dict, outcome_of: dict, sev_order: dict) -> str:
+    """The remediation section: gate blocks labelled "name (RAG)", failures
+    first, or "" when there is nothing to fix."""
+    eyebrow = '<div class="eyebrow">Remediation — fixes to raise the score</div>'
+    groups = advice.get("remediation_groups") or []
+    raw = (advice.get("remediation") or "").strip()
+    if not groups:  # LLM gave no per-gate structure → plain markdown or a note
+        # Nothing to fix (every gate green) → omit the section entirely rather
+        # than printing a "No remediation needed." placeholder.
+        if _NO_REMEDIATION.match(raw):
+            return ""
+        inner = _md_to_html(raw) if raw else _EMPTY_NOTE
+        return f'{eyebrow}<section class="summary accent-remediation">{inner}</section>'
+    # One block, gates labelled "name (RAG)"; failures first, then warnings.
+    ordered = sorted(
+        groups,
+        key=lambda g: sev_order.get(outcome_of.get(g[0]) or GateOutcome.PASS, 3),
+    )
+    pre = (advice.get("remediation_pre") or "").strip()
+    parts = [f'<div class="rem-pre">{_md_to_html(pre)}</div>'] if pre else []
+    for name, body in ordered:
+        outcome = outcome_of.get(name)
+        cls = outcome.name.lower() if outcome else "warn"
+        word = _RAG[outcome][3] if outcome else "WARN"
+        parts.append(
+            f'<div class="rem-gate">{html.escape(name)} '
+            f'<span class="badge {cls}">{word}</span></div>'
+            f'<div class="rem-body">{_md_to_html(body)}</div>'
+        )
+    return f'{eyebrow}<section class="summary accent-remediation">{"".join(parts)}</section>'
+
+
 def render_html(
     label: str,
     results: list[GateResult],
@@ -703,38 +787,6 @@ def render_html(
     """
     vcls = verdict.outcome.name.lower()  # pass | warn | fail
     vword = _RAG[verdict.outcome][3]
-    sev = {GateOutcome.PASS: 0, GateOutcome.WARN: 1, GateOutcome.FAIL: 2}
-
-    def row(r: GateResult) -> str:
-        emoji, _, _, word = _RAG[r.outcome]
-        cls = r.outcome.name.lower()
-        if did_not_run(r):
-            emoji, word = _SKIP_EMOJI, "NOT RUN"
-        detail = html.escape(r.summary)
-        if r.findings:
-            items = "".join(
-                f"<li>{html.escape(fmt_finding(f))}</li>" for f in r.findings
-            )
-            detail += (
-                f"<details><summary>{len(r.findings)} finding"
-                f"{'s' if len(r.findings) != 1 else ''}</summary>"
-                f'<ul class="findings">{items}</ul></details>'
-            )
-        pill = (
-            '<span class="pill">blocking</span>'
-            if getattr(r, "_blocking", False)
-            else ""
-        )
-        category = html.escape(category_of(r))
-        return (
-            f'<tr class="{cls}" data-gate="{html.escape(r.name)}" '
-            f'data-rag="{sev[r.outcome]}" data-cat="{category}">'
-            f'<td class="emoji">{emoji}</td>'
-            f"<td><strong>{html.escape(r.name)}</strong>{pill}</td>"
-            f'<td class="cat-cell">{category}</td>'
-            f'<td class="rag {cls}">{word}</td>'
-            f'<td class="cell-detail">{detail}</td></tr>'
-        )
 
     # Group by category (Security, Dependencies, …), in a fixed order — used for
     # both the per-category score cards and the table's grouped rows.
@@ -767,7 +819,7 @@ def render_html(
     # Default order: by category (in _GROUP_ORDER), then name — sortable columns override.
     cat_index = {g: i for i, g in enumerate(_GROUP_ORDER)}
     data_rows = [
-        row(r)
+        _gate_row(r)
         for r in sorted(
             results, key=lambda r: (cat_index.get(category_of(r), 99), r.name)
         )
@@ -786,45 +838,8 @@ def render_html(
         f'<div class="metabar">{" &nbsp;·&nbsp; ".join(bits)}</div>' if bits else ""
     )
 
-    def section(key: str, title: str, accent: str) -> str:
-        body = (advice.get(key) or "").strip()
-        inner = _md_to_html(body) if body else _EMPTY_NOTE
-        return (
-            f'<div class="eyebrow">{title}</div>'
-            f'<section class="summary {accent}">{inner}</section>'
-        )
-
     outcome_of = {r.name: r.outcome for r in results}
     sev_order = {GateOutcome.FAIL: 0, GateOutcome.WARN: 1, GateOutcome.PASS: 2}
-
-    def remediation_html() -> str:
-        eyebrow = '<div class="eyebrow">Remediation — fixes to raise the score</div>'
-        groups = advice.get("remediation_groups") or []
-        raw = (advice.get("remediation") or "").strip()
-        if not groups:  # LLM gave no per-gate structure → plain markdown or a note
-            # Nothing to fix (every gate green) → omit the section entirely rather
-            # than printing a "No remediation needed." placeholder.
-            if _NO_REMEDIATION.match(raw):
-                return ""
-            inner = _md_to_html(raw) if raw else _EMPTY_NOTE
-            return f'{eyebrow}<section class="summary accent-remediation">{inner}</section>'
-        # One block, gates labelled "name (RAG)"; failures first, then warnings.
-        ordered = sorted(
-            groups,
-            key=lambda g: sev_order.get(outcome_of.get(g[0]) or GateOutcome.PASS, 3),
-        )
-        pre = (advice.get("remediation_pre") or "").strip()
-        parts = [f'<div class="rem-pre">{_md_to_html(pre)}</div>'] if pre else []
-        for name, body in ordered:
-            outcome = outcome_of.get(name)
-            cls = outcome.name.lower() if outcome else "warn"
-            word = _RAG[outcome][3] if outcome else "WARN"
-            parts.append(
-                f'<div class="rem-gate">{html.escape(name)} '
-                f'<span class="badge {cls}">{word}</span></div>'
-                f'<div class="rem-body">{_md_to_html(body)}</div>'
-            )
-        return f'{eyebrow}<section class="summary accent-remediation">{"".join(parts)}</section>'
 
     return (
         '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">'
@@ -838,7 +853,8 @@ def render_html(
         f"{html.escape(_format_delta(meta.get('score_delta')))}</div>"
         '<div class="eyebrow">Summary</div>'
         f'<section class="summary">{_md_to_html(advice.get("summary") or "")}</section>'
-        + section(
+        + _advice_section(
+            advice,
             "changeset",
             "Changeset — what this stage / commit changes",
             "accent-changeset",
@@ -856,9 +872,12 @@ def render_html(
         + header_row
         + "</thead>"
         f"<tbody>{''.join(data_rows)}</tbody></table></div>"
-        + remediation_html()
-        + section(
-            "improvement", "Improvement — raise the bar further", "accent-improvement"
+        + _remediation_html(advice, outcome_of, sev_order)
+        + _advice_section(
+            advice,
+            "improvement",
+            "Improvement — raise the bar further",
+            "accent-improvement",
         )
         + '<footer><a href="https://github.com/fabiocicerchia/gandalf">'
         + "github.com/fabiocicerchia/gandalf</a> &middot; &copy; 2026 Fabio Cicerchia</footer>"

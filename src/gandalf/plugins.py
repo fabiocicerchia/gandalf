@@ -236,6 +236,11 @@ def ignore_patterns(workdir: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(pats))  # de-dup, order preserved
 
 
+def _alternation(pats: list[str]):
+    """One regex matching any of the globs, or None when there are none."""
+    return re.compile("|".join(f"(?:{translate(g)})" for g in pats)) if pats else None
+
+
 @lru_cache(maxsize=16)
 def _compiled_ignores(patterns: tuple[str, ...]):
     """Sort the patterns into the cheapest test each one allows.
@@ -263,18 +268,13 @@ def _compiled_ignores(patterns: tuple[str, ...]):
         else:
             segment_globs.append(pat)
 
-    def alternation(pats):
-        return (
-            re.compile("|".join(f"(?:{translate(g)})" for g in pats)) if pats else None
-        )
-
     # A glob is tried against the whole path as well, because fnmatch's `*`
     # spans separators — `*.min.js` is expected to match `web/app.min.js`.
     return (
         names,
         tuple(prefixes),
-        alternation(segment_globs),
-        alternation(path_globs + segment_globs),
+        _alternation(segment_globs),
+        _alternation(path_globs + segment_globs),
     )
 
 
