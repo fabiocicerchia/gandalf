@@ -65,7 +65,7 @@ function runArgs(req: RunRequest, s: Settings, supports: Supports): string[] {
   // The cache is keyed per gate on a hash of the whole scanned file set, so a
   // one-file scan would overwrite the workspace entries with a one-file hash
   // and make the next full scan a complete miss. Only whole-tree scans cache.
-  if (s.useCache && req.kind === 'workspace') args.push('--cache');
+  if (s.useCache && req.kind === 'workspace' && supports('--cache')) args.push('--cache');
   // Per-gate results as they land, so the pane fills during the run.
   if ((req.onGate || req.onStart) && supports('--stream')) args.push('--stream');
   return args;

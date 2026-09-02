@@ -142,16 +142,17 @@ describe('the gandalf command line', () => {
   });
 
   it('withholds the flags it knows an older build may not have', () => {
-    // `--help` is how the launcher learns what this build takes. These four are
-    // the ones it gates on; `--cache` is deliberately not among them today, and
-    // this test records that rather than asserting the behaviour it does not have.
+    // `--help` is how the launcher learns what this build takes. A workspace
+    // scan with useCache on is the case that would otherwise pass `--cache` to a
+    // build that has no such flag, which argparse rejects with exit 2 — the scan
+    // fails outright rather than degrading to an uncached one.
     const old = launcher([]);
     const args = buildArgs(
       request('workspace', { excludes: ['node_modules'], onGate: () => undefined }),
       settings({ concurrency: 4 }),
       old,
     );
-    for (const flag of ['--out-dir', '--no-trend', '--stream', '--exclude']) {
+    for (const flag of ['--out-dir', '--no-trend', '--cache', '--stream', '--exclude']) {
       assert.ok(!args.includes(flag), `${flag} was passed to a build that has no such flag`);
     }
     // The flags gandalf has always had are still passed, unconditionally.
