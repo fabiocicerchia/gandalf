@@ -1,0 +1,12 @@
+ruff
+semgrep
+bandit
+pip-audit
+checkov
+mypy
+vulture
+codespell
+yamllint
+sqlfluff
+interrogate
+lizard

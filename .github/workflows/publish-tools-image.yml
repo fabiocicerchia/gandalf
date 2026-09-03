@@ -8,7 +8,7 @@ name: publish-tools-image
 on:
   push:
     branches: [main]
-    paths: [tools.Dockerfile]
+    paths: [tools.Dockerfile, tools-requirements.txt]
   # A release published by release-please runs under GITHUB_TOKEN, and GitHub
   # deliberately does not fire workflows from GITHUB_TOKEN events — so this
   # trigger alone never ran on a release. release.yml now calls this workflow
