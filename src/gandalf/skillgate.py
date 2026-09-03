@@ -83,6 +83,16 @@ def _changed_file_contents(ctx: GateContext) -> str:
     return "\n\n".join(out)
 
 
+def _alias(item: dict, *keys: str) -> str:
+    """The first non-empty value among the names a model might have used for the
+    same field. '' when it used none of them."""
+    for k in keys:
+        v = item.get(k)
+        if v:
+            return str(v).strip()
+    return ""
+
+
 def _normalize_findings(raw) -> list[dict]:
     """Coerce the model's findings into dicts whose keys report.fmt_finding
     already understands (``file`` / ``finding`` / ``description``)."""
@@ -93,22 +103,12 @@ def _normalize_findings(raw) -> list[dict]:
             continue
         if not isinstance(item, dict):
             continue
-        sev = str(item.get("severity") or item.get("risk") or "").strip().lower()
         findings.append(
             {
-                "severity": sev,
-                "finding": str(
-                    item.get("title") or item.get("finding") or item.get("issue") or ""
-                ).strip(),
-                "description": str(
-                    item.get("detail")
-                    or item.get("description")
-                    or item.get("recommendation")
-                    or ""
-                ).strip(),
-                "file": str(
-                    item.get("location") or item.get("file") or item.get("module") or ""
-                ).strip(),
+                "severity": _alias(item, "severity", "risk").lower(),
+                "finding": _alias(item, "title", "finding", "issue"),
+                "description": _alias(item, "detail", "description", "recommendation"),
+                "file": _alias(item, "location", "file", "module"),
             }
         )
     return [f for f in findings if f.get("finding") or f.get("description")]
@@ -148,15 +148,8 @@ class SkillGate:
         diff = (meta.get("diff") or "").strip()
         files = _changed_file_contents(ctx)
 
-        if self.needs_request and not (title or body):
-            return unavailable(
-                self.name,
-                f"{self.name}: no plan to judge — pass --title/--body describing the intent",
-            )
-        if not (diff or files or title or body):
-            return unavailable(
-                self.name, f"{self.name}: nothing in scope to judge — skipped"
-            )
+        if refusal := self._nothing_to_judge(title, body, diff, files):
+            return refusal
 
         prompt = self._prompt(rubric, title, body, diff, files, ctx)
         try:
@@ -168,7 +161,28 @@ class SkillGate:
             return unavailable(
                 self.name, f"{self.name}: judge unavailable ({str(exc)[:70]}) — skipped"
             )
+        return self._verdict(data)
 
+    def _nothing_to_judge(
+        self, title: str, body: str, diff: str, files: str
+    ) -> GateResult | None:
+        """The gate's own refusals, before a token is spent: no plan when the
+        skill needs one, or nothing in scope at all."""
+        if self.needs_request and not (title or body):
+            return unavailable(
+                self.name,
+                f"{self.name}: no plan to judge — pass --title/--body describing the intent",
+            )
+        if not (diff or files or title or body):
+            return unavailable(
+                self.name, f"{self.name}: nothing in scope to judge — skipped"
+            )
+        return None
+
+    def _verdict(self, data: dict) -> GateResult:
+        """The judge's JSON as a gate result. A score that will not parse is 0,
+        never a pass — the gate must not go green because the model went off
+        format."""
         try:
             pct = max(0, min(100, round(float(data.get("score", 0)))))
         except (TypeError, ValueError):

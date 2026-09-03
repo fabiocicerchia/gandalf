@@ -8,17 +8,22 @@ from gandalf.gates._toolchain import named
 from gandalf.plugins import missing_result, run_tool, timeout_result
 
 
+def _markdown(ctx: GateContext) -> list[str]:
+    """The repo's markdown, minus hidden/generated artifacts (e.g.
+    .aider.chat.history.md) at any depth."""
+    return [
+        f
+        for f in named(ctx, "*.md")
+        if not any(part.startswith(".") for part in f.split("/"))
+    ]
+
+
 class MdlGate:
     name = "mdl"
     blocking = False
 
     async def run(self, ctx: GateContext) -> GateResult:
-        mds = [
-            f
-            for f in named(ctx, "*.md")
-            # Skip hidden/generated artifacts (e.g. .aider.chat.history.md) at any depth.
-            if not any(part.startswith(".") for part in f.split("/"))
-        ]
+        mds = _markdown(ctx)
         if not mds:
             return GateResult(
                 self.name, GateOutcome.PASS, 1.0, "mdl: no markdown files"

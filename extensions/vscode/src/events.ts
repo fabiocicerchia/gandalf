@@ -32,30 +32,46 @@ function isOutcome(v: unknown): v is Outcome {
   return v === 'pass' || v === 'warn' || v === 'fail';
 }
 
-/** Validate rather than trust: a malformed line must not poison the pane. */
-function toEvent(parsed: unknown): StreamEvent | undefined {
-  if (!parsed || typeof parsed !== 'object') return undefined;
-  const o = parsed as Record<string, unknown>;
-  if (o.event === 'start') {
-    return typeof o.gates === 'number'
-      ? { event: 'start', scope: String(o.scope ?? ''), gates: o.gates }
-      : undefined;
-  }
-  if (o.event !== 'gate') return undefined;
+/** A number the gate reported, or the stand-in for "it did not say". */
+function num(value: unknown, fallback: number): number {
+  return typeof value === 'number' ? value : fallback;
+}
+
+function str(value: unknown, fallback: string): string {
+  return typeof value === 'string' ? value : fallback;
+}
+
+/** The one-line "here is what I am about to run" gandalf opens a stream with. */
+function toStartEvent(o: Record<string, unknown>): StartEvent | undefined {
+  if (typeof o.gates !== 'number') return undefined;
+  return { event: 'start', scope: String(o.scope ?? ''), gates: o.gates };
+}
+
+/** One finished gate. A name and an outcome are what make it one. */
+function toGateEvent(o: Record<string, unknown>): GateEvent | undefined {
   if (typeof o.name !== 'string' || !isOutcome(o.outcome)) return undefined;
   return {
     event: 'gate',
-    index: typeof o.index === 'number' ? o.index : 0,
-    total: typeof o.total === 'number' ? o.total : 0,
+    index: num(o.index, 0),
+    total: num(o.total, 0),
     name: o.name,
     outcome: o.outcome,
-    score: typeof o.score === 'number' ? o.score : 0,
-    summary: typeof o.summary === 'string' ? o.summary : '',
+    score: num(o.score, 0),
+    summary: str(o.summary, ''),
     findings: Array.isArray(o.findings) ? (o.findings as RawFinding[]) : [],
     category: typeof o.category === 'string' ? o.category : undefined,
     blocking: o.blocking === true,
     duration: typeof o.duration === 'number' ? o.duration : null,
   };
+}
+
+/** Validate rather than trust: a malformed line must not poison the pane. */
+function toEvent(parsed: unknown): StreamEvent | undefined {
+  if (!parsed || typeof parsed !== 'object') return undefined;
+  const o = parsed as Record<string, unknown>;
+  if (o.event === 'start') return toStartEvent(o);
+  if (o.event === 'gate') return toGateEvent(o);
+  return undefined;
 }
 
 export class EventParser {

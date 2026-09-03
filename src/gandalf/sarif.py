@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import hashlib
 
-from .base import GateOutcome, GateResult
 from . import findings
+from .base import GateOutcome, GateResult
 from .report import fmt_finding
 from .suppress import fingerprint
 
@@ -110,31 +110,28 @@ def _rule_id(gate: str, rule_name: str) -> str:
     return f"{rule_id[: _MAX_RULE_ID - len(digest) - 1]}~{digest}"
 
 
-def to_sarif(results: list[GateResult], meta: dict | None = None) -> dict:
-    """Render the results as a SARIF log.
+def _collect(
+    results: list[GateResult], root: str
+) -> tuple[dict[str, dict], list[dict], int]:
+    """(rules by id, SARIF results, findings that could not be located).
 
-    SARIF is what GitHub code scanning ingests, so this is how findings become
-    annotations on a pull request instead of lines in a job log. Findings
-    without a resolvable location are counted rather than dropped — a total
-    that quietly omits some of them is not a total.
+    Findings without a resolvable location are counted rather than dropped — a
+    total that quietly omits some of them is not a total, and one locationless
+    result invalidates the entire upload.
     """
-    meta = meta or {}
-    root = meta.get("workdir", "")
     rules: dict[str, dict] = {}
     sarif_results: list[dict] = []
     without_location = 0
-
     for r in results:
         gate_level = _OUTCOME_LEVEL[r.outcome]
         if not r.findings:
             # No structured findings. Only surface hard FAILs as gate-level
             # results — a location-less WARN ("judge unavailable", "no target —
-            # skipped") is pure noise as a code-scanning alert.
+            # skipped") is pure noise as a code-scanning alert. A gate that
+            # failed without naming a file — a tool crash, a config error — has
+            # nowhere to appear as an alert, but is still in the console output
+            # and the PR review body.
             if r.outcome == GateOutcome.FAIL:
-                # A gate that failed without naming a file — a tool crash, a
-                # config error — has nowhere to appear as an alert, and
-                # including it locationless would sink the whole upload. It is
-                # still in the console output and the PR review body.
                 without_location += 1
             continue
         for f in r.findings:
@@ -146,8 +143,7 @@ def to_sarif(results: list[GateResult], meta: dict | None = None) -> dict:
             locations = _location(findings.path(f), _finding_line(f), root)
             if not locations:
                 # Repo-level findings (no path) cannot be rendered as an alert
-                # against anything, and one of them invalidates the entire
-                # SARIF. Counted below rather than silently dropped.
+                # against anything. Counted rather than silently dropped.
                 without_location += 1
                 continue
             _bump_severity(rule, _SEV_SCORE.get(sev) or _LEVEL_SCORE[level])
@@ -160,6 +156,19 @@ def to_sarif(results: list[GateResult], meta: dict | None = None) -> dict:
                     "partialFingerprints": {"gandalf/v1": fingerprint(r.name, f)},
                 }
             )
+    return rules, sarif_results, without_location
+
+
+def to_sarif(results: list[GateResult], meta: dict | None = None) -> dict:
+    """Render the results as a SARIF log.
+
+    SARIF is what GitHub code scanning ingests, so this is how findings become
+    annotations on a pull request instead of lines in a job log. Findings
+    without a resolvable location are counted rather than dropped — a total
+    that quietly omits some of them is not a total.
+    """
+    meta = meta or {}
+    rules, sarif_results, without_location = _collect(results, meta.get("workdir", ""))
 
     driver = {
         "name": "gandalf",

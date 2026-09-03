@@ -8,18 +8,10 @@ import json
 import subprocess
 
 from gandalf import plugins
-from gandalf.__main__ import (
-    _files_note,
-    _gate_timeout,
-    _resolve_concurrency,
-    _run_fixers,
-    _run_gates,
-    _touched,
-    _tree_state,
-    main,
-)
+from gandalf.__main__ import _gate_timeout, _resolve_concurrency, _run_gates, main
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.config import Config
+from gandalf.fixers import _files_note, _touched, _tree_state, run_fixers
 
 
 class _Slow:
@@ -91,13 +83,13 @@ class _BadFixer:
 
 
 def test_run_fixers_collects_and_skips():
-    res = asyncio.run(_run_fixers([_Fixer(), _NoFix()], _CTX))
+    res = asyncio.run(run_fixers([_Fixer(), _NoFix()], _CTX))
     # only the gate exposing fix() is run
     assert res == [("fixme", True, "did a thing")]
 
 
 def test_run_fixers_isolates_errors():
-    res = asyncio.run(_run_fixers([_BadFixer()], _CTX))
+    res = asyncio.run(run_fixers([_BadFixer()], _CTX))
     assert res[0][0] == "badfix" and res[0][1] is False and "nope" in res[0][2]
 
 
@@ -370,7 +362,7 @@ def test_fixer_report_comes_from_the_worktree(tmp_path):
             return (False, "rewriter ran")
 
     (name, changed, msg) = asyncio.run(
-        _run_fixers([_Rewriter()], GateContext(repo=str(repo), workdir=str(repo)))
+        run_fixers([_Rewriter()], GateContext(repo=str(repo), workdir=str(repo)))
     )[0]
     assert (name, changed) == ("rewriter", True)
     assert msg == "rewriter ran — src/ok.py"
@@ -387,6 +379,6 @@ def test_a_fixer_that_changes_nothing_is_reported_as_such(tmp_path):
             return (False, "nothing to do")
 
     res = asyncio.run(
-        _run_fixers([_Idle()], GateContext(repo=str(repo), workdir=str(repo)))
+        run_fixers([_Idle()], GateContext(repo=str(repo), workdir=str(repo)))
     )
     assert res == [("idle", False, "nothing to do")]

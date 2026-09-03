@@ -12,7 +12,6 @@ Each self-skips when its tool is not installed.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from gandalf.base import GateContext, GateOutcome, GateResult
@@ -20,6 +19,8 @@ from gandalf.gates._toolchain import (
     ToolchainGate,
     counted,
     exit_code,
+    merged,
+    parsed,
     per_file,
     project_dir,
     tail,
@@ -54,6 +55,22 @@ class RubySyntaxGate(ToolchainGate):
         return await per_file(self.name, ["ruby", "-c"], ctx, (".rb",), label="ruby -c")
 
 
+def _rubocop_findings(data: dict) -> list[dict]:
+    """rubocop's per-file offence lists, flattened."""
+    return [
+        {
+            "file": f.get("path", ""),
+            "line": (o.get("location") or {}).get("line", 0),
+            "column": (o.get("location") or {}).get("column", 0),
+            "rule": o.get("cop_name", ""),
+            "message": o.get("message", ""),
+            "severity": o.get("severity", ""),
+        }
+        for f in data.get("files") or []
+        for o in f.get("offenses") or []
+    ]
+
+
 class RubocopGate(ToolchainGate):
     """rubocop — the de-facto Ruby linter/formatter."""
 
@@ -69,27 +86,15 @@ class RubocopGate(ToolchainGate):
         )
         if (to := timeout_result(self.name, rc)) is not None:
             return to
-        try:
-            data = json.loads(out or "{}")
-        except json.JSONDecodeError:
+        data = parsed(out)
+        if data is None:
             # rubocop exits 2 and prints nothing parseable when its config is
             # broken or a required gem is absent — a tool failure, not offences.
             return unavailable(
                 self.name,
-                f"rubocop: did not run — {tail((out or '') + (err or ''), 2)}",
+                f"rubocop: did not run — {tail(merged(out, err), 2)}",
             )
-        findings = [
-            {
-                "file": f.get("path", ""),
-                "line": (o.get("location") or {}).get("line", 0),
-                "column": (o.get("location") or {}).get("column", 0),
-                "rule": o.get("cop_name", ""),
-                "message": o.get("message", ""),
-                "severity": o.get("severity", ""),
-            }
-            for f in data.get("files") or []
-            for o in f.get("offenses") or []
-        ]
+        findings = _rubocop_findings(data)
         n = (data.get("summary") or {}).get("offense_count", len(findings))
         return counted(self.name, n, "rubocop", findings[:50], noun="offence(s)")
 

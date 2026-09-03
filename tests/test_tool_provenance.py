@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import pytest
 
-from gandalf import plugins
-from gandalf.__main__ import _tool_report, _tools_line
+from gandalf import plugins, toolrun
+from gandalf.outputs import tool_report
+from gandalf.summary import _tools_line
 
 
 @pytest.fixture(autouse=True)
@@ -20,67 +21,67 @@ def _clean():
 
 
 def test_host_resolution_is_recorded(monkeypatch):
-    monkeypatch.setattr(plugins.shutil, "which", lambda b: "/usr/bin/" + b)
-    plugins._dockerize(["ruff", "check"], "/tmp")
+    monkeypatch.setattr(toolrun.shutil, "which", lambda b: "/usr/bin/" + b)
+    toolrun._dockerize(["ruff", "check"], "/tmp")
     assert plugins.tool_sources() == {"ruff": "host"}
 
 
 def test_image_resolution_is_recorded(monkeypatch):
-    monkeypatch.setattr(plugins.shutil, "which", lambda b: None)
-    monkeypatch.setattr(plugins, "_via_image", lambda b: True)
-    cmd = plugins._dockerize(["trivy", "fs", "."], "/tmp")
+    monkeypatch.setattr(toolrun.shutil, "which", lambda b: None)
+    monkeypatch.setattr(toolrun, "_via_image", lambda b: True)
+    cmd = toolrun._dockerize(["trivy", "fs", "."], "/tmp")
     assert cmd[0] == "docker"
     assert plugins.tool_sources() == {"trivy": "image"}
 
 
 def test_an_unresolvable_tool_is_not_claimed_to_have_run(monkeypatch):
-    monkeypatch.setattr(plugins.shutil, "which", lambda b: None)
-    monkeypatch.setattr(plugins, "_via_image", lambda b: False)
-    plugins._dockerize(["nope"], "/tmp")
+    monkeypatch.setattr(toolrun.shutil, "which", lambda b: None)
+    monkeypatch.setattr(toolrun, "_via_image", lambda b: False)
+    toolrun._dockerize(["nope"], "/tmp")
     assert plugins.tool_sources() == {}
 
 
 def test_first_resolution_wins(monkeypatch):
-    monkeypatch.setattr(plugins.shutil, "which", lambda b: "/usr/bin/" + b)
-    plugins._dockerize(["ruff"], "/tmp")
-    monkeypatch.setattr(plugins.shutil, "which", lambda b: None)
-    monkeypatch.setattr(plugins, "_via_image", lambda b: True)
-    plugins._dockerize(["ruff"], "/tmp")
+    monkeypatch.setattr(toolrun.shutil, "which", lambda b: "/usr/bin/" + b)
+    toolrun._dockerize(["ruff"], "/tmp")
+    monkeypatch.setattr(toolrun.shutil, "which", lambda b: None)
+    monkeypatch.setattr(toolrun, "_via_image", lambda b: True)
+    toolrun._dockerize(["ruff"], "/tmp")
     assert plugins.tool_sources()["ruff"] == "host"
 
 
 def test_reset_clears_process_state(monkeypatch):
-    monkeypatch.setattr(plugins.shutil, "which", lambda b: "/usr/bin/" + b)
-    plugins._dockerize(["ruff"], "/tmp")
+    monkeypatch.setattr(toolrun.shutil, "which", lambda b: "/usr/bin/" + b)
+    toolrun._dockerize(["ruff"], "/tmp")
     plugins.reset_tool_sources()
     assert plugins.tool_sources() == {}
 
 
 def test_report_names_the_image_only_when_one_was_used(monkeypatch):
     monkeypatch.setattr(plugins, "tool_sources", lambda: {"ruff": "host"})
-    assert "image" not in _tool_report("/tmp", False)
+    assert "image" not in tool_report("/tmp", False)
     monkeypatch.setattr(plugins, "tool_sources", lambda: {"trivy": "image"})
     monkeypatch.setattr(plugins, "tools_image_id", lambda: "sha256:deadbeef")
-    block = _tool_report("/tmp", False)
+    block = tool_report("/tmp", False)
     assert block["image"] == {"name": plugins.TOOLS_IMAGE, "id": "sha256:deadbeef"}
     assert block["resolved"]["trivy"] == {"source": "image"}
 
 
 def test_versions_are_opt_in(monkeypatch):
     monkeypatch.setattr(plugins, "tool_sources", lambda: {"ruff": "host"})
-    assert "version" not in _tool_report("/tmp", False)["resolved"]["ruff"]
+    assert "version" not in tool_report("/tmp", False)["resolved"]["ruff"]
 
     async def fake(workdir):
         return {"ruff": "ruff 0.15.8"}
 
     monkeypatch.setattr(plugins, "tool_versions", fake)
-    got = _tool_report("/tmp", True)["resolved"]["ruff"]
+    got = tool_report("/tmp", True)["resolved"]["ruff"]
     assert got == {"source": "host", "version": "ruff 0.15.8"}
 
 
 def test_no_tools_no_block(monkeypatch):
     monkeypatch.setattr(plugins, "tool_sources", dict)
-    assert _tool_report("/tmp", True) == {}
+    assert tool_report("/tmp", True) == {}
     assert _tools_line({}) == ""
 
 

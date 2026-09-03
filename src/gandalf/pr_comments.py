@@ -31,9 +31,9 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 
+from . import findings, suggest
 from .base import GateOutcome, GateResult
 from .report import fmt_finding
-from . import findings, suggest
 
 # Hidden in the rendered comment; how a re-run finds what it posted last time.
 _MARKER = "<!-- gandalf-pr-review -->"

@@ -38,10 +38,16 @@ local project = vim.fn.tempname()
 vim.fn.mkdir(project, 'p')
 vim.fn.writefile({ 'import os', '', 'def f():', '    x = 1', '    return x' }, project .. '/app.py')
 vim.fn.writefile({ '# fixture' }, project .. '/README.md')
+-- One file that will not parse. Everything downstream of "the scan found
+-- something" — a placed finding, a level to filter on — needs a finding to
+-- exist, and ruff/mypy/format only produce one on a machine that has them
+-- installed. `build` is gandalf's own compile() check: no tool, no toolchain,
+-- same finding on every host this ever runs on.
+vim.fn.writefile({ 'def broken(:' }, project .. '/broken.py')
 -- An allowlist, so the smoke test is seconds rather than the several minutes a
 -- full ~30-gate run takes. It also exercises `config_path`, which is how you
 -- run a narrower gate set while you work.
-vim.fn.writefile({ '[gandalf]', 'only = ["ruff", "mypy", "format"]' }, project .. '/.gandalf.toml')
+vim.fn.writefile({ '[gandalf]', 'only = ["build", "ruff", "mypy", "format"]' }, project .. '/.gandalf.toml')
 for _, args in ipairs({
   { 'init', '-q' },
   { 'config', 'user.email', 'smoke@example.invalid' },
@@ -123,6 +129,9 @@ if snapshot then
     end
   end
   check(#bad == 0, ('every placed finding resolves on disk (%d placed, %d bad)'):format(placed, #bad))
+  -- Stated, not assumed: broken.py guarantees this, and the command checks
+  -- below are only worth anything while it holds.
+  check(placed > 0, ('the run produced a placed finding (%d)'):format(placed))
 
   -- And no rule id is a source snippet, which is the bug that started all this.
   local snippets = {}

@@ -9,7 +9,7 @@ import asyncio
 from gandalf import llm, skillgate, skills
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.plugins import discover_gates
-from gandalf.report import _CATEGORY, _GROUP_ORDER, aggregate
+from gandalf.report import _CATEGORY, GROUP_ORDER, aggregate
 from gandalf.scope import _classify
 
 P = GateOutcome.PASS
@@ -279,7 +279,7 @@ def test_llm_skill_gates_discovered():
         assert getattr(g, "blocking", False) is False  # advisory, never hard-red
         assert not getattr(g, "langs", None)  # generic: run on every change
         cat = _CATEGORY[name]
-        assert cat in _GROUP_ORDER, f"{cat} won't render in the scorecard"
+        assert cat in GROUP_ORDER, f"{cat} won't render in the scorecard"
 
 
 def test_skills_are_embedded():
@@ -412,11 +412,11 @@ def test_communicate_kills_the_child_on_timeout():
 def test_reap_kills_the_container_not_just_the_docker_client(monkeypatch):
     """A timed-out image-backed tool (semgrep, trivy…) must have its container
     stopped: killing `docker run` kills the client and leaves the tool running."""
-    from gandalf import plugins
+    from gandalf import toolrun
 
-    monkeypatch.setattr(plugins, "_via_image", lambda b: b == "semgrep")
-    monkeypatch.setattr(plugins.shutil, "which", lambda b: None)
-    cmd = plugins._dockerize(["semgrep", "scan"], "/repo", "gandalf-1-0")
+    monkeypatch.setattr(toolrun, "_via_image", lambda b: b == "semgrep")
+    monkeypatch.setattr(toolrun.shutil, "which", lambda b: None)
+    cmd = toolrun._dockerize(["semgrep", "scan"], "/repo", "gandalf-1-0")
     assert cmd[:2] == ["docker", "run"]
     assert "--name" in cmd and cmd[cmd.index("--name") + 1] == "gandalf-1-0"
 
@@ -438,13 +438,13 @@ def test_reap_kills_the_container_not_just_the_docker_client(monkeypatch):
         killed.append(list(argv))
         return FakeProc()
 
-    monkeypatch.setattr(plugins.asyncio, "create_subprocess_exec", fake_exec)
-    asyncio.run(plugins._reap(FakeProc(), cmd, "gandalf-1-0"))
+    monkeypatch.setattr(toolrun.asyncio, "create_subprocess_exec", fake_exec)
+    asyncio.run(toolrun._reap(FakeProc(), cmd, "gandalf-1-0"))
     assert killed == [["docker", "kill", "gandalf-1-0"]]
 
     # A host-binary run has no container, so no docker call at all.
     killed.clear()
-    asyncio.run(plugins._reap(FakeProc(), ["semgrep", "scan"], "gandalf-1-0"))
+    asyncio.run(toolrun._reap(FakeProc(), ["semgrep", "scan"], "gandalf-1-0"))
     assert killed == []
 
 

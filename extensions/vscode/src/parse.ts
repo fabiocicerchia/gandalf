@@ -400,3 +400,14 @@ export function slim(payload: Payload): Payload {
   for (const gate of payload.gates ?? []) gate.findings = [];
   return payload;
 }
+
+/**
+ * Gates that recorded a wall-clock, slowest first — the answer to "why does a
+ * full scan take so long". A gate that reported no duration is not a zero, so it
+ * is left out rather than sorted to the bottom.
+ */
+export function gatesByDuration(payload: Payload | undefined): RawGate[] {
+  return (payload?.gates ?? [])
+    .filter((g) => typeof g.duration === 'number')
+    .sort((a, b) => (b.duration ?? 0) - (a.duration ?? 0));
+}

@@ -8,7 +8,7 @@ leaves it out of the composite and the verdict.
 
 from __future__ import annotations
 
-from gandalf import report, severity, suppress
+from gandalf import render_html, render_text, report, severity, suppress
 from gandalf.base import GateOutcome, GateResult
 from gandalf.plugins import did_not_run, unavailable
 
@@ -60,22 +60,22 @@ def test_nothing_ran_at_all_is_amber_and_scoreless():
 
 
 def test_category_with_nothing_run_reports_no_percentage():
-    outcome, pct = report._group_outcome_and_pct([unavailable("trivy", "missing")])
+    outcome, pct = report.group_outcome_and_pct([unavailable("trivy", "missing")])
     assert pct is None and outcome is W
-    _, pct = report._group_outcome_and_pct([GateResult("ruff", P, 1.0, "clean")])
+    _, pct = report.group_outcome_and_pct([GateResult("ruff", P, 1.0, "clean")])
     assert pct == 100
 
 
 def test_terminal_render_marks_and_counts_them():
     results = [GateResult("ruff", P, 1.0, "clean"), unavailable("trivy", "missing")]
-    out = report.render_terminal("wt", results, report.aggregate(results), {}, {})
-    assert report._SKIP_EMOJI in out
+    out = render_text.render_terminal("wt", results, report.aggregate(results), {}, {})
+    assert report.SKIP_EMOJI in out
     assert "1 of 2 gate(s) could not run" in out
 
 
 def test_html_render_labels_them_not_run():
     results = [GateResult("ruff", P, 1.0, "clean"), unavailable("trivy", "missing")]
-    out = report.render_html("wt", results, report.aggregate(results), {}, {})
+    out = render_html.render_html("wt", results, report.aggregate(results), {}, {})
     assert "NOT RUN" in out and "not run" in out
 
 

@@ -62,6 +62,48 @@ describe('the command line', function()
     assert.is_false(vim.tbl_contains(core.scan_argv(cfg, { kind = 'workspace', llm = true }), '--no-llm'))
   end)
 
+  -- An older gandalf rejects an unknown flag with exit 2, so a flag it does not
+  -- have fails the whole scan rather than being ignored. `--help` is what the
+  -- caller probes; these three cases pin what argv does with the answer.
+  describe('a build that does not take every flag', function()
+    local with_excludes = require('gandalf.config').resolve({ exclude = { 'node_modules' } })
+    local GATED = { '--out-dir', '--no-trend', '--cache', '--stream', '--exclude' }
+
+    local function argv_with(flags)
+      return core.scan_argv(with_excludes, {
+        kind = 'workspace',
+        out_dir = '/tmp/out',
+        stream = true,
+        flags = flags,
+      })
+    end
+
+    it('withholds every optional flag the build did not report', function()
+      local argv = argv_with({})
+      for _, flag in ipairs(GATED) do
+        assert.is_false(vim.tbl_contains(argv, flag), flag .. ' was passed to a build that has no such flag')
+      end
+    end)
+
+    it('still passes the flags gandalf has always had', function()
+      local argv = argv_with({})
+      assert.is_true(vim.tbl_contains(argv, '--no-llm'))
+      assert.is_true(vim.tbl_contains(argv, '--no-html'))
+    end)
+
+    it('passes them all when the build reported them, and when nobody probed', function()
+      local reported = {}
+      for _, flag in ipairs(GATED) do
+        reported[flag] = true
+      end
+      for _, argv in ipairs({ argv_with(reported), argv_with(nil) }) do
+        for _, flag in ipairs(GATED) do
+          assert.is_true(vim.tbl_contains(argv, flag), flag .. ' was withheld from a build that takes it')
+        end
+      end
+    end)
+  end)
+
   it('repeats --exclude rather than joining, since a path may contain a comma', function()
     local with = require('gandalf.config').resolve({ exclude = { 'node_modules', 'src/generated' } })
     local argv = core.scan_argv(with, { kind = 'workspace' })

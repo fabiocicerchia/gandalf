@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 import shutil
 import subprocess
-import sys
 
 import pytest
 
@@ -100,10 +99,16 @@ def test_missing_toolchain_warns_and_names_the_binary(
     """Amber, never a pass: the gate had something to look at and could not."""
     # Both namespaces: the base class asks _toolchain, and a gate that picks its
     # own tool (maven vs gradle, vendor/bin vs global) asks its own module.
+    # That second namespace has to come off the class itself. Looking it up as
+    # sys.modules[cls.__module__] finds the wrong object: discover_gates()
+    # re-executes every gate file on each call and rebinds `gandalf_gate_<stem>`
+    # to a fresh module, so once another test module has discovered gates the
+    # entry under that name is no longer the namespace this class resolves
+    # against — and the gate would go on to shell out to a real mvn.
     monkeypatch.setattr(_toolchain, "tool_missing", lambda _b: True)
-    gate_module = sys.modules[type(GATES[name]).__module__]
-    if hasattr(gate_module, "tool_missing"):
-        monkeypatch.setattr(gate_module, "tool_missing", lambda _b: True)
+    gate_globals = type(GATES[name]).check.__globals__
+    if "tool_missing" in gate_globals:
+        monkeypatch.setitem(gate_globals, "tool_missing", lambda _b: True)
     r = _run(name, _repo(tmp_path, files))
     assert r.outcome is GateOutcome.WARN, r.summary
     assert binary in r.summary and "skipped" in r.summary

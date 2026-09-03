@@ -4,15 +4,25 @@ licenses (LOW/UNKNOWN severity) are ignored so only real obligations surface."""
 
 from __future__ import annotations
 
-import json
-
 from gandalf.base import GateContext, GateOutcome, GateResult
+from gandalf.gates._toolchain import parsed, scored
 from gandalf.plugins import (
     missing_result,
     run_tool,
     timeout_result,
     unavailable,
 )
+
+
+def _flagged(data: dict) -> list[dict]:
+    """trivy's license findings that carry an obligation. LOW and UNKNOWN are
+    the permissive ones and are not worth reporting."""
+    return [
+        lc
+        for r in data.get("Results", [])
+        for lc in (r.get("Licenses") or [])
+        if lc.get("Severity") not in ("LOW", "UNKNOWN")
+    ]
 
 
 class LicensesGate:
@@ -46,16 +56,10 @@ class LicensesGate:
         )
         if (to := timeout_result(self.name, rc)) is not None:
             return to
-        try:
-            data = json.loads(out or "{}")
-        except json.JSONDecodeError:
+        data = parsed(out)
+        if data is None:
             return unavailable(self.name, "licenses: unparsable output")
-        lic = [
-            lc
-            for r in data.get("Results", [])
-            for lc in (r.get("Licenses") or [])
-            if lc.get("Severity") not in ("LOW", "UNKNOWN")  # skip permissive
-        ]
+        lic = _flagged(data)
         if not lic:
             return GateResult(
                 self.name, GateOutcome.PASS, 1.0, "licenses: no problematic licenses"
@@ -68,12 +72,10 @@ class LicensesGate:
             }
             for lc in lic
         ]
-        score = max(0.0, 1.0 - min(len(lic), 10) / 10)
-        outcome = GateOutcome.FAIL if bad else GateOutcome.WARN
-        return GateResult(
+        return scored(
             self.name,
-            outcome,
-            score,
+            len(lic),
             f"licenses: {len(lic)} flagged ({len(bad)} forbidden/restricted)",
             findings,
+            fail=bool(bad),
         )

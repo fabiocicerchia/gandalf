@@ -1,0 +1,34 @@
+{
+  "components": {
+    ".mdl_style": {
+      "fan_in": 0,
+      "fan_out": 0,
+      "modules": 1
+    },
+    "extensions": {
+      "fan_in": 0,
+      "fan_out": 0,
+      "modules": 28
+    },
+    "scripts": {
+      "fan_in": 0,
+      "fan_out": 0,
+      "modules": 2
+    },
+    "src": {
+      "fan_in": 0,
+      "fan_out": 0,
+      "modules": 71
+    }
+  },
+  "cycles": [],
+  "edges": [],
+  "external": [
+    "./test/vscode-shim",
+    "chart",
+    "gandalf",
+    "vscode"
+  ],
+  "version": "2.0",
+  "violations": []
+}

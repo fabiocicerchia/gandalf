@@ -16,6 +16,26 @@ from .base import GateOutcome, GateResult
 from .report import fmt_finding
 
 
+def _testcase(r: GateResult) -> list[str]:
+    """One <testcase> element. A FAIL carries a <failure> — that is what fails
+    the build under gandalf's default policy; a WARN with anything to say
+    carries a <system-out> instead and still passes."""
+    duration = getattr(r, "_duration", None)
+    time_attr = f' time="{duration:.3f}"' if isinstance(duration, (int, float)) else ""
+    lines = [f'  <testcase classname="gandalf" name={quoteattr(r.name)}{time_attr}>']
+    body_lines = [r.summary] if r.summary else []
+    body_lines += [fmt_finding(f) for f in r.findings]
+    body = escape("\n".join(body_lines))
+    if r.outcome == GateOutcome.FAIL:
+        lines.append(
+            f"    <failure message={quoteattr(r.summary or r.name)}>{body}</failure>"
+        )
+    elif r.outcome == GateOutcome.WARN and body:
+        lines.append(f"    <system-out>{body}</system-out>")
+    lines.append("  </testcase>")
+    return lines
+
+
 def to_junit(results: list[GateResult], meta: dict | None = None) -> str:
     """Render the results as a JUnit XML suite — one test case per gate.
 
@@ -33,22 +53,6 @@ def to_junit(results: list[GateResult], meta: dict | None = None) -> str:
         ),
     ]
     for r in results:
-        duration = getattr(r, "_duration", None)
-        time_attr = (
-            f' time="{duration:.3f}"' if isinstance(duration, (int, float)) else ""
-        )
-        lines.append(
-            f'  <testcase classname="gandalf" name={quoteattr(r.name)}{time_attr}>'
-        )
-        body_lines = [r.summary] if r.summary else []
-        body_lines += [fmt_finding(f) for f in r.findings]
-        body = escape("\n".join(body_lines))
-        if r.outcome == GateOutcome.FAIL:
-            lines.append(
-                f"    <failure message={quoteattr(r.summary or r.name)}>{body}</failure>"
-            )
-        elif r.outcome == GateOutcome.WARN and body:
-            lines.append(f"    <system-out>{body}</system-out>")
-        lines.append("  </testcase>")
+        lines += _testcase(r)
     lines.append("</testsuite>")
     return "\n".join(lines)

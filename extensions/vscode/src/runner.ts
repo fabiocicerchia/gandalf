@@ -1,91 +1,38 @@
 /**
- * Locating gandalf and running it.
+ * Running gandalf once, and reading what it said.
  *
- * gandalf is pure-stdlib Python with no install step, so "where is it" has
- * several legitimate answers: `gandalf.path` (a wrapper or a checkout), a
- * checkout in the open workspace, `gandalf` on PATH, or the clone `install.sh`
- * drops in `~/.local/share/gandalf`. All are tried, in that order.
+ * The three parts this used to hold are their own modules now — `exec.ts` for
+ * the child process, `launcher.ts` for finding gandalf, `argv.ts` for the
+ * command line — and they are re-exported from here, because the extension and
+ * its tests are written against `./runner` and that spelling is not worth
+ * churning.
  */
-import { spawn } from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
 import * as vscode from 'vscode';
 
+import { buildArgs, RunRequest } from './argv';
 import { Settings } from './config';
-import { EventParser, GateEvent } from './events';
+import { EventParser } from './events';
+import { exec } from './exec';
+import { resolveLauncher } from './launcher';
 import { log } from './log';
-import { ProgressParser, ScanProgress } from './progress';
+import { ProgressParser } from './progress';
 import { Payload } from './types';
 
-export class GandalfNotFoundError extends Error {}
+export { buildArgs, RunRequest } from './argv';
+export {
+  findOnPath,
+  GandalfNotFoundError,
+  INSTALL_COMMAND,
+  Launcher,
+  promptInstall,
+  resetLauncherCache,
+  resolveLauncher,
+  ScanKind,
+} from './launcher';
+
 /** Raised when a scan cannot apply, but nothing is wrong (e.g. untracked file). */
 export class ScanSkippedError extends Error {}
-
-/** The one-liner from the README — kept here so the notification can run it. */
-export const INSTALL_COMMAND =
-  'curl -fsSL https://raw.githubusercontent.com/fabiocicerchia/gandalf/main/install.sh | bash';
-
-/**
- * "gandalf is missing" told once, the same way, wherever it is noticed — with
- * the command that fixes it rather than a pointer to a document that has it.
- */
-export async function promptInstall(message: string): Promise<void> {
-  const choice = await vscode.window.showErrorMessage(
-    `Gandalf: ${message}`,
-    'Install Gandalf',
-    'Copy command',
-    'Open settings',
-  );
-  if (choice === 'Install Gandalf') {
-    const terminal = vscode.window.createTerminal('gandalf: install');
-    terminal.show(true);
-    terminal.sendText(INSTALL_COMMAND);
-    // The clone and the wrapper take a moment; the next scan should look again
-    // rather than trust the "not found" we just cached.
-    resetLauncherCache();
-  } else if (choice === 'Copy command') {
-    await vscode.env.clipboard.writeText(INSTALL_COMMAND);
-  } else if (choice === 'Open settings') {
-    await vscode.commands.executeCommand('workbench.action.openSettings', 'gandalf');
-  }
-}
-
-export interface Launcher {
-  command: string;
-  args: string[];
-  env: NodeJS.ProcessEnv;
-  /** Human-readable description of how gandalf is being invoked. */
-  label: string;
-  /** Source checkout backing this launcher, when there is one (for `make tools`). */
-  checkout: string;
-  /** Flags this build of gandalf accepts, read from `--help`. */
-  flags: Set<string>;
-}
-
-export type ScanKind = 'workspace' | 'file' | 'commit';
-
-export interface RunRequest {
-  folder: vscode.WorkspaceFolder;
-  kind: ScanKind;
-  /** Repo-relative path, for `kind === 'file'`. */
-  relPath?: string;
-  /** Commit to evaluate, for `kind === 'commit'`. */
-  commit?: string;
-  llm: boolean;
-  html: boolean;
-  outDir: string;
-  /** Paths no gate should read, already translated to gandalf's dialect. */
-  excludes: string[];
-  /** Why this run started — shown in the log. */
-  reason: string;
-  /** Called as gandalf reports stages and gate completions. */
-  onProgress?: (p: ScanProgress) => void;
-  /** Called once the gate count is known, before any gate has finished. */
-  onStart?: (gates: number, scope: string) => void;
-  /** Called per gate as it finishes, when the build supports `--stream`. */
-  onGate?: (gate: GateEvent) => void;
-}
 
 export interface RunResult {
   payload: Payload;
@@ -95,268 +42,18 @@ export interface RunResult {
   durationMs: number;
 }
 
-const MAX_OUTPUT_CHARS = 4 * 1024 * 1024;
 /** The scorecard and the report paths are a few KB; this is only a backstop. */
 const MAX_PLAIN_CHARS = 256 * 1024;
-const HELP_TIMEOUT_MS = 20_000;
-
-let launcherCache = new Map<string, Launcher>();
-
-export function resetLauncherCache(): void {
-  launcherCache = new Map();
-}
-
-function expand(p: string): string {
-  return p.startsWith('~') ? path.join(os.homedir(), p.slice(1)) : p;
-}
-
-function isCheckout(dir: string): boolean {
-  if (!dir) return false;
-  try {
-    return fs.statSync(path.join(dir, 'src', 'gandalf', '__main__.py')).isFile();
-  } catch {
-    return false;
-  }
-}
-
-function findOnPath(name: string): string {
-  const exts = process.platform === 'win32' ? (process.env.PATHEXT ?? '.EXE;.CMD;.BAT').split(';') : [''];
-  for (const dir of (process.env.PATH ?? '').split(path.delimiter)) {
-    if (!dir) continue;
-    for (const ext of exts) {
-      const candidate = path.join(dir, name + ext);
-      try {
-        if (fs.statSync(candidate).isFile()) return candidate;
-      } catch {
-        // Next candidate.
-      }
-    }
-  }
-  return '';
-}
-
-function exec(
-  command: string,
-  args: string[],
-  opts: {
-    cwd?: string;
-    env?: NodeJS.ProcessEnv;
-    timeoutMs: number;
-    token?: vscode.CancellationToken;
-    /** Receives stderr as it arrives, for live progress. */
-    onStderr?: (chunk: string) => void;
-    /** Receives stdout as it arrives, for streamed gate results. */
-    onStdout?: (chunk: string) => void;
-    /** When false, stdout is handed to `onStdout` only and never buffered. */
-    collectStdout?: boolean;
-  },
-): Promise<{ code: number; stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    let child: ReturnType<typeof spawn>;
-    try {
-      // Its own process group: gandalf shells out to the scanners (trivy,
-      // semgrep, docker), and signalling the python process alone leaves those
-      // running as orphans of the extension host — a cancelled scan that keeps
-      // burning a core. The group is what has to die, not the parent.
-      child = spawn(command, args, { cwd: opts.cwd, env: opts.env, detached: process.platform !== 'win32' });
-    } catch (err) {
-      reject(err);
-      return;
-    }
-
-    const out: string[] = [];
-    const errOut: string[] = [];
-    let outChars = 0;
-    let errChars = 0;
-    let settled = false;
-    let exited = false;
-
-    const finish = (fn: () => void) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      cancelSub?.dispose();
-      fn();
-    };
-
-    const signal = (sig: NodeJS.Signals) => {
-      try {
-        if (process.platform === 'win32') {
-          // No process groups: taskkill's /T walks the child tree instead.
-          spawn('taskkill', ['/pid', String(child.pid), '/T', '/F']).unref();
-        } else if (child.pid) {
-          process.kill(-child.pid, sig);
-        }
-      } catch {
-        // Group already gone, or never formed — fall back to the child itself.
-        try {
-          child.kill(sig);
-        } catch {
-          // Nothing left to signal.
-        }
-      }
-    };
-
-    // SIGTERM first so a dockerized gate gets a chance to tear its container
-    // down; SIGKILL only if the process is still there a few seconds later.
-    // `exited` rather than `child.killed`: that flag only says a signal was
-    // delivered, so it is true immediately and the escalation never fired.
-    const kill = () => {
-      signal('SIGTERM');
-      setTimeout(() => exited || signal('SIGKILL'), 3000).unref?.();
-    };
-
-    const timer = setTimeout(() => {
-      kill();
-      finish(() => reject(new Error(`gandalf timed out after ${Math.round(opts.timeoutMs / 1000)}s`)));
-    }, opts.timeoutMs);
-
-    const cancelSub = opts.token?.onCancellationRequested(() => {
-      kill();
-      finish(() => reject(new vscode.CancellationError()));
-    });
-
-    // Decoded by the stream, not per chunk: a read boundary lands mid-UTF-8
-    // sequence often enough on a big scan, and `buf.toString()` on each half
-    // turns one `--stream` gate line into two unparsable ones. It also drops
-    // the Buffer.concat of the whole output at the end.
-    child.stdout?.setEncoding('utf8');
-    child.stderr?.setEncoding('utf8');
-    child.stdout?.on('data', (s: string) => {
-      if (opts.collectStdout !== false && outChars < MAX_OUTPUT_CHARS) {
-        out.push(s);
-        outChars += s.length;
-      }
-      opts.onStdout?.(s);
-    });
-    child.stderr?.on('data', (s: string) => {
-      if (errChars < MAX_OUTPUT_CHARS) {
-        errOut.push(s);
-        errChars += s.length;
-      }
-      opts.onStderr?.(s);
-    });
-    child.on('error', (err) => {
-      exited = true;
-      finish(() => reject(err));
-    });
-    child.on('exit', () => (exited = true));
-    child.on('close', (code) =>
-      finish(() => resolve({ code: code ?? -1, stdout: out.join(''), stderr: errOut.join('') })),
-    );
-  });
-}
-
-async function readFlags(l: Omit<Launcher, 'flags'>, cwd: string): Promise<Set<string>> {
-  try {
-    const { stdout, stderr } = await exec(l.command, [...l.args, '--help'], {
-      cwd,
-      env: l.env,
-      timeoutMs: HELP_TIMEOUT_MS,
-    });
-    return new Set((stdout + stderr).match(/--[a-z][a-z0-9-]*/g) ?? []);
-  } catch (err) {
-    log().warn(`could not read gandalf --help (${String(err)}); assuming a current build`);
-    return new Set(['--out-dir', '--no-trend', '--cache', '--concurrency', '--path']);
-  }
-}
-
-/** Every plausible way to invoke gandalf, most explicit first. */
-function candidates(folder: vscode.WorkspaceFolder, s: Settings): Omit<Launcher, 'flags'>[] {
-  const out: Omit<Launcher, 'flags'>[] = [];
-  const viaPython = (dir: string, label: string) => ({
-    command: s.pythonPath,
-    args: ['-m', 'gandalf'],
-    env: {
-      ...process.env,
-      PYTHONPATH: [path.join(dir, 'src'), process.env.PYTHONPATH].filter(Boolean).join(path.delimiter),
-    },
-    label: `${s.pythonPath} -m gandalf (${label}: ${dir})`,
-    checkout: dir,
-  });
-
-  // One setting for both shapes: a checkout is a directory we can recognise, so
-  // there is no need to make the user say which kind of path they gave us.
-  const configured = s.path ? expand(s.path) : '';
-  if (isCheckout(configured)) out.push(viaPython(configured, 'gandalf.path'));
-  else if (configured) {
-    out.push({
-      command: configured,
-      args: [],
-      env: { ...process.env },
-      label: `gandalf.path: ${configured}`,
-      checkout: '',
-    });
-  }
-  if (isCheckout(folder.uri.fsPath)) out.push(viaPython(folder.uri.fsPath, 'workspace checkout'));
-  const onPath = findOnPath('gandalf');
-  if (onPath) {
-    out.push({ command: onPath, args: [], env: { ...process.env }, label: `gandalf on PATH: ${onPath}`, checkout: '' });
-  }
-  const installed = path.join(os.homedir(), '.local', 'share', 'gandalf');
-  if (isCheckout(installed)) out.push(viaPython(installed, 'install.sh clone'));
-  return out;
-}
-
-export async function resolveLauncher(folder: vscode.WorkspaceFolder, s: Settings): Promise<Launcher> {
-  const key = folder.uri.toString();
-  const cached = launcherCache.get(key);
-  if (cached) return cached;
-
-  const options = candidates(folder, s);
-  if (options.length === 0) {
-    throw new GandalfNotFoundError(
-      `the gandalf CLI is not installed. Install it now?  It runs:  ${INSTALL_COMMAND}` +
-        `  — or point "gandalf.path" at an existing wrapper or checkout.`,
-    );
-  }
-  const chosen = options[0];
-  const launcher: Launcher = { ...chosen, flags: await readFlags(chosen, folder.uri.fsPath) };
-  log().info(`using ${launcher.label}`);
-  launcherCache.set(key, launcher);
-  return launcher;
-}
-
-function buildArgs(req: RunRequest, s: Settings, l: Launcher): string[] {
-  const args = [...l.args];
-  const supports = (flag: string) => l.flags.has(flag);
-
-  if (req.kind === 'file' && req.relPath) args.push('--path', req.relPath.replace(/\\/g, '/'));
-  if (req.kind === 'commit' && req.commit) args.push('--commit', req.commit);
-
-  if (!req.llm) args.push('--no-llm');
-  if (!req.html) args.push('--no-html');
-
-  if (supports('--out-dir')) args.push('--out-dir', req.outDir);
-  // Editor scans never join the trend log: it is meant to be per-commit, and a
-  // scan on every save would swamp it. Scanning a named commit is the exception
-  // — that is exactly one entry for exactly one commit, which is what the log is.
-  if (req.kind !== 'commit' && supports('--no-trend')) args.push('--no-trend');
-  if (s.configPath) args.push('--config', expand(s.configPath));
-  if (s.concurrency > 0) args.push('--concurrency', String(s.concurrency));
-
-  // The cache is keyed per gate on a hash of the whole scanned file set, so a
-  // one-file scan would overwrite the workspace entries with a one-file hash
-  // and make the next full scan a complete miss. Only whole-tree scans cache.
-  if (s.useCache && req.kind === 'workspace') args.push('--cache');
-
-  // Per-gate results as they land, so the pane fills during the run.
-  if ((req.onGate || req.onStart) && supports('--stream')) args.push('--stream');
-
-  // Repeated rather than comma-joined: a path may legitimately contain a comma,
-  // and argparse's append is unambiguous.
-  if (supports('--exclude')) for (const pattern of req.excludes) args.push('--exclude', pattern);
-
-  args.push(...s.extraArgs);
-  return args;
-}
+const PROBE_TIMEOUT_MS = 15_000;
+/** Lines of diagnostics quoted when a run produced no report. */
+const TAIL_LINES = 12;
 
 const JSON_LINE = /^JSON report:\s*(.+)$/m;
 const HTML_LINE = /^HTML report:\s*(.+)$/m;
 /** gandalf's ways of saying the requested scope holds nothing to scan. */
 const EMPTY_SCOPE = /no git-tracked files under this folder|every path under it is excluded/i;
 
-function tail(text: string, lines = 12): string {
+function tail(text: string, lines = TAIL_LINES): string {
   return text.trimEnd().split('\n').slice(-lines).join('\n');
 }
 
@@ -439,7 +136,7 @@ export async function probe(
   command: string,
   args: string[],
   cwd?: string,
-  timeoutMs = 15_000,
+  timeoutMs = PROBE_TIMEOUT_MS,
 ): Promise<{ ok: boolean; output: string }> {
   try {
     const { code, stdout, stderr } = await exec(command, args, { cwd, env: process.env, timeoutMs });
@@ -448,5 +145,3 @@ export async function probe(
     return { ok: false, output: err instanceof Error ? err.message : String(err) };
   }
 }
-
-export { findOnPath };

@@ -20,6 +20,8 @@ from gandalf.gates._toolchain import (
     ToolchainGate,
     counted,
     exit_code,
+    merged,
+    parsed,
     per_file,
     project_dir,
     tail,
@@ -59,6 +61,22 @@ class PhpSyntaxGate(ToolchainGate):
         )
 
 
+def _phpcs_findings(data: dict) -> list[dict]:
+    """phpcs' per-file message lists, flattened."""
+    return [
+        {
+            "file": path,
+            "line": m.get("line", 0),
+            "column": m.get("column", 0),
+            "rule": m.get("source", ""),
+            "message": m.get("message", ""),
+            "severity": (m.get("type") or "").lower(),
+        }
+        for path, f in (data.get("files") or {}).items()
+        for m in f.get("messages") or []
+    ]
+
+
 class PhpcsGate(ToolchainGate):
     """PHP_CodeSniffer — style/lint against the repo's standard, else PSR-12."""
 
@@ -83,24 +101,12 @@ class PhpcsGate(ToolchainGate):
         )
         if (to := timeout_result(self.name, rc)) is not None:
             return to
-        try:
-            data = json.loads(out or "{}")
-        except json.JSONDecodeError:
+        data = parsed(out)
+        if data is None:
             return unavailable(
-                self.name, f"phpcs: did not run — {tail((out or '') + (err or ''), 2)}"
+                self.name, f"phpcs: did not run — {tail(merged(out, err), 2)}"
             )
-        findings = [
-            {
-                "file": path,
-                "line": m.get("line", 0),
-                "column": m.get("column", 0),
-                "rule": m.get("source", ""),
-                "message": m.get("message", ""),
-                "severity": (m.get("type") or "").lower(),
-            }
-            for path, f in (data.get("files") or {}).items()
-            for m in f.get("messages") or []
-        ]
+        findings = _phpcs_findings(data)
         totals = data.get("totals") or {}
         n = totals.get("errors", 0) + totals.get("warnings", 0) or len(findings)
         return counted(self.name, n, "phpcs", findings[:50], noun="violation(s)")

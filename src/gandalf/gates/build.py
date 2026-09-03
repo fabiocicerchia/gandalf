@@ -10,6 +10,27 @@ from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.plugins import ignore_patterns, is_ignored, scannable_files
 
 
+def _syntax_errors(root: Path, rels: list[str]) -> list[dict[str, object]]:
+    """Every file in `rels` that will not compile, with its parse error."""
+    errors: list[dict[str, object]] = []
+    for rel in rels:
+        try:
+            source = (root / rel).read_text(errors="replace")
+        except OSError:
+            continue  # deleted by the diff — nothing to compile
+        try:
+            compile(source, rel, "exec")
+        except SyntaxError as exc:
+            errors.append(
+                {
+                    "path": rel,
+                    "line": exc.lineno,
+                    "message": f"{exc.msg} (line {exc.lineno})",
+                }
+            )
+    return errors
+
+
 class BuildGate:
     name = "build"
     blocking = True
@@ -31,25 +52,7 @@ class BuildGate:
         if not py_files:
             return GateResult(self.name, GateOutcome.PASS, 1.0, "no Python files")
 
-        root = Path(ctx.workdir)
-        errors: list[dict[str, object]] = []
-        for rel in py_files:
-            path = root / rel
-            try:
-                source = path.read_text(errors="replace")
-            except OSError:
-                continue  # deleted by the diff — nothing to compile
-            try:
-                compile(source, rel, "exec")
-            except SyntaxError as exc:
-                errors.append(
-                    {
-                        "path": rel,
-                        "line": exc.lineno,
-                        "message": f"{exc.msg} (line {exc.lineno})",
-                    }
-                )
-
+        errors = _syntax_errors(Path(ctx.workdir), py_files)
         if errors:
             first = errors[0]
             summary = f"{len(errors)} file(s) fail to compile — {first['path']}: {first['message']}"

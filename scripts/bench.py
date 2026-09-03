@@ -33,8 +33,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from gandalf import findings as gfindings  # noqa: E402
-from gandalf import plugins, scope  # noqa: E402
+# Imported after the sys.path tweak above, on purpose.
+from gandalf import findings as gfindings
+from gandalf import ignores, plugins, scope
 
 # Big enough that the numbers mean something, small enough that `make bench`
 # stays a coffee-free operation.
@@ -77,7 +78,7 @@ def bench_tree_filter() -> dict:
     """The exclusion filter, applied to every path in the tree on every scan."""
     pats = plugins.ignore_patterns(".") + ("*.min.js", "src/generated", "vendor")
     paths = [f"src/pkg{i % 200}/mod{i}.py" for i in range(TREE_PATHS)]
-    plugins._compiled_ignores.cache_clear()
+    ignores._compiled_ignores.cache_clear()
 
     def run():
         return [p for p in paths if not plugins.is_ignored(p, pats)]
@@ -282,13 +283,21 @@ def bench_extension(repo_root: Path) -> list[dict]:
         print("  (extension bench skipped — needs node and `npm install` in", ext, ")")
         return []
     build = subprocess.run(
-        ["node", "esbuild.mjs", "--bench"], cwd=ext, capture_output=True, text=True
+        ["node", "esbuild.mjs", "--bench"],
+        cwd=ext,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     if build.returncode != 0:
         print("  (extension bench skipped — build failed)\n", build.stderr[-500:])
         return []
     run = subprocess.run(
-        ["node", "out/bench.js"], cwd=ext, capture_output=True, text=True
+        ["node", "out/bench.js"],
+        cwd=ext,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     if run.returncode != 0:
         print("  (extension bench skipped — run failed)\n", run.stderr[-500:])
@@ -362,7 +371,8 @@ def main(argv: list[str] | None = None) -> int:
 
     print(table(rows))
     if args.svg:
-        from chart import render  # noqa: PLC0415 — only needed for --svg
+        # Local import: only needed for --svg.
+        from chart import render
 
         target = Path(args.svg)
         target.parent.mkdir(parents=True, exist_ok=True)
