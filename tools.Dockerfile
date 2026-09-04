@@ -22,9 +22,9 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 # Python-packaged tools (scanners + type/dead-code/yaml/spell/sql/docs/complexity)
-RUN pip install --no-cache-dir \
-      ruff semgrep bandit pip-audit checkov \
-      mypy vulture codespell yamllint sqlfluff interrogate lizard
+COPY tools-requirements.txt /tmp/tools-requirements.txt
+RUN pip install --no-cache-dir --require-hashes -r /tmp/tools-requirements.txt \
+ && rm /tmp/tools-requirements.txt
 
 # squawk — Postgres migration linter (single binary)
 RUN curl -sSfL "https://github.com/sbdchd/squawk/releases/download/v${SQUAWK_VERSION}/squawk-linux-x64" \
@@ -49,7 +49,7 @@ RUN curl -sSfL "https://github.com/hadolint/hadolint/releases/download/v${HADOLI
       | tar -xz -C /usr/local/bin actionlint \
  && curl -sSfL "https://github.com/ossf/scorecard/releases/download/v${SCORECARD_VERSION}/scorecard_${SCORECARD_VERSION}_linux_amd64.tar.gz" \
       | tar -xz -C /usr/local/bin scorecard \
- && curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+ && curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/75c4dc0f45c5d7ffd05ae26df1e0c666787bdf2a/contrib/install.sh \
       | sh -s -- -b /usr/local/bin
 
 # Run as a non-root user (uid 1000 to match the typical host user, so tools that
