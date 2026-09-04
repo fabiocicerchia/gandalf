@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.2](https://github.com/fabiocicerchia/gandalf/compare/v0.12.1...v0.12.2) (2026-09-04)
+
+
+### Bug Fixes
+
+* **ci:** pin the editorconfig-checker binary version ([#88](https://github.com/fabiocicerchia/gandalf/issues/88)) ([44ba771](https://github.com/fabiocicerchia/gandalf/commit/44ba7711135818aa99a11b74077030a1530f450f))
+
 ## [0.12.1](https://github.com/fabiocicerchia/gandalf/compare/v0.12.0...v0.12.1) (2026-08-30)
 
 
