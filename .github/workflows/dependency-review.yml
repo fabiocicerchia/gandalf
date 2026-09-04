@@ -25,10 +25,14 @@ jobs:
           # python-ecdsa. Allowed because there is nothing to upgrade to: the
           # advisory's vulnerable range is `>= 0` and it has no patched
           # version, upstream having stated it does not offer side-channel
-          # resistance. ecdsa arrives transitively via checkov and semgrep,
-          # two of the scanners this image exists to ship, and it is already
-          # in the published image today -- pinning the tools by hash is what
-          # made it visible here, not what introduced it.
+          # resistance. checkov is the only thing that pulls it in
+          # (ecdsa>=0.19.0,<1.0.0), and it is already in the published image
+          # today -- pinning the tools by hash is what made it visible here,
+          # not what introduced it.
+          #
+          # This is a suppression, not a fix. The only actual fix is dropping
+          # checkov; trivy and kics in this same image also scan IaC, so that
+          # is a real option rather than a theoretical one.
           #
           # The attack needs timing measurements of P-256 signing. Nothing in
           # gandalf signs with this library; it is linter dependency weight.
