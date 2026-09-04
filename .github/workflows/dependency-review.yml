@@ -21,3 +21,16 @@ jobs:
       - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48  # v4.9.0
         with:
           fail-on-severity: high
+          # GHSA-wj6h-64fc-37mp — Minerva timing attack on P-256 in
+          # python-ecdsa. Allowed because there is nothing to upgrade to: the
+          # advisory's vulnerable range is `>= 0` and it has no patched
+          # version, upstream having stated it does not offer side-channel
+          # resistance. ecdsa arrives transitively via checkov and semgrep,
+          # two of the scanners this image exists to ship, and it is already
+          # in the published image today -- pinning the tools by hash is what
+          # made it visible here, not what introduced it.
+          #
+          # The attack needs timing measurements of P-256 signing. Nothing in
+          # gandalf signs with this library; it is linter dependency weight.
+          # Revisit if either scanner drops it or upstream ships a fix.
+          allow-ghsas: GHSA-wj6h-64fc-37mp
