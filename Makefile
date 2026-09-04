@@ -21,9 +21,9 @@ CODE ?= code
 .PHONY: help
 help: ## Show this help
 	awk 'BEGIN {FS = ":.*## "} \
-	  /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } \
-	  /^[a-zA-Z_0-9-]+:.*## / { printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2 }' \
-	  $(MAKEFILE_LIST)
+		/^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } \
+		/^[a-zA-Z_0-9-]+:.*## / { printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2 }' \
+		$(MAKEFILE_LIST)
 
 .PHONY: setup
 setup: ## Install the pre-commit hook
@@ -85,10 +85,10 @@ ext-package: ext-build ## Build the VS Code extension into a .vsix
 .PHONY: ext-install
 ext-install: ext-package ## Build the VS Code extension and install it (override with CODE=)
 	@command -v "$(CODE)" >/dev/null 2>&1 || { \
-	  echo "'$(CODE)' CLI not found. Run \"Shell Command: Install '$(CODE)' command in PATH\""; \
-	  echo "from the Command Palette, or install $(EXT_DIR)/*.vsix by hand:"; \
-	  echo "  Extensions view -> ... -> Install from VSIX..."; \
-	  exit 1; }
+		echo "'$(CODE)' CLI not found. Run \"Shell Command: Install '$(CODE)' command in PATH\""; \
+		echo "from the Command Palette, or install $(EXT_DIR)/*.vsix by hand:"; \
+		echo "  Extensions view -> ... -> Install from VSIX..."; \
+		exit 1; }
 	@vsix=$$(ls -t "$(EXT_DIR)"/*.vsix | head -1) && "$(CODE)" --install-extension "$$vsix" --force
 	@echo "installed — reload the window (Developer: Reload Window)"
 
