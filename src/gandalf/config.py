@@ -29,10 +29,10 @@ The file is optional; with no file (or a broken one) gandalf uses its defaults.
 from __future__ import annotations
 
 import os
-import sys
+import tomllib
 from pathlib import Path
 
-import tomllib
+from . import console
 
 CONFIG_FILENAME = ".gandalf.toml"
 
@@ -41,7 +41,7 @@ class Config:
     """The `[gandalf]` table, with typed accessors. `data` is the raw table so
     later features can read their own sub-sections without touching this class."""
 
-    def __init__(self, data: dict | None = None, path: str = ""):
+    def __init__(self, data: dict | None = None, path: str = "") -> None:
         self.data = data or {}
         self.path = path
 
@@ -91,10 +91,10 @@ def load(repo_root: str | None = None, explicit: str | None = None) -> Config:
     if not path or not Path(path).is_file():
         return Config()
     try:
-        with open(path, "rb") as fh:
+        with Path(path).open("rb") as fh:
             raw = tomllib.load(fh)
     except (OSError, tomllib.TOMLDecodeError) as exc:
         # A broken config must never sink the run — warn and fall back to defaults.
-        print(f"gandalf: ignoring config {path}: {exc}", file=sys.stderr)
+        console.err(f"gandalf: ignoring config {path}: {exc}")
         return Config()
     return Config(raw.get("gandalf", {}) or {}, path)

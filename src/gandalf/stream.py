@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .base import GateResult
+    from .suppress import Suppressor
+
 import dataclasses
 import json
 
+from . import console, plugins, report
 from . import findings as gfindings
-from . import plugins, report
 
 
 class GateStream:
@@ -22,14 +28,14 @@ class GateStream:
     not applied, so a streamed `score` is preliminary; the report is the record.
     """
 
-    def __init__(self, total: int, scope: str, sup, workdir: str = ""):
+    def __init__(self, total: int, scope: str, sup: Suppressor, workdir: str = "") -> None:
         self.total = total
         self.n = 0
         self.sup = sup
         self.workdir = workdir
         self._write({"event": "start", "scope": scope, "gates": total})
 
-    def gate(self, r) -> None:
+    def gate(self, r: GateResult) -> None:
         self.n += 1
         shown = self.sup.apply(r) if self.sup.active else r
         self._write(
@@ -49,4 +55,4 @@ class GateStream:
     @staticmethod
     def _write(obj: dict) -> None:
         # flush: the point is to be read while the process is still running.
-        print(json.dumps(obj, default=str), flush=True)
+        console.out(json.dumps(obj, default=str), flush=True)
