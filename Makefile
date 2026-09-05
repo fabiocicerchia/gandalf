@@ -18,7 +18,7 @@ CODE ?= code
 
 ##@ General
 
-.PHONY: help
+.PHONY: help setup build install test lint format analyze run
 help: ## Show this help
 	awk 'BEGIN {FS = ":.*## "} \
 		/^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } \
@@ -99,3 +99,12 @@ ext-install: ext-package ## Build the VS Code extension and install it (override
 ext-publish: ext-package ## Publish the .vsix to both marketplaces
 	@cd "$(EXT_DIR)" && npm run publish -- --packagePath "$(notdir $(VSIX))"
 	@cd "$(EXT_DIR)" && npx --yes ovsx@1.1.1 publish "$(notdir $(VSIX))" -p "$$OVSX_PAT"
+
+build: ## Build sdist and wheel
+	python -m build
+
+format: ## Rewrite the sources to canonical form
+	ruff format .
+
+run: ## Run gandalf over the working tree
+	python -m gandalf --help
