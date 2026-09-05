@@ -45,6 +45,13 @@ ROW_GAP = 13
 PANEL_GAP = 34
 
 
+# Axis tick spacing switches at these magnitudes.
+HUNDRED = 100
+TEN = 10
+# A run this much slower than baseline is a regression worth flagging.
+REGRESSION_FACTOR = 1.15
+
+
 def _nice_max(v: float) -> float:
     """A round number at or above `v`, so the gridlines land somewhere sane."""
     if v <= 0:
@@ -59,9 +66,9 @@ def _nice_max(v: float) -> float:
 
 
 def _fmt(v: float) -> str:
-    if v >= 100:
+    if v >= HUNDRED:
         return f"{v:.0f}"
-    if v >= 10:
+    if v >= TEN:
         return f"{v:.1f}"
     return f"{v:.2f}".rstrip("0").rstrip(".")
 
@@ -94,13 +101,10 @@ def _row_svg(row: dict, ry: int, plot: int, ceiling: float, unit: str) -> list[s
             f'rx="4" class="bar {series}"><title>{escape(row["label"])} — '
             f"{series} {_fmt(value)} {escape(unit)}</title></rect>"
         )
-        out.append(
-            f'<text x="{GUTTER + w + 8:.1f}" y="{by + BAR - 3}" class="value">'
-            f"{_fmt(value)}</text>"
-        )
+        out.append(f'<text x="{GUTTER + w + 8:.1f}" y="{by + BAR - 3}" class="value">{_fmt(value)}</text>')
     if row.get("before") is not None and row["after"] > 0:
         factor = row["before"] / row["after"]
-        if factor >= 1.15:
+        if factor >= REGRESSION_FACTOR:
             out.append(
                 f'<text x="{WIDTH - 2}" y="{ry + _row_height(row) / 2 + 4:.1f}" '
                 f'class="delta" text-anchor="end">{factor:.1f}x</text>'
@@ -131,9 +135,7 @@ def _panel(rows: list[dict], unit: str, title: str, top: int) -> tuple[list[str]
     # Grid first, so every mark sits on top of it.
     for i in range(5):
         gx = GUTTER + plot * i / 4
-        out.append(
-            f'<line x1="{gx:.1f}" y1="{axis_top - 4}" x2="{gx:.1f}" y2="{axis_bottom}" class="grid"/>'
-        )
+        out.append(f'<line x1="{gx:.1f}" y1="{axis_top - 4}" x2="{gx:.1f}" y2="{axis_bottom}" class="grid"/>')
         out.append(
             f'<text x="{gx:.1f}" y="{axis_bottom + 14}" class="tick" text-anchor="middle">'
             f"{_fmt(ceiling * i / 4)}</text>"

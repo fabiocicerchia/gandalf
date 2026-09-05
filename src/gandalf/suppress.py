@@ -49,16 +49,14 @@ def fingerprint(gate: str, f: dict) -> str:
     fp_path, fp_rule, fp_message = findings.fingerprint_keys(f)
     key = f"{gate}|{fp_path}|{fp_rule}|{fp_message[:200]}"
     # nosemgrep: insecure-hash-algorithm-sha1 — content-dedup key, not security
-    return hashlib.sha1(
-        key.encode("utf-8", "replace"), usedforsecurity=False
-    ).hexdigest()
+    return hashlib.sha1(key.encode("utf-8", "replace"), usedforsecurity=False).hexdigest()
 
 
 class _Rule:
     """A parsed 'gate:rule:pathglob' suppression rule ('' = wildcard)."""
 
-    def __init__(self, spec: str):
-        parts = (spec.split(":", 2) + ["", "", ""])[:3]
+    def __init__(self, spec: str) -> None:
+        parts = ([*spec.split(":", 2), "", "", ""])[:3]
         self.gate, self.rule, self.path = (p.strip() for p in parts)
 
     def matches(self, gate: str, f: dict) -> bool:
@@ -78,9 +76,7 @@ class Suppressor:
     count of what was suppressed stays visible.
     """
 
-    def __init__(
-        self, rules: list[str] | None = None, baseline: set[str] | None = None
-    ):
+    def __init__(self, rules: list[str] | None = None, baseline: set[str] | None = None) -> None:
         self.rules = [_Rule(r) for r in (rules or []) if r.strip()]
         self.baseline = baseline or set()
 
@@ -159,7 +155,5 @@ def write_baseline(path: str, results: list[GateResult], generated_at: str) -> i
     """Snapshot every current finding's fingerprint so later runs mute them.
     Returns the count written."""
     fps = sorted({fingerprint(r.name, f) for r in results for f in r.findings})
-    Path(path).write_text(
-        json.dumps({"generated_at": generated_at, "fingerprints": fps}, indent=2)
-    )
+    Path(path).write_text(json.dumps({"generated_at": generated_at, "fingerprints": fps}, indent=2))
     return len(fps)

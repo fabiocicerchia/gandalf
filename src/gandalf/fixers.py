@@ -6,6 +6,11 @@ diffed either side of it instead — see `_tree_state`.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .base import Gate, GateContext
+
 import hashlib
 import subprocess
 
@@ -25,7 +30,7 @@ def _tree_state(workdir: str) -> dict[str, str]:
     """
     try:
         out = subprocess.run(  # nosec B603 B607 - fixed git argv, no shell
-            ["git", "diff", "--no-color", "--no-ext-diff"],
+            ["git", "diff", "--no-color", "--no-ext-diff"],  # noqa: S607 — resolved from PATH on purpose: the tool may be a host binary or a shim
             cwd=workdir,
             capture_output=True,
             text=True,
@@ -40,10 +45,7 @@ def _tree_state(workdir: str) -> dict[str, str]:
             body = chunks.setdefault(line.split(" b/", 1)[-1], [])
         elif body is not None:
             body.append(line)
-    return {
-        path: hashlib.sha256("\n".join(lines).encode()).hexdigest()
-        for path, lines in chunks.items()
-    }
+    return {path: hashlib.sha256("\n".join(lines).encode()).hexdigest() for path, lines in chunks.items()}
 
 
 def _touched(before: dict[str, str], after: dict[str, str]) -> list[str]:
@@ -58,7 +60,7 @@ def _files_note(paths: list[str], limit: int = 5) -> str:
     return f"{shown}, …+{len(paths) - limit} more" if len(paths) > limit else shown
 
 
-async def run_fixers(gates, ctx):
+async def run_fixers(gates: list[Gate], ctx: GateContext) -> list[tuple[str, bool, str]]:
     """Apply autofixes from gates that expose `async def fix(ctx)`. Sequential —
     fixers edit files (e.g. ruff --fix then ruff format on the same files), so
     order matters and concurrent writes would race. Returns [(name, changed, msg)].
@@ -73,7 +75,7 @@ async def run_fixers(gates, ctx):
             continue
         try:
             changed, msg = await fix(ctx)
-        except Exception as exc:  # noqa: BLE001 — a broken fixer must not sink the run
+        except Exception as exc:
             changed, msg = False, f"fix errored: {exc}"
         after = _tree_state(ctx.workdir)
         if touched := _touched(before, after):

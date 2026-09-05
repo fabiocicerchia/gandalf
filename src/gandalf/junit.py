@@ -27,9 +27,7 @@ def _testcase(r: GateResult) -> list[str]:
     body_lines += [fmt_finding(f) for f in r.findings]
     body = escape("\n".join(body_lines))
     if r.outcome == GateOutcome.FAIL:
-        lines.append(
-            f"    <failure message={quoteattr(r.summary or r.name)}>{body}</failure>"
-        )
+        lines.append(f"    <failure message={quoteattr(r.summary or r.name)}>{body}</failure>")
     elif r.outcome == GateOutcome.WARN and body:
         lines.append(f"    <system-out>{body}</system-out>")
     lines.append("  </testcase>")
@@ -47,10 +45,7 @@ def to_junit(results: list[GateResult], meta: dict | None = None) -> str:
     failures = sum(1 for r in results if r.outcome == GateOutcome.FAIL)
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
-        (
-            f'<testsuite name="gandalf" tests="{len(results)}" failures="{failures}" '
-            f'errors="0" skipped="0">'
-        ),
+        (f'<testsuite name="gandalf" tests="{len(results)}" failures="{failures}" errors="0" skipped="0">'),
     ]
     for r in results:
         lines += _testcase(r)

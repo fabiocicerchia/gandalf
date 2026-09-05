@@ -15,6 +15,7 @@ import json
 import os
 import shutil
 import tempfile
+from pathlib import Path
 
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.plugins import (
@@ -46,7 +47,7 @@ def _argv(workdir: str, outdir: str, have_host: bool) -> list[str]:
         "run",
         "--rm",
         "-v",
-        f"{os.path.abspath(workdir)}:/src",
+        f"{Path(workdir).resolve()}:/src",
         "-v",
         f"{outdir}:/out",
         "-w",
@@ -93,23 +94,19 @@ class KicsGate:
     async def run(self, ctx: GateContext) -> GateResult:
         have_host = shutil.which("kics") is not None
         if not have_host and not shutil.which("docker"):
-            return unavailable(
-                self.name, "kics unavailable (no host binary and no docker) — skipped"
-            )
+            return unavailable(self.name, "kics unavailable (no host binary and no docker) — skipped")
 
         outdir = tempfile.mkdtemp(prefix="gandalf-kics-")
         try:
-            rc, _out, _err = await run_tool(
-                _argv(ctx.workdir, outdir, have_host), ctx.workdir
-            )
+            rc, _out, _err = await run_tool(_argv(ctx.workdir, outdir, have_host), ctx.workdir)
             if (to := timeout_result(self.name, rc)) is not None:
                 return to
-            results = os.path.join(outdir, "results.json")
-            if not os.path.exists(results):
+            results = str(Path(outdir) / "results.json")
+            if not Path(results).exists():  # noqa: ASYNC240 — one stat, straight after a subprocess that took seconds — not worth a thread hop
                 return unavailable(self.name, "kics: no results produced — skipped")
             # Small local results read right after the subprocess completes —
             # not worth a thread hop.
-            with open(results, errors="replace") as fh:  # noqa: ASYNC230
+            with Path(results).open(errors="replace") as fh:  # noqa: ASYNC230 — a small local file, read once the subprocess has finished
                 data = json.load(fh)
         except (OSError, json.JSONDecodeError) as exc:
             return unavailable(self.name, f"kics: {exc}")

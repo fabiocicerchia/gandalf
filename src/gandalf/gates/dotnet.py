@@ -34,9 +34,7 @@ _LANGS = frozenset({"dotnet"})
 # `dotnet format` reports one line per fix it would make.
 _FORMAT_HIT = re.compile(r"^(?P<file>.+?)\((?P<line>\d+),(?P<col>\d+)\): (?P<msg>.+)$")
 # `dotnet list package --vulnerable` marks each hit with a leading '>'.
-_VULN_HIT = re.compile(
-    r"^\s*>\s+(?P<pkg>\S+)\s+(?P<req>\S+)\s+(?P<res>\S+)\s+(?P<sev>\S+)"
-)
+_VULN_HIT = re.compile(r"^\s*>\s+(?P<pkg>\S+)\s+(?P<req>\S+)\s+(?P<res>\S+)\s+(?P<sev>\S+)")
 
 
 class DotnetBuildGate(ToolchainGate):
@@ -72,9 +70,7 @@ class DotnetFormatGate(ToolchainGate):
     binary = "dotnet"
 
     async def check(self, ctx: GateContext, root: str) -> GateResult:
-        rc, out, err = await run_tool(
-            ["dotnet", "format", "--verify-no-changes", "--no-restore"], root
-        )
+        rc, out, err = await run_tool(["dotnet", "format", "--verify-no-changes", "--no-restore"], root)
         if (to := timeout_result(self.name, rc)) is not None:
             return to
         if rc == 0:
@@ -93,9 +89,7 @@ class DotnetFormatGate(ToolchainGate):
         if not findings:
             # No restore, no SDK for this project, an analyser that crashed: the
             # command failed without telling us anything about the code.
-            return unavailable(
-                self.name, f"dotnet format: did not run — {tail(combined, 2)}"
-            )
+            return unavailable(self.name, f"dotnet format: did not run — {tail(combined, 2)}")
         return counted(
             self.name,
             len(findings),
@@ -123,21 +117,15 @@ class DotnetAuditGate(ToolchainGate):
     binary = "dotnet"
 
     async def check(self, ctx: GateContext, root: str) -> GateResult:
-        rc, out, err = await run_tool(
-            ["dotnet", "list", "package", "--vulnerable", "--include-transitive"], root
-        )
+        rc, out, err = await run_tool(["dotnet", "list", "package", "--vulnerable", "--include-transitive"], root)
         if (to := timeout_result(self.name, rc)) is not None:
             return to
         combined = (out or "") + (err or "")
         hits = [m for m in (_VULN_HIT.match(ln) for ln in combined.splitlines()) if m]
         if not hits:
             if rc != 0:
-                return unavailable(
-                    self.name, f"dotnet audit: did not run — {tail(combined, 2)}"
-                )
-            return GateResult(
-                self.name, GateOutcome.PASS, 1.0, "dotnet audit: no vulnerable packages"
-            )
+                return unavailable(self.name, f"dotnet audit: did not run — {tail(combined, 2)}")
+            return GateResult(self.name, GateOutcome.PASS, 1.0, "dotnet audit: no vulnerable packages")
         n = len(hits)
         score = max(0.0, 1.0 - min(n, 10) / 10)
         return GateResult(

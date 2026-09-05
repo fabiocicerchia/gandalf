@@ -7,15 +7,15 @@ app package, so gandalf has zero cross-project dependency.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
 
 
-class GateOutcome(str, Enum):
+class GateOutcome(StrEnum):
     """The traffic light. A str enum so it serialises straight into the JSON
     report and the cache without a converter on either side."""
 
-    PASS = "pass"  # nosec B105 — enum value, not a password
+    PASS = "pass"  # noqa: S105 — an enum value, not a password
     WARN = "warn"
     FAIL = "fail"
 

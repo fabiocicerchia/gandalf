@@ -37,7 +37,4 @@ def record(path: str, commit: str, score: int, generated_at: str) -> None:
     previous_score() already skips lines it cannot parse.
     """
     with Path(path).open("a") as f:
-        f.write(
-            json.dumps({"commit": commit, "score": score, "generated_at": generated_at})
-            + "\n"
-        )
+        f.write(json.dumps({"commit": commit, "score": score, "generated_at": generated_at}) + "\n")

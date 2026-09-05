@@ -40,9 +40,7 @@ class GitleaksGate:
             findings = []
         n = len(findings)
         if n == 0:
-            return GateResult(
-                self.name, GateOutcome.PASS, 1.0, "gitleaks: no secrets found"
-            )
+            return GateResult(self.name, GateOutcome.PASS, 1.0, "gitleaks: no secrets found")
         return GateResult(
             self.name,
             GateOutcome.FAIL,

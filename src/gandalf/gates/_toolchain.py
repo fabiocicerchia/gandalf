@@ -88,11 +88,7 @@ def named(ctx: GateContext, *globs: str) -> list[str]:
     raw rglob walks straight into `dist/`, `site/` and everything else git
     ignores. Tracked-and-not-excluded is the same answer every other gate gets.
     """
-    return [
-        f
-        for f in scannable_files(ctx.workdir)
-        if any(fnmatch.fnmatch(f.rsplit("/", 1)[-1], g) for g in globs)
-    ]
+    return [f for f in scannable_files(ctx.workdir) if any(fnmatch.fnmatch(f.rsplit("/", 1)[-1], g) for g in globs)]
 
 
 def tail(text: str, lines: int = 5) -> str:
@@ -109,7 +105,7 @@ def nonblank(out: str | None) -> list[str]:
     return [ln for ln in (out or "").splitlines() if ln.strip()]
 
 
-def parsed(out: str, empty: str = "{}"):
+def parsed(out: str, empty: str = "{}") -> dict | list | None:
     """A tool's JSON stdout, or None when it did not emit JSON at all.
 
     None rather than an empty document, because "the scanner printed something
@@ -122,7 +118,7 @@ def parsed(out: str, empty: str = "{}"):
         return None
 
 
-def scored(
+def scored(  # noqa: PLR0913 — the parameters are the record this writes; a wrapper object here would only rename them
     gate: str,
     n: int,
     summary: str,
@@ -138,7 +134,7 @@ def scored(
     return GateResult(gate, outcome, score, summary, findings or [])
 
 
-def counted(
+def counted(  # noqa: PLR0913 — the parameters are the record this writes; a wrapper object here would only rename them
     gate: str,
     n: int,
     label: str,
@@ -154,7 +150,7 @@ def counted(
     return scored(gate, n, f"{label}: {n} {noun}", findings, fail=n > warn_max)
 
 
-async def exit_code(
+async def exit_code(  # noqa: PLR0913 — the parameters are the record this writes; a wrapper object here would only rename them
     gate: str,
     argv: list[str],
     cwd: str,
@@ -186,9 +182,7 @@ async def exit_code(
     )
 
 
-async def _check_one(
-    rel: str, argv: list[str], workdir: str, limit: asyncio.Semaphore
-) -> tuple[str, int, str]:
+async def _check_one(rel: str, argv: list[str], workdir: str, limit: asyncio.Semaphore) -> tuple[str, int, str]:
     """Run the per-file checker over one file → (path, exit code, output)."""
     async with limit:
         rc, out, err = await run_tool([*argv, rel], workdir)
@@ -214,19 +208,12 @@ async def per_file(
         return GateResult(gate, GateOutcome.PASS, 1.0, f"{label}: no files in scope")
     capped = files[:MAX_SYNTAX_FILES]
     limit = asyncio.Semaphore(_PARALLEL)
-    results = await asyncio.gather(
-        *(_check_one(rel, argv, ctx.workdir, limit) for rel in capped)
-    )
+    results = await asyncio.gather(*(_check_one(rel, argv, ctx.workdir, limit) for rel in capped))
     broken = [(rel, txt) for rel, rc, txt in results if rc not in (0, _TIMEOUT_RC)]
-    scanned = f"{len(capped)} file(s)" + (
-        f" (of {len(files)}, capped)" if len(files) > len(capped) else ""
-    )
+    scanned = f"{len(capped)} file(s)" + (f" (of {len(files)}, capped)" if len(files) > len(capped) else "")
     if not broken:
         return GateResult(gate, GateOutcome.PASS, 1.0, f"{label}: {scanned} parse")
-    findings = [
-        {"file": rel, "message": tail(txt, 2), "severity": "error"}
-        for rel, txt in broken[:20]
-    ]
+    findings = [{"file": rel, "message": tail(txt, 2), "severity": "error"} for rel, txt in broken[:20]]
     return GateResult(
         gate,
         GateOutcome.FAIL,

@@ -30,6 +30,7 @@ import json
 import os
 import shutil
 import tempfile
+from pathlib import Path
 
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.gates._toolchain import scored
@@ -40,9 +41,7 @@ from gandalf.plugins import (
 )
 from gandalf.scope import _classify
 
-_IMAGE = os.environ.get(
-    "GANDALF_CODEQL_IMAGE", "mcr.microsoft.com/cstsectools/codeql-container:latest"
-)
+_IMAGE = os.environ.get("GANDALF_CODEQL_IMAGE", "mcr.microsoft.com/cstsectools/codeql-container:latest")
 _TIMEOUT = int(os.environ.get("GANDALF_CODEQL_TIMEOUT", "600"))
 
 # gandalf language tag → CodeQL language id. node and ts both map to "javascript"
@@ -55,6 +54,10 @@ _LANG_MAP = {
 }
 
 
+# More than a handful of alerts is a failure, not a warning.
+MAX_ALERTS = 5
+
+
 def _codeql_langs(changed_files: list[str] | None) -> list[str]:
     """The CodeQL language ids to analyze.
 
@@ -63,9 +66,7 @@ def _codeql_langs(changed_files: list[str] | None) -> list[str]:
     empty DB for a language with no sources.
     """
     detected = _classify(changed_files) if changed_files else None
-    return sorted(
-        {_LANG_MAP[t] for t in (detected or set(_LANG_MAP)) if t in _LANG_MAP}
-    )
+    return sorted({_LANG_MAP[t] for t in (detected or set(_LANG_MAP)) if t in _LANG_MAP})
 
 
 class CodeqlGate:
@@ -76,9 +77,7 @@ class CodeqlGate:
     async def run(self, ctx: GateContext) -> GateResult:
         have_host = shutil.which("codeql") is not None
         if not have_host and not shutil.which("docker"):
-            return unavailable(
-                self.name, "codeql unavailable (no host binary and no docker) — skipped"
-            )
+            return unavailable(self.name, "codeql unavailable (no host binary and no docker) — skipped")
 
         cq_langs = _codeql_langs(ctx.changed_files)
         if not cq_langs:
@@ -91,9 +90,7 @@ class CodeqlGate:
 
         work = tempfile.mkdtemp(prefix="gandalf-codeql-")
         try:
-            ran, errors, warnings, findings = await self._collect(
-                ctx, work, cq_langs, have_host
-            )
+            ran, errors, warnings, findings = await self._collect(ctx, work, cq_langs, have_host)
         finally:
             shutil.rmtree(work, ignore_errors=True)
 
@@ -106,15 +103,13 @@ class CodeqlGate:
         n = errors + warnings
         langs_txt = "+".join(ran)
         if n == 0:
-            return GateResult(
-                self.name, GateOutcome.PASS, 1.0, f"codeql ({langs_txt}): clean"
-            )
+            return GateResult(self.name, GateOutcome.PASS, 1.0, f"codeql ({langs_txt}): clean")
         return scored(
             self.name,
             n,
             f"codeql ({langs_txt}): {errors} error, {warnings} warning finding(s)",
             findings[:100],
-            fail=errors > 0 or n > 5,
+            fail=errors > 0 or n > MAX_ALERTS,
         )
 
     async def _collect(
@@ -126,13 +121,13 @@ class CodeqlGate:
         findings: list[dict] = []
         errors = warnings = 0
         for lang in cq_langs:
-            sarif = os.path.join(work, f"{lang}.sarif")
+            sarif = str(Path(work) / f"{lang}.sarif")
             if not await self._analyze(ctx, work, lang, sarif, have_host):
                 continue
             try:
                 # Small local SARIF read right after the subprocess completes —
                 # not worth a thread hop.
-                with open(sarif, errors="replace") as fh:  # noqa: ASYNC230
+                with Path(sarif).open(errors="replace") as fh:  # noqa: ASYNC230 — a small local file, read once the subprocess has finished
                     data = json.load(fh)
             except (OSError, json.JSONDecodeError):
                 continue
@@ -143,12 +138,10 @@ class CodeqlGate:
             findings.extend(f)
         return ran, errors, warnings, findings
 
-    async def _analyze(
-        self, ctx: GateContext, work: str, lang: str, sarif: str, have_host: bool
-    ) -> bool:
+    async def _analyze(self, ctx: GateContext, work: str, lang: str, sarif: str, have_host: bool) -> bool:
         """Create a DB and run the `<lang>-queries` code-scanning pack, writing SARIF
         to `sarif`. Returns True iff both steps succeeded (SARIF should now exist)."""
-        db = os.path.join(work, f"db-{lang}")
+        db = str(Path(work) / f"db-{lang}")
         pack = f"codeql/{lang}-queries"
         if have_host:
             create = [
@@ -189,9 +182,9 @@ class CodeqlGate:
                 "--network",
                 "host",
                 "-v",
-                f"{os.path.abspath(ctx.workdir)}:/src",
+                f"{Path(ctx.workdir).resolve()}:/src",  # noqa: ASYNC240 — one stat, straight after a subprocess that took seconds — not worth a thread hop
                 "-v",
-                f"{os.path.abspath(work)}:/work",
+                f"{Path(work).resolve()}:/work",  # noqa: ASYNC240 — one stat, straight after a subprocess that took seconds — not worth a thread hop
                 "-w",
                 "/src",
                 _IMAGE,
@@ -230,7 +223,7 @@ class CodeqlGate:
         rc, _o, _e = await run_tool(analyze, ctx.workdir, _TIMEOUT)
         if rc != 0 or timeout_result(self.name, rc) is not None:
             return False
-        return os.path.exists(sarif)
+        return Path(sarif).exists()  # noqa: ASYNC240 — one stat, straight after a subprocess that took seconds — not worth a thread hop
 
 
 def _parse_sarif(data: dict) -> tuple[int, int, list[dict]]:

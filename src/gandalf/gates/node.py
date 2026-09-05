@@ -22,6 +22,13 @@ from gandalf.plugins import (
     unavailable,
 )
 
+# ESLint reports severity 2 for an error and 1 for a warning.
+ESLINT_ERROR = 2
+# A source range is a [start, end] pair.
+RANGE_PAIR = 2
+# More than this many lint issues fails the gate.
+MAX_ISSUES = 10
+
 
 def _no_pkg(ctx: GateContext) -> bool:
     return not (Path(ctx.workdir) / "package.json").exists()
@@ -36,7 +43,7 @@ def _item(m: dict, rel: str) -> dict:
         "column": m.get("column") or 0,
         "rule_id": m.get("ruleId") or "eslint",
         "message": m.get("message", ""),
-        "severity": "error" if m.get("severity") == 2 else "warning",
+        "severity": "error" if m.get("severity") == ESLINT_ERROR else "warning",
     }
 
 
@@ -44,7 +51,7 @@ def _fix_range(m: dict) -> list | None:
     """The character-offset span of the rule's own autofix, when it has one."""
     fix = m.get("fix") if isinstance(m.get("fix"), dict) else {}
     rng = fix.get("range")
-    return rng if isinstance(rng, list) and len(rng) == 2 else None
+    return rng if isinstance(rng, list) and len(rng) == RANGE_PAIR else None
 
 
 def _messages(results: list, workdir: str) -> list[dict]:
@@ -97,21 +104,17 @@ class EslintGate:
     blocking = False
     langs = frozenset({"node", "ts"})
 
-    async def run(self, ctx: GateContext) -> GateResult:
+    async def run(self, ctx: GateContext) -> GateResult:  # noqa: PLR0911 — one early return per failure mode: fail fast (FC-GEN-019) reads better than one exit
         if _no_pkg(ctx):
             return GateResult(self.name, GateOutcome.PASS, 1.0, "node: no package.json")
         if tool_missing("npx"):
             return unavailable(self.name, "npx/node not installed — skipped")
-        rc, out, _err = await run_tool(
-            ["npx", "--no-install", "eslint", "-f", "json", "."], ctx.workdir
-        )
+        rc, out, _err = await run_tool(["npx", "--no-install", "eslint", "-f", "json", "."], ctx.workdir)
         if (to := timeout_result(self.name, rc)) is not None:
             return to
         if not (out or "").strip():
             # npx --no-install printed nothing → eslint isn't installed in the project.
-            return unavailable(
-                self.name, "eslint: not installed in project (npm i eslint) — skipped"
-            )
+            return unavailable(self.name, "eslint: not installed in project (npm i eslint) — skipped")
         results = parsed(out, "")
         if results is None:
             return unavailable(self.name, "eslint: not configured in project — skipped")
@@ -149,9 +152,7 @@ class TscGate:
             return GateResult(self.name, GateOutcome.PASS, 1.0, "tsc: no tsconfig.json")
         if tool_missing("npx"):
             return unavailable(self.name, "npx/node not installed — skipped")
-        rc, out, err = await run_tool(
-            ["npx", "--no-install", "tsc", "--noEmit"], ctx.workdir
-        )
+        rc, out, err = await run_tool(["npx", "--no-install", "tsc", "--noEmit"], ctx.workdir)
         if (to := timeout_result(self.name, rc)) is not None:
             return to
         combined = merged(out, err)
@@ -170,7 +171,7 @@ class TscGate:
             n,
             f"tsc: {n} type error(s)",
             [{"errors": tail}],
-            fail=n > 10,
+            fail=n > MAX_ISSUES,
             cap=20,
         )
 
@@ -198,6 +199,4 @@ class NodeTestGate:
         if rc == 0:
             return GateResult(self.name, GateOutcome.PASS, 1.0, "npm test: passed")
         tail = "\n".join(((out or "") + (err or "")).strip().splitlines()[-5:])
-        return GateResult(
-            self.name, GateOutcome.FAIL, 0.0, f"npm test: failed — {tail}"
-        )
+        return GateResult(self.name, GateOutcome.FAIL, 0.0, f"npm test: failed — {tail}")

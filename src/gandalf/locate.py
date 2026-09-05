@@ -9,14 +9,12 @@ exist is worse than one left unanchored.
 
 from __future__ import annotations
 
-import os
 import re
+from pathlib import Path
 
 # `src/a.py:12:` or `src/a.py:12:5:` inside a message — the gates that hand back
 # a raw tool line (mypy, tsc, codeql) carry their location nowhere else.
-_TEXT_LOCATION = re.compile(
-    r"(?:^|[\s(\[\"'])([\w.@+-]+(?:[/\\][\w.@+-]+)*\.\w{1,12}):(\d+)(?::(\d+))?"
-)
+_TEXT_LOCATION = re.compile(r"(?:^|[\s(\[\"'])([\w.@+-]+(?:[/\\][\w.@+-]+)*\.\w{1,12}):(\d+)(?::(\d+))?")
 # A bare path with no line — the format gate's "Would reformat: src/x.py". Needs
 # a separator to match, so an ordinary word with a dot in it is not a candidate.
 _TEXT_PATH = re.compile(r"[\w.@+-]+(?:[/\\][\w.@+-]+)+\.\w{1,12}")
@@ -59,12 +57,10 @@ def _on_disk(candidate: str, root: str) -> bool:
     """
     if not root:
         return True
-    return os.path.isfile(os.path.join(root, relpath(candidate, root)))
+    return (Path(root) / relpath(candidate, root)).is_file()
 
 
-def place_from_prose(
-    p: str, ln: int, col: int, text: str, root: str
-) -> tuple[str, int, int, str]:
+def place_from_prose(p: str, ln: int, col: int, text: str, root: str) -> tuple[str, int, int, str]:
     """Recover `path:line:col` from a message that carries it in prose, and take
     the recovered prefix back off the message.
 

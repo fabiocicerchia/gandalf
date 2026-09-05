@@ -5,7 +5,6 @@ All available via the gandalf-tools image, so no host installs needed.
 from __future__ import annotations
 
 import json
-import os
 import tempfile
 from pathlib import Path
 
@@ -16,6 +15,10 @@ from gandalf.plugins import missing_result, run_tool, timeout_result, tool_missi
 # What codespell must not read. One list, so `--fix` corrects exactly the files
 # the gate scored — a fixer with a wider reach would rewrite vendored trees.
 _CODESPELL_SKIP = "*.lock,*.min.js,.git,.venv,node_modules,llama.cpp,reports,*.svg"
+
+
+# More than a few findings fails the gate.
+MAX_FINDINGS = 3
 
 
 def _yamllint_config(workdir: str) -> list[str]:
@@ -44,12 +47,8 @@ class ShellcheckGate:
             return m
         scripts = named(ctx, "*.sh", "*.bash")
         if not scripts:
-            return GateResult(
-                self.name, GateOutcome.PASS, 1.0, "shellcheck: no shell scripts"
-            )
-        rc, out, _ = await run_tool(
-            ["shellcheck", "--format=json", *scripts], ctx.workdir
-        )
+            return GateResult(self.name, GateOutcome.PASS, 1.0, "shellcheck: no shell scripts")
+        rc, out, _ = await run_tool(["shellcheck", "--format=json", *scripts], ctx.workdir)
         if (to := timeout_result(self.name, rc)) is not None:
             return to
         try:
@@ -89,20 +88,16 @@ class ShellcheckGate:
         scripts = named(ctx, "*.sh", "*.bash")
         if not scripts:
             return (False, "shellcheck: no shell scripts")
-        _rc, out, _err = await run_tool(
-            ["shellcheck", "--format=diff", *scripts], ctx.workdir
-        )
+        _rc, out, _err = await run_tool(["shellcheck", "--format=diff", *scripts], ctx.workdir)
         if "@@" not in (out or ""):
             return (False, "shellcheck: nothing it can fix automatically")
-        with tempfile.NamedTemporaryFile(
-            "w", suffix=".patch", delete=False, encoding="utf-8"
-        ) as fh:
+        with tempfile.NamedTemporaryFile("w", suffix=".patch", delete=False, encoding="utf-8") as fh:
             fh.write(out if out.endswith("\n") else out + "\n")
             patch = fh.name
         try:
             rc, _o, err = await run_tool(["git", "apply", patch], ctx.workdir)
         finally:
-            os.unlink(patch)
+            Path(patch).unlink()  # noqa: ASYNC240 — one stat, straight after a subprocess that took seconds — not worth a thread hop
         if rc != 0:
             return (False, f"shellcheck: patch rejected — {(err or '').strip()[:120]}")
         return (True, "shellcheck: applied its suggested fixes")
@@ -115,9 +110,7 @@ class ActionlintGate:
     async def run(self, ctx: GateContext) -> GateResult:
         wf = Path(ctx.workdir) / ".github" / "workflows"
         if not wf.is_dir() or not any(wf.glob("*.y*ml")):
-            return GateResult(
-                self.name, GateOutcome.PASS, 1.0, "actionlint: no workflows"
-            )
+            return GateResult(self.name, GateOutcome.PASS, 1.0, "actionlint: no workflows")
         if (m := missing_result(self.name, "actionlint")) is not None:
             return m
         rc, out, _ = await run_tool(["actionlint", "-oneline"], ctx.workdir)
@@ -126,15 +119,13 @@ class ActionlintGate:
         issues = nonblank(out)
         n = len(issues)
         if n == 0:
-            return GateResult(
-                self.name, GateOutcome.PASS, 1.0, "actionlint: workflows clean"
-            )
+            return GateResult(self.name, GateOutcome.PASS, 1.0, "actionlint: workflows clean")
         return scored(
             self.name,
             n,
             f"actionlint: {n} issue(s)",
             [{"issue": i} for i in issues],
-            fail=n > 3,
+            fail=n > MAX_FINDINGS,
         )
 
 
@@ -148,9 +139,7 @@ class YamllintGate:
             return m
         yamls = named(ctx, "*.yml", "*.yaml")
         if not yamls:
-            return GateResult(
-                self.name, GateOutcome.PASS, 1.0, "yamllint: no YAML files"
-            )
+            return GateResult(self.name, GateOutcome.PASS, 1.0, "yamllint: no YAML files")
         rc, out, _ = await run_tool(
             ["yamllint", "-f", "parsable", *_yamllint_config(ctx.workdir), *yamls],
             ctx.workdir,
@@ -183,9 +172,7 @@ class CodespellGate:
     async def run(self, ctx: GateContext) -> GateResult:
         if (m := missing_result(self.name, "codespell")) is not None:
             return m
-        rc, out, _ = await run_tool(
-            ["codespell", "--skip", _CODESPELL_SKIP, *_spellable(ctx)], ctx.workdir
-        )
+        rc, out, _ = await run_tool(["codespell", "--skip", _CODESPELL_SKIP, *_spellable(ctx)], ctx.workdir)
         if (to := timeout_result(self.name, rc)) is not None:
             return to
         typos = [ln for ln in (out or "").splitlines() if "==>" in ln]
@@ -223,7 +210,5 @@ class CodespellGate:
             return (False, "codespell: did not run")
         # Deduped: codespell reports each correction on both streams, and
         # run_tool captures them separately, so a plain count doubles.
-        fixed = {
-            ln.strip() for ln in ((out or "") + (err or "")).splitlines() if "==>" in ln
-        }
+        fixed = {ln.strip() for ln in ((out or "") + (err or "")).splitlines() if "==>" in ln}
         return (bool(fixed), f"codespell: {len(fixed)} typo(s) corrected")

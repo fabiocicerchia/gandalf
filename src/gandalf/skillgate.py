@@ -93,7 +93,7 @@ def _alias(item: dict, *keys: str) -> str:
     return ""
 
 
-def _normalize_findings(raw) -> list[dict]:
+def _normalize_findings(raw: object) -> list[dict]:
     """Coerce the model's findings into dicts whose keys report.fmt_finding
     already understands (``file`` / ``finding`` / ``description``)."""
     findings: list[dict] = []
@@ -133,7 +133,7 @@ class SkillGate:
     unit = "issue"  # what a finding is called in the summary line
 
     async def run(self, ctx: GateContext) -> GateResult:
-        from gandalf import llm
+        from gandalf import llm  # noqa: PLC0415 — local import: importing at module scope closes a cycle
 
         rubric = _rubric(self.skills)
         if not rubric:
@@ -151,21 +151,15 @@ class SkillGate:
         if refusal := self._nothing_to_judge(title, body, diff, files):
             return refusal
 
-        prompt = self._prompt(rubric, title, body, diff, files, ctx)
+        prompt = self._prompt(rubric, title, body, diff=diff, files=files, ctx=ctx)
         try:
-            text = await asyncio.to_thread(
-                llm.chat, [{"role": "user", "content": prompt}], temperature=0.0
-            )
+            text = await asyncio.to_thread(llm.chat, [{"role": "user", "content": prompt}], temperature=0.0)
             data = parse_json(text)
-        except Exception as exc:  # noqa: BLE001 — never crash or false-pass the run
-            return unavailable(
-                self.name, f"{self.name}: judge unavailable ({str(exc)[:70]}) — skipped"
-            )
+        except Exception as exc:
+            return unavailable(self.name, f"{self.name}: judge unavailable ({str(exc)[:70]}) — skipped")
         return self._verdict(data)
 
-    def _nothing_to_judge(
-        self, title: str, body: str, diff: str, files: str
-    ) -> GateResult | None:
+    def _nothing_to_judge(self, title: str, body: str, diff: str, files: str) -> GateResult | None:
         """The gate's own refusals, before a token is spent: no plan when the
         skill needs one, or nothing in scope at all."""
         if self.needs_request and not (title or body):
@@ -174,9 +168,7 @@ class SkillGate:
                 f"{self.name}: no plan to judge — pass --title/--body describing the intent",
             )
         if not (diff or files or title or body):
-            return unavailable(
-                self.name, f"{self.name}: nothing in scope to judge — skipped"
-            )
+            return unavailable(self.name, f"{self.name}: nothing in scope to judge — skipped")
         return None
 
     def _verdict(self, data: dict) -> GateResult:
@@ -193,25 +185,22 @@ class SkillGate:
 
         outcome = GateOutcome.PASS if score >= self.pass_threshold else GateOutcome.WARN
         n = len(findings)
-        summary = f"{pct}/100" + (
-            f" · {n} {self.unit}{'s' if n != 1 else ''}" if n else " · clean"
-        )
+        summary = f"{pct}/100" + (f" · {n} {self.unit}{'s' if n != 1 else ''}" if n else " · clean")
         if judge_summary:
             findings = [*findings, {"judge_summary": judge_summary}]
         return GateResult(self.name, outcome, score, summary, findings)
 
-    def _prompt(
+    def _prompt(  # noqa: PLR0913 — these are the fields of the record it writes; a wrapper object would only rename them
         self,
         rubric: str,
         title: str,
         body: str,
+        *,
         diff: str,
         files: str,
         ctx: GateContext,
     ) -> str:
-        diff_trunc = diff[:_DIFF_LIMIT] + (
-            "\n…[diff truncated]" if len(diff) > _DIFF_LIMIT else ""
-        )
+        diff_trunc = diff[:_DIFF_LIMIT] + ("\n…[diff truncated]" if len(diff) > _DIFF_LIMIT else "")
         langs = ", ".join((ctx.meta or {}).get("languages") or []) or "unknown"
         request = (
             f"Title: {title}\n\n{body}".strip()

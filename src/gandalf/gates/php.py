@@ -56,9 +56,7 @@ class PhpSyntaxGate(ToolchainGate):
     binary = "php"
 
     async def check(self, ctx: GateContext, root: str) -> GateResult:
-        return await per_file(
-            self.name, ["php", "-l", "-n"], ctx, (".php",), label="php -l"
-        )
+        return await per_file(self.name, ["php", "-l", "-n"], ctx, (".php",), label="php -l")
 
 
 def _phpcs_findings(data: dict) -> list[dict]:
@@ -96,16 +94,12 @@ class PhpcsGate(ToolchainGate):
         phpcs = _vendored(root, "phpcs")
         if phpcs is None:
             return self.missing("phpcs")
-        rc, out, err = await run_tool(
-            [phpcs, "--report=json", "--no-colors", *self._standard(root), "."], root
-        )
+        rc, out, err = await run_tool([phpcs, "--report=json", "--no-colors", *self._standard(root), "."], root)
         if (to := timeout_result(self.name, rc)) is not None:
             return to
         data = parsed(out)
         if data is None:
-            return unavailable(
-                self.name, f"phpcs: did not run — {tail(merged(out, err), 2)}"
-            )
+            return unavailable(self.name, f"phpcs: did not run — {tail(merged(out, err), 2)}")
         findings = _phpcs_findings(data)
         totals = data.get("totals") or {}
         n = totals.get("errors", 0) + totals.get("warnings", 0) or len(findings)
@@ -135,9 +129,7 @@ class ComposerAuditGate(ToolchainGate):
     binary = "composer"
 
     async def check(self, ctx: GateContext, root: str) -> GateResult:
-        rc, out, err = await run_tool(
-            ["composer", "audit", "--format=json", "--no-interaction"], root
-        )
+        rc, out, err = await run_tool(["composer", "audit", "--format=json", "--no-interaction"], root)
         if (to := timeout_result(self.name, rc)) is not None:
             return to
         try:
@@ -157,9 +149,7 @@ class ComposerAuditGate(ToolchainGate):
             for a in items
         ]
         if not advisories:
-            return GateResult(
-                self.name, GateOutcome.PASS, 1.0, "composer audit: no known advisories"
-            )
+            return GateResult(self.name, GateOutcome.PASS, 1.0, "composer audit: no known advisories")
         n = len(advisories)
         score = max(0.0, 1.0 - min(n, 10) / 10)
         return GateResult(
@@ -181,12 +171,8 @@ class PhpunitGate(ToolchainGate):
         phpunit = _vendored(root, "phpunit")
         if phpunit is None:
             return self.missing("phpunit")
-        if not any(
-            (Path(root) / rel).is_file() for rel in ("phpunit.xml", "phpunit.xml.dist")
-        ):
-            return GateResult(
-                self.name, GateOutcome.PASS, 1.0, "php: no phpunit configuration"
-            )
+        if not any((Path(root) / rel).is_file() for rel in ("phpunit.xml", "phpunit.xml.dist")):
+            return GateResult(self.name, GateOutcome.PASS, 1.0, "php: no phpunit configuration")
         return await exit_code(
             self.name,
             [phpunit, "--no-coverage", "--colors=never"],

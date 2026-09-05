@@ -25,6 +25,4 @@ class QualityGateReviewGate:
     category = "Best practices"
 
     async def run(self, ctx: GateContext) -> GateResult:
-        return await skills.judge(
-            ctx, skill="quality-gate-review", gate_name=self.name, task=_TASK
-        )
+        return await skills.judge(ctx, skill="quality-gate-review", gate_name=self.name, task=_TASK)
