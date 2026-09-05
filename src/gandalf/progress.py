@@ -22,22 +22,18 @@ class Progress:
     collide with it.
     """
 
-    def __init__(self, total: int):
+    def __init__(self, total: int) -> None:
         self.total = total
         self.i = 0
         self.label = ""
         # Debug logging writes multi-line to stderr; a single-line progress bar
         # would collide with it, so step aside when --debug is on.
-        self.on = (
-            os.environ.get("GANDALF_PROGRESS") == "1" or sys.stderr.isatty()
-        ) and not debug.enabled()
+        self.on = (os.environ.get("GANDALF_PROGRESS") == "1" or sys.stderr.isatty()) and not debug.enabled()
 
     def _draw(self, extra: str = "") -> None:
         if self.on:
             # \r + clear-to-end keeps everything on one in-place line.
-            sys.stderr.write(
-                f"\r\033[K\033[36m[{self.i}/{self.total}]\033[0m {self.label}{extra}"
-            )
+            sys.stderr.write(f"\r\033[K\033[36m[{self.i}/{self.total}]\033[0m {self.label}{extra}")
             sys.stderr.flush()
 
     def stage(self, label: str) -> None:

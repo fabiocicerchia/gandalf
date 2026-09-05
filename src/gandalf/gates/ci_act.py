@@ -20,9 +20,7 @@ from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.plugins import communicate, unavailable
 
 _EVENT = os.environ.get("GANDALF_ACT_EVENT", "pull_request")
-_PLATFORM = os.environ.get(
-    "GANDALF_ACT_PLATFORM", "ubuntu-latest=catthehacker/ubuntu:act-latest"
-)
+_PLATFORM = os.environ.get("GANDALF_ACT_PLATFORM", "ubuntu-latest=catthehacker/ubuntu:act-latest")
 _TIMEOUT = int(os.environ.get("GANDALF_ACT_TIMEOUT", "900"))
 _BINARY = os.environ.get("GANDALF_ACT_BINARY", "act")
 
@@ -31,23 +29,15 @@ class ActGate:
     name = "ci_act"
     blocking = False
 
-    async def run(self, ctx: GateContext) -> GateResult:
+    async def run(self, ctx: GateContext) -> GateResult:  # noqa: PLR0911 — one early return per failure mode: fail fast (FC-GEN-019) reads better than one exit
         if os.environ.get("GANDALF_ACT", "1") == "0":
-            return GateResult(
-                self.name, GateOutcome.PASS, 1.0, "act gate disabled (GANDALF_ACT=0)"
-            )
+            return GateResult(self.name, GateOutcome.PASS, 1.0, "act gate disabled (GANDALF_ACT=0)")
         wf_dir = Path(ctx.workdir) / ".github" / "workflows"
-        workflows = (
-            (list(wf_dir.glob("*.yml")) + list(wf_dir.glob("*.yaml")))
-            if wf_dir.is_dir()
-            else []
-        )
+        workflows = (list(wf_dir.glob("*.yml")) + list(wf_dir.glob("*.yaml"))) if wf_dir.is_dir() else []
         if not workflows:
             return GateResult(self.name, GateOutcome.PASS, 1.0, "no workflows to run")
         if shutil.which(_BINARY) is None:
-            return unavailable(
-                self.name, f"'{_BINARY}' not found; CI not verified locally"
-            )
+            return unavailable(self.name, f"'{_BINARY}' not found; CI not verified locally")
         if shutil.which("docker") is None:
             return unavailable(
                 self.name,
@@ -63,14 +53,10 @@ class ActGate:
             )
             streams = await communicate(proc, _TIMEOUT)
             if streams is None:
-                return GateResult(
-                    self.name, GateOutcome.FAIL, 0.0, f"act timed out after {_TIMEOUT}s"
-                )
+                return GateResult(self.name, GateOutcome.FAIL, 0.0, f"act timed out after {_TIMEOUT}s")
             out_b, _ = streams
-        except Exception as exc:  # noqa: BLE001
-            return GateResult(
-                self.name, GateOutcome.WARN, 0.5, f"act failed to launch: {exc}"
-            )
+        except Exception as exc:
+            return GateResult(self.name, GateOutcome.WARN, 0.5, f"act failed to launch: {exc}")
         out = (out_b or b"").decode(errors="replace")
         tail = "\n".join(out.strip().splitlines()[-8:])
         if proc.returncode == 0:

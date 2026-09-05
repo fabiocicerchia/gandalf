@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import re
 import subprocess
+from collections.abc import Iterable
+from dataclasses import dataclass
 from fnmatch import translate
 from functools import lru_cache
 from pathlib import Path
@@ -24,7 +26,7 @@ def tracked_files(workdir: str) -> tuple[str, ...]:
     llama.cpp checkout) aren't dragged in and don't blow the per-gate timeout."""
     try:
         out = subprocess.run(  # nosec B603 B607 - fixed git argv, no shell
-            ["git", "ls-files", "-z"],
+            ["git", "ls-files", "-z"],  # noqa: S607 — resolved from PATH on purpose: the tool may be a host binary or a shim
             cwd=workdir,
             capture_output=True,
             text=True,
@@ -40,16 +42,25 @@ def tracked_files(workdir: str) -> tuple[str, ...]:
 # repos, so nothing repo-specific is hardcoded.
 _DEFAULT_IGNORES = ("reports", "node_modules", "llama.cpp", ".venv", ".git")
 
+
 # Set once from --exclude before any gate runs (see __main__.main), so a caller
 # that knows what to skip — an editor with its own excluded folders, a CI job —
 # can say so without writing a file into the repo.
-_EXTRA_IGNORES: tuple[str, ...] = ()
+@dataclass
+class _Extra:
+    """The --exclude patterns for this process. An object rather than a
+    module-level name so the setter mutates state instead of rebinding
+    through `global`."""
+
+    patterns: tuple[str, ...] = ()
 
 
-def set_extra_ignores(patterns) -> None:
+_extra = _Extra()
+
+
+def set_extra_ignores(patterns: Iterable[str] | None) -> None:
     """Extend the ignore list for this process. Clears the caches built from it."""
-    global _EXTRA_IGNORES
-    _EXTRA_IGNORES = tuple(p.strip() for p in (patterns or []) if p and p.strip())
+    _extra.patterns = tuple(p.strip() for p in (patterns or []) if p and p.strip())
     ignore_patterns.cache_clear()
     scannable_files.cache_clear()
     _compiled_ignores.cache_clear()
@@ -69,17 +80,19 @@ def ignore_patterns(workdir: str) -> tuple[str, ...]:
             s = line.strip()
             if s and not s.startswith("#"):
                 pats.append(s)
-    pats.extend(_EXTRA_IGNORES)
+    pats.extend(_extra.patterns)
     return tuple(dict.fromkeys(pats))  # de-dup, order preserved
 
 
-def _alternation(pats: list[str]):
+def _alternation(pats: list[str]) -> re.Pattern[str] | None:
     """One regex matching any of the globs, or None when there are none."""
     return re.compile("|".join(f"(?:{translate(g)})" for g in pats)) if pats else None
 
 
 @lru_cache(maxsize=16)
-def _compiled_ignores(patterns: tuple[str, ...]):
+def _compiled_ignores(
+    patterns: tuple[str, ...],
+) -> tuple[set[str], tuple[str, ...], re.Pattern[str] | None, re.Pattern[str] | None]:
     """Sort the patterns into the cheapest test each one allows.
 
     Naively fnmatching every pattern against every path costs ~900ms on a 25k
@@ -150,18 +163,14 @@ def scannable_files(workdir: str) -> tuple[str, ...]:
     return tuple(f for f in tracked_files(workdir) if not is_ignored(f, pats))
 
 
-def _changed_in_scope(
-    ctx: GateContext, pats: tuple[str, ...], py_only: bool
-) -> list[str]:
+def _changed_in_scope(ctx: GateContext, pats: tuple[str, ...], py_only: bool) -> list[str]:
     """The change's own files that still exist and are not ignored. Deletions
     and non-existent paths are dropped."""
     root = Path(ctx.workdir)
     return [
         rel
         for rel in ctx.changed_files or []
-        if (not py_only or rel.endswith(".py"))
-        and not is_ignored(rel, pats)
-        and (root / rel).is_file()
+        if (not py_only or rel.endswith(".py")) and not is_ignored(rel, pats) and (root / rel).is_file()
     ]
 
 

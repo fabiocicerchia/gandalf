@@ -17,15 +17,15 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
-import sys
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from . import cache as gcache
 from . import config as gconfig
-from . import debug, llm, outputs, plugins, report, scope, severity, suppress
+from . import console, debug, llm, outputs, plugins, report, scope, severity, suppress
 from . import summary as gsummary
 from . import trend as gtrend
 from .base import GateContext, GateOutcome
@@ -35,8 +35,25 @@ from .plugins import discover_gates
 from .progress import Progress
 from .stream import GateStream
 
+if TYPE_CHECKING:  # import-time cycle: these are only needed for annotations
+    import argparse
+    from collections.abc import Callable
 
-async def _run_gates(gates, ctx, on_done=None, limit=0, timeouts=None, on_result=None):
+    from .base import Gate, GateResult
+    from .config import Config
+    from .report import Verdict
+    from .scope import Scope
+
+
+async def _run_gates(  # noqa: PLR0913 — these are the fields of the record it writes; a wrapper object would only rename them
+    gates: list[Gate],
+    ctx: GateContext,
+    *,
+    on_done: Callable[[int, int, str], None] | None = None,
+    limit: int = 0,
+    timeouts: dict | None = None,
+    on_result: Callable[[GateResult], None] | None = None,
+) -> list[GateResult]:
     """Run gates concurrently, but at most `limit` at once (<=0 = unbounded).
     Bounding matters because ~35 gates each may spawn a `docker run`, which can
     swamp a laptop/CI runner if all launch simultaneously. `timeouts` is the
@@ -46,7 +63,7 @@ async def _run_gates(gates, ctx, on_done=None, limit=0, timeouts=None, on_result
     done = 0
     sem = asyncio.Semaphore(limit) if limit and limit > 0 else None
 
-    async def one(g):
+    async def one(g: Gate) -> GateResult:
         nonlocal done
         plugins.GATE_TIMEOUT.set(_gate_timeout(g.name, timeouts))
         cm = sem if sem is not None else contextlib.nullcontext()
@@ -55,15 +72,13 @@ async def _run_gates(gates, ctx, on_done=None, limit=0, timeouts=None, on_result
         async with cm:
             try:
                 res = await g.run(ctx)
-            except Exception as exc:  # noqa: BLE001 — a broken plugin must not sink the whole run
-                from .base import GateResult
+            except Exception as exc:
+                from .base import GateResult  # noqa: PLC0415 — local import: importing at module scope closes a cycle
 
                 res = GateResult(g.name, GateOutcome.WARN, 0.5, f"gate errored: {exc}")
         res._duration = round(time.monotonic() - t0, 3)
         res._blocking = getattr(g, "blocking", False)
-        res._category = getattr(
-            g, "category", ""
-        )  # optional gate override for grouping
+        res._category = getattr(g, "category", "")  # optional gate override for grouping
         done += 1  # asyncio is single-threaded → no lock needed
         debug.log(f"gate {g.name}: {res.outcome.value} in {res._duration:.2f}s")
         if on_done:
@@ -97,7 +112,7 @@ def _gate_timeout(name: str, timeouts: dict | None) -> int | None:
         return None
 
 
-def _resolve_concurrency(cli: int | None, cfg) -> int:
+def _resolve_concurrency(cli: int | None, cfg: Config) -> int:
     """Max gates in flight. Precedence: --concurrency → GANDALF_CONCURRENCY →
     [gandalf] concurrency → cpu count. <=0 anywhere means unbounded."""
     for src in (cli, os.environ.get("GANDALF_CONCURRENCY"), cfg.concurrency):
@@ -109,7 +124,13 @@ def _resolve_concurrency(cli: int | None, cfg) -> int:
     return os.cpu_count() or 4
 
 
-def _build_advice(args, sc, results, verdict, prog) -> dict:
+def _build_advice(
+    args: argparse.Namespace,
+    sc: Scope,
+    results: list[GateResult],
+    verdict: Verdict,
+    prog: Progress,
+) -> dict:
     """LLM analysis section, or a skipped-stub when --no-llm."""
     if args.no_llm:
         return {
@@ -136,7 +157,7 @@ def _build_advice(args, sc, results, verdict, prog) -> dict:
     )
 
 
-def _apply_excludes(args, cfg) -> None:
+def _apply_excludes(args: argparse.Namespace, cfg: Config) -> None:
     """Set the process-wide exclusions before any gate resolves its file list,
     so every gate sees the same scope.
 
@@ -144,16 +165,14 @@ def _apply_excludes(args, cfg) -> None:
     same process (the editor extension) must not inherit the first one's
     exclusions. Tool resolutions are process state for the same reason.
     """
-    excludes = list(args.exclude or []) + [
-        str(x) for x in (cfg.data.get("exclude") or [])
-    ]
+    excludes = list(args.exclude or []) + [str(x) for x in (cfg.data.get("exclude") or [])]
     plugins.set_extra_ignores(excludes)
     plugins.reset_tool_sources()
     if excludes:
         debug.log(f"excluding {len(excludes)} extra pattern(s): {', '.join(excludes)}")
 
 
-def _select_gates(cfg) -> tuple[list, list, str]:
+def _select_gates(cfg: Config) -> tuple[list, list, str]:
     """(gates to run, gates the config disabled, error message).
 
     A non-empty message means there is nothing to run. Config selection
@@ -168,11 +187,11 @@ def _select_gates(cfg) -> tuple[list, list, str]:
     return gates, disabled, ""
 
 
-def _fix_mode(args) -> bool:
+def _fix_mode(args: argparse.Namespace) -> bool:
     """Whether --fix applies. It cannot under --commit: that runs in a throwaway
     worktree, so anything fixed there is discarded with it."""
     if args.fix and args.commit:
-        print("--fix ignored for --commit (throwaway worktree)", file=sys.stderr)
+        console.err("--fix ignored for --commit (throwaway worktree)")
         return False
     return bool(args.fix)
 
@@ -188,13 +207,11 @@ def _active_gates(gates: list, detected: set) -> tuple[list, list[str]]:
     Only gates relevant to the languages in scope, plus the generic (untagged)
     ones — so a Go change doesn't trigger eslint/mypy, etc.
     """
-    active = [
-        g for g in gates if not getattr(g, "langs", None) or (set(g.langs) & detected)
-    ]
+    active = [g for g in gates if not getattr(g, "langs", None) or (set(g.langs) & detected)]
     return active, [g.name for g in gates if g not in active]
 
 
-def _gate_context(args, cfg, sc, detected: set, do_fix: bool) -> GateContext:
+def _gate_context(args: argparse.Namespace, cfg: Config, sc: Scope, detected: set, do_fix: bool) -> GateContext:
     """The context every gate is handed."""
     return GateContext(
         repo=sc.workdir,
@@ -213,7 +230,7 @@ def _gate_context(args, cfg, sc, detected: set, do_fix: bool) -> GateContext:
     )
 
 
-def _cache_plan(args, sc) -> gcache.Plan:
+def _cache_plan(args: argparse.Namespace, sc: Scope) -> gcache.Plan:
     """The result cache for this run, or an inert plan.
 
     --target, --title and --body change what a gate reports without changing a
@@ -230,7 +247,7 @@ def _cache_plan(args, sc) -> gcache.Plan:
     return gcache.Plan(path, gcache.load(path), file_hash)
 
 
-def _stream(args, cfg, n_gates: int, sc) -> GateStream | None:
+def _stream(args: argparse.Namespace, cfg: Config, n_gates: int, sc: Scope) -> GateStream | None:
     """The --stream reporter, or None.
 
     Its suppressor is built here and deliberately not reused for the report:
@@ -246,28 +263,23 @@ def _stream(args, cfg, n_gates: int, sc) -> GateStream | None:
     )
 
 
-def _log_slowest(results) -> None:
+def _log_slowest(results: list[GateResult]) -> None:
     """The five slowest gates, under --debug."""
     if not debug.enabled():
         return
-    slowest = sorted(results, key=lambda r: getattr(r, "_duration", 0.0), reverse=True)[
-        :5
-    ]
-    debug.log(
-        "slowest gates: "
-        + ", ".join(f"{r.name} {getattr(r, '_duration', 0.0):.2f}s" for r in slowest)
-    )
+    slowest = sorted(results, key=lambda r: getattr(r, "_duration", 0.0), reverse=True)[:5]
+    debug.log("slowest gates: " + ", ".join(f"{r.name} {getattr(r, '_duration', 0.0):.2f}s" for r in slowest))
 
 
-def _write_baseline(args, results) -> None:
+def _write_baseline(args: argparse.Namespace, results: list[GateResult]) -> None:
     """--write-baseline: accept everything this run found, so only new findings
     can fail the next one."""
     if args.write_baseline is None:
         return
     bpath = str(Path(scope.repo_root()) / args.write_baseline)
-    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    stamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
     n = suppress.write_baseline(bpath, results, generated_at=stamp)
-    print(f"Wrote baseline: {bpath} ({n} finding(s))")
+    console.out(f"Wrote baseline: {bpath} ({n} finding(s))")
 
 
 @dataclass(frozen=True)
@@ -282,7 +294,7 @@ class Scored:
     reason: str
 
 
-def _score(args, cfg, results) -> Scored:
+def _score(args: argparse.Namespace, cfg: Config, results: list[GateResult]) -> Scored:
     """Suppress, reweight, aggregate, decide — in that order.
 
     Suppression comes first so a legacy repo's known issues don't fail the gate;
@@ -295,14 +307,12 @@ def _score(args, cfg, results) -> Scored:
     if args.severity_weight or cfg.section("severity").get("weight"):
         results = [severity.reweight(r) for r in results]
     verdict = report.aggregate(results)
-    policy = report.Policy.from_config(
-        cfg.section("verdict"), args.fail_on, args.min_score
-    )
+    policy = report.Policy.from_config(cfg.section("verdict"), args.fail_on, args.min_score)
     passed, reason = report.decide(verdict, policy)
     return Scored(results, verdict, policy, passed, reason)
 
 
-def _meta_line(args, sc, verdict, generated_at: str) -> dict:
+def _meta_line(args: argparse.Namespace, sc: Scope, verdict: Verdict, generated_at: str) -> dict:
     """The report header block — and, on the way, this run's trend entry."""
     trend_path = str(Path(scope.repo_root()) / gtrend.DEFAULT_TREND)
     commit_short = sc.commit.get("short", "")
@@ -334,7 +344,7 @@ def main(argv: list[str] | None = None) -> int:
 
     gates, disabled, problem = _select_gates(cfg)
     if problem:
-        print(problem, file=sys.stderr)
+        console.err(problem)
         return 2
 
     do_fix = _fix_mode(args)
@@ -380,44 +390,36 @@ def main(argv: list[str] | None = None) -> int:
 
         prog.stage("Writing reports")
         prog.finish()  # end the single progress line before the scorecard prints
-        generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        generated_at = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
         meta_line = _meta_line(args, sc, verdict, generated_at)
         tools = outputs.tool_report(sc.workdir, args.tool_versions)
-        gsummary.print_summary(
-            sc,
-            results,
-            verdict,
-            advice,
-            meta_line,
-            detected,
-            skipped,
-            disabled,
-            fixes,
-            cfg,
-            passed,
-            scored.reason,
-            tools,
-            args.explain_score,
+        run = report.Run(
+            scope=sc,
+            results=results,
+            verdict=verdict,
+            advice=advice,
+            detected=detected,
+            skipped=skipped,
+            disabled=disabled,
+            fixes=fixes,
+            passed=passed,
+            reason=scored.reason,
+            tools=tools,
         )
+        gsummary.print_summary(run, meta_line, cfg, explain=args.explain_score)
 
         out_dir, stem = outputs.destination(args, sc)
-        payload = outputs.build_payload(
-            sc,
-            generated_at,
-            detected,
-            verdict,
-            passed,
-            scored.policy,
-            scored.reason,
-            advice,
-            skipped,
-            disabled,
-            fixes,
-            results,
-            tools,
-        )
+        payload = outputs.build_payload(run, generated_at, scored.policy)
         outputs.write_outputs(
-            args, out_dir, stem, sc, results, verdict, advice, meta_line, payload
+            args,
+            out_dir,
+            stem,
+            sc,
+            results=results,
+            verdict=verdict,
+            advice=advice,
+            meta_line=meta_line,
+            payload=payload,
         )
 
     return 0 if passed else 1

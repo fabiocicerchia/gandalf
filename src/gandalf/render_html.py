@@ -22,10 +22,7 @@ from .report import (
 )
 
 # Shown in place of an empty LLM section so it reads as "skipped", not "missing".
-_EMPTY_NOTE = (
-    '<p class="empty-note">Not generated for this run '
-    "(LLM was skipped or unavailable).</p>"
-)
+_EMPTY_NOTE = '<p class="empty-note">Not generated for this run (LLM was skipped or unavailable).</p>'
 # The model's "everything passes" reply — matched loosely (markdown/punctuation
 # tolerated) so the remediation section is omitted rather than showing a placeholder.
 _NO_REMEDIATION = re.compile(r"^\W*no remediation needed\W*$", re.IGNORECASE)
@@ -39,8 +36,7 @@ def _md_inline(s: str) -> str:
     s = re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", r'<a href="\2">\1</a>', s)
     s = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", s)
     s = re.sub(r"(?<!\w)\*([^*]+)\*(?!\w)", r"<em>\1</em>", s)
-    s = re.sub(r"(?<!\w)_([^_]+)_(?!\w)", r"<em>\1</em>", s)
-    return s
+    return re.sub(r"(?<!\w)_([^_]+)_(?!\w)", r"<em>\1</em>", s)
 
 
 class _MdBlocks:
@@ -61,9 +57,7 @@ class _MdBlocks:
     def flush_list(self) -> None:
         if self.items:
             self.out.append(
-                f"<{self.otype}>"
-                + "".join(f"<li>{_md_inline(i)}</li>" for i in self.items)
-                + f"</{self.otype}>"
+                f"<{self.otype}>" + "".join(f"<li>{_md_inline(i)}</li>" for i in self.items) + f"</{self.otype}>"
             )
             self.items.clear()
             self.otype = ""
@@ -152,9 +146,7 @@ def _gate_row(r: GateResult) -> str:
             f"{'s' if len(r.findings) != 1 else ''}</summary>"
             f'<ul class="findings">{items}</ul></details>'
         )
-    pill = (
-        '<span class="pill">blocking</span>' if getattr(r, "_blocking", False) else ""
-    )
+    pill = '<span class="pill">blocking</span>' if getattr(r, "_blocking", False) else ""
     category = html.escape(category_of(r))
     return (
         f'<tr class="{cls}" data-gate="{html.escape(r.name)}" '
@@ -172,10 +164,7 @@ def _advice_section(advice: dict, key: str, title: str, accent: str) -> str:
     nothing for it."""
     body = (advice.get(key) or "").strip()
     inner = _md_to_html(body) if body else _EMPTY_NOTE
-    return (
-        f'<div class="eyebrow">{title}</div>'
-        f'<section class="summary {accent}">{inner}</section>'
-    )
+    return f'<div class="eyebrow">{title}</div><section class="summary {accent}">{inner}</section>'
 
 
 def _plain_remediation(eyebrow: str, raw: str) -> str:
@@ -188,7 +177,7 @@ def _plain_remediation(eyebrow: str, raw: str) -> str:
     return f'{eyebrow}<section class="summary accent-remediation">{inner}</section>'
 
 
-def _rem_gate_html(name: str, body: str, outcome) -> str:
+def _rem_gate_html(name: str, body: str, outcome: GateOutcome | None) -> str:
     """One gate's remediation block, labelled "name (RAG)"."""
     cls = outcome.name.lower() if outcome else "warn"
     word = RAG[outcome][3] if outcome else "WARN"
@@ -213,17 +202,16 @@ def _remediation_html(advice: dict, outcome_of: dict, sev_order: dict) -> str:
     )
     pre = (advice.get("remediation_pre") or "").strip()
     parts = [f'<div class="rem-pre">{_md_to_html(pre)}</div>'] if pre else []
-    parts += [
-        _rem_gate_html(name, body, outcome_of.get(name)) for name, body in ordered
-    ]
+    parts += [_rem_gate_html(name, body, outcome_of.get(name)) for name, body in ordered]
     return f'{eyebrow}<section class="summary accent-remediation">{"".join(parts)}</section>'
 
 
-def render_html(
+def render_html(  # noqa: PLR0913 — these are the fields of the record it writes; a wrapper object would only rename them
     label: str,
     results: list[GateResult],
     verdict: Verdict,
     advice: dict,
+    *,
     meta: dict | None = None,
     diff: str = "",
 ) -> str:
@@ -266,25 +254,16 @@ def render_html(
     )
     # Default order: by category (in GROUP_ORDER), then name — sortable columns override.
     cat_index = {g: i for i, g in enumerate(GROUP_ORDER)}
-    data_rows = [
-        _gate_row(r)
-        for r in sorted(
-            results, key=lambda r: (cat_index.get(category_of(r), 99), r.name)
-        )
-    ]
+    data_rows = [_gate_row(r) for r in sorted(results, key=lambda r: (cat_index.get(category_of(r), 99), r.name))]
     esc = html.escape(label)
     meta = meta or {}
     c = meta.get("commit") or {}
     bits = []
     if c.get("short"):
-        bits.append(
-            f"commit <code>{html.escape(c['short'])}</code> {html.escape(c.get('subject', ''))}"
-        )
+        bits.append(f"commit <code>{html.escape(c['short'])}</code> {html.escape(c.get('subject', ''))}")
     if meta.get("generated_at"):
         bits.append(f"generated {html.escape(meta['generated_at'])}")
-    metabar = (
-        f'<div class="metabar">{" &nbsp;·&nbsp; ".join(bits)}</div>' if bits else ""
-    )
+    metabar = f'<div class="metabar">{" &nbsp;·&nbsp; ".join(bits)}</div>' if bits else ""
 
     outcome_of = {r.name: r.outcome for r in results}
     sev_order = {GateOutcome.FAIL: 0, GateOutcome.WARN: 1, GateOutcome.PASS: 2}

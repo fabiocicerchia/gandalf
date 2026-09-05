@@ -29,7 +29,7 @@ _WEIGHT = {
 _FLOOR_AT = 5.0
 
 
-def of(f) -> str:
+def of(f: dict) -> str:
     """Normalized severity of a finding, or '' if it reports none."""
     return findings_mod.severity(f)
 
@@ -49,9 +49,7 @@ def reweight(res: GateResult) -> GateResult:
     s = score(res.findings)
     if s is None:
         return res
-    out = carry_over(
-        res, GateResult(res.name, res.outcome, round(s, 3), res.summary, res.findings)
-    )
+    out = carry_over(res, GateResult(res.name, res.outcome, round(s, 3), res.summary, res.findings))
     # Keep what the gate itself scored. Without it --explain-score can only show
     # the weighted number, which is the one the user cannot derive from the gate's
     # own output — so the explanation would be the least explanatory part.

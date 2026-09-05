@@ -25,14 +25,16 @@ _DEFAULT_FUZZ_TIME = 60
 _DAST_TIMEOUT = 300
 
 
+# A handful of real findings warns; beyond that the scan has failed.
+MAX_FINDINGS = 3
+
+
 def _is_local(url: str) -> bool:
     host = urlparse(url).hostname or ""
-    return host in ("localhost", "127.0.0.1", "0.0.0.0", "::1")  # nosec B104 — host equality check, not a bind
+    return host in ("localhost", "127.0.0.1", "0.0.0.0", "::1")  # noqa: S104 — compared against, never bound  # nosec B104 — host equality check, not a bind
 
 
-async def _run(
-    cmd: list[str], cwd: str, timeout: int = _DAST_TIMEOUT
-) -> tuple[int, str, str]:
+async def _run(cmd: list[str], cwd: str, timeout: int = _DAST_TIMEOUT) -> tuple[int, str, str]:  # noqa: ASYNC109 — the timeout is plumbed to asyncio.wait_for, which is the mechanism this rule asks for
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         cwd=cwd,
@@ -50,17 +52,13 @@ async def _run(
     )
 
 
-def _guard(ctx: GateContext, name: str):
+def _guard(ctx: GateContext, name: str) -> tuple[str | None, GateResult | None]:
     """Return (target_url, None) or (None, skip_result)."""
     target = (ctx.meta or {}).get("target", "")
     if not target:
-        return None, unavailable(
-            name, f"{name}: no target URL — skipped (pass --target)"
-        )
+        return None, unavailable(name, f"{name}: no target URL — skipped (pass --target)")
     if not _is_local(target) and not (ctx.meta or {}).get("allow_remote", False):
-        return None, unavailable(
-            name, f"{name}: refusing active scan against non-local target '{target}'"
-        )
+        return None, unavailable(name, f"{name}: refusing active scan against non-local target '{target}'")
     return target, None
 
 
@@ -110,9 +108,7 @@ class AtherisGate:
     async def run(self, ctx: GateContext) -> GateResult:
         harness = Path(ctx.workdir) / "tests" / "fuzz" / "fuzz_adapters.py"
         if not harness.exists():
-            return unavailable(
-                self.name, "atheris: no fuzz harness at tests/fuzz/fuzz_adapters.py"
-            )
+            return unavailable(self.name, "atheris: no fuzz harness at tests/fuzz/fuzz_adapters.py")
         if not await _atheris_installed(ctx.workdir):
             return unavailable(self.name, "atheris: package not installed — skipped")
         fuzz_time = int((ctx.meta or {}).get("fuzz_time", _DEFAULT_FUZZ_TIME))
@@ -135,11 +131,7 @@ class AtherisGate:
         # self-match. A nonzero exit is the authoritative signal (libFuzzer
         # exits 0 after a clean time-budget run); the marker check is belt
         # and suspenders for when exit codes get lost through a wrapper.
-        if (
-            rc != 0
-            or "ERROR: libFuzzer" in combined
-            or "Uncaught Python exception" in combined
-        ):
+        if rc != 0 or "ERROR: libFuzzer" in combined or "Uncaught Python exception" in combined:
             return GateResult(
                 self.name,
                 GateOutcome.FAIL,
@@ -181,7 +173,7 @@ class NiktoGate:
             len(real),
             f"nikto: {len(real)} issue(s)",
             [{"finding": f} for f in real],
-            fail=len(real) > 3,
+            fail=len(real) > MAX_FINDINGS,
         )
 
 
@@ -226,9 +218,7 @@ class SqlmapGate:
                 "sqlmap: injectable parameter found",
                 [{"log": combined[-800:]}],
             )
-        return GateResult(
-            self.name, GateOutcome.PASS, 1.0, "sqlmap: no injection found"
-        )
+        return GateResult(self.name, GateOutcome.PASS, 1.0, "sqlmap: no injection found")
 
 
 class DalfoxGate:

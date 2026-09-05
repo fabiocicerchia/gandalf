@@ -28,6 +28,4 @@ class PrCodeSummaryGate:
     category = "Best practices"
 
     async def run(self, ctx: GateContext) -> GateResult:
-        return await skills.judge(
-            ctx, skill="pr-code-summarizer", gate_name=self.name, task=_TASK
-        )
+        return await skills.judge(ctx, skill="pr-code-summarizer", gate_name=self.name, task=_TASK)

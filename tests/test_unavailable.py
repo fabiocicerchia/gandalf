@@ -15,76 +15,83 @@ from gandalf.plugins import did_not_run, unavailable
 P, W, F = GateOutcome.PASS, GateOutcome.WARN, GateOutcome.FAIL
 
 
-def test_unavailable_is_still_an_amber_gate_result():
+def test_unavailable_is_still_an_amber_gate_result() -> None:
     """The wire shape is unchanged — only the out-of-band marker is new."""
     r = unavailable("trivy", "trivy unavailable — skipped")
-    assert r.outcome is W and r.score == 0.8 and r.name == "trivy"
+    assert r.outcome is W
+    assert r.score == 0.8
+    assert r.name == "trivy"
     assert did_not_run(r)
     assert not did_not_run(GateResult("ruff", W, 0.8, "ruff: 1 issue"))
 
 
-def test_gate_outcome_gains_no_member():
+def test_gate_outcome_gains_no_member() -> None:
     """Adding an enum member would break the cache, SARIF's level map, JUnit and
     the badge — all of which map the three outcomes exhaustively."""
     assert [o.value for o in GateOutcome] == ["pass", "warn", "fail"]
 
 
-def test_unavailable_gates_are_left_out_of_the_score():
+def test_unavailable_gates_are_left_out_of_the_score() -> None:
     ran = [GateResult("ruff", P, 1.0, "clean"), GateResult("mypy", P, 1.0, "clean")]
     assert report.aggregate(ran).score == 100
     # Three missing scanners must not drag a clean repo to 88.
     with_missing = ran + [unavailable(n, "not installed") for n in ("a", "b", "c")]
     v = report.aggregate(with_missing)
-    assert v.score == 100 and v.outcome is P
+    assert v.score == 100
+    assert v.outcome is P
 
 
-def test_unavailable_gates_do_not_colour_the_verdict():
+def test_unavailable_gates_do_not_colour_the_verdict() -> None:
     """The reported bug: a scanner that is merely absent must not amber the run."""
     results = [GateResult("ruff", P, 1.0, "clean"), unavailable("trivy", "missing")]
     assert report.aggregate(results).outcome is P
 
 
-def test_a_gate_that_actually_failed_still_reddens():
+def test_a_gate_that_actually_failed_still_reddens() -> None:
     results = [
         GateResult("ruff", F, 0.0, "3 findings"),
         unavailable("trivy", "missing"),
     ]
     v = report.aggregate(results)
-    assert v.outcome is F and v.score == 0
+    assert v.outcome is F
+    assert v.score == 0
 
 
-def test_nothing_ran_at_all_is_amber_and_scoreless():
+def test_nothing_ran_at_all_is_amber_and_scoreless() -> None:
     """No score is honest here; inventing 80/100 from the 0.8 sentinels is not."""
     v = report.aggregate([unavailable(n, "not installed") for n in ("a", "b")])
-    assert v.outcome is W and v.score == 0
+    assert v.outcome is W
+    assert v.score == 0
 
 
-def test_category_with_nothing_run_reports_no_percentage():
+def test_category_with_nothing_run_reports_no_percentage() -> None:
     outcome, pct = report.group_outcome_and_pct([unavailable("trivy", "missing")])
-    assert pct is None and outcome is W
+    assert pct is None
+    assert outcome is W
     _, pct = report.group_outcome_and_pct([GateResult("ruff", P, 1.0, "clean")])
     assert pct == 100
 
 
-def test_terminal_render_marks_and_counts_them():
+def test_terminal_render_marks_and_counts_them() -> None:
     results = [GateResult("ruff", P, 1.0, "clean"), unavailable("trivy", "missing")]
     out = render_text.render_terminal("wt", results, report.aggregate(results), {}, {})
     assert report.SKIP_EMOJI in out
     assert "1 of 2 gate(s) could not run" in out
 
 
-def test_html_render_labels_them_not_run():
+def test_html_render_labels_them_not_run() -> None:
     results = [GateResult("ruff", P, 1.0, "clean"), unavailable("trivy", "missing")]
-    out = render_html.render_html("wt", results, report.aggregate(results), {}, {})
-    assert "NOT RUN" in out and "not run" in out
+    out = render_html.render_html("wt", results, report.aggregate(results), {}, meta={})
+    assert "NOT RUN" in out
+    assert "not run" in out
 
 
-def test_marker_survives_severity_reweighting():
+def test_marker_survives_severity_reweighting() -> None:
     r = unavailable("trivy", "missing")
     assert did_not_run(severity.reweight(r))
 
 
-def test_marker_survives_partial_suppression():
+def test_marker_survives_partial_suppression() -> None:
     """A marked result carries no findings, so suppression returns it untouched —
     and a partially-suppressed real gate keeps whatever it had."""
     sup = suppress.build({"rules": ["ruff:E501"]}, None)
@@ -109,34 +116,39 @@ def _decorated() -> GateResult:
     return r
 
 
-def test_reweighting_keeps_the_duration():
+def test_reweighting_keeps_the_duration() -> None:
     """It never did: --severity-weight wrote a null duration for every gate."""
     out = severity.reweight(_decorated())
     assert out._duration == 1.25
-    assert out._blocking is True and out._category == "Dependencies"
+    assert out._blocking is True
+    assert out._category == "Dependencies"
 
 
-def test_partial_suppression_keeps_the_duration():
+def test_partial_suppression_keeps_the_duration() -> None:
     sup = suppress.build({"rules": ["trivy::*"]}, None)
     r = _decorated()
     r.findings.append({"severity": "LOW", "code": "Y", "path": "b.py"})
     out = sup.apply(r)
-    assert out._duration == 1.25 and out._blocking is True
+    assert out._duration == 1.25
+    assert out._blocking is True
 
 
-def test_full_suppression_keeps_the_metadata_too():
+def test_full_suppression_keeps_the_metadata_too() -> None:
     sup = suppress.build({"rules": ["trivy"]}, None)
     out = sup.apply(_decorated())
     assert out.outcome is P  # everything muted
-    assert out._duration == 1.25 and out._category == "Dependencies"
+    assert out._duration == 1.25
+    assert out._category == "Dependencies"
 
 
-def test_carry_over_ignores_the_dataclass_fields():
+def test_carry_over_ignores_the_dataclass_fields() -> None:
     """Only runner metadata travels — the rebuilt score/summary must stand."""
     from gandalf.plugins import carry_over
 
     src = _decorated()
     dst = GateResult("trivy", P, 1.0, "rebuilt", [])
     carry_over(src, dst)
-    assert dst.score == 1.0 and dst.summary == "rebuilt" and dst.findings == []
+    assert dst.score == 1.0
+    assert dst.summary == "rebuilt"
+    assert dst.findings == []
     assert dst._duration == 1.25

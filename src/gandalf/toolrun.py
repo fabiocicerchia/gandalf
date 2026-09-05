@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import time
 from functools import lru_cache
+from pathlib import Path
 
 from . import debug
 
@@ -27,9 +28,7 @@ _TIMEOUT_RC = -1
 # Per-gate timeout override, set by the runner before each gate runs (see
 # __main__._run_gates). run_tool reads it so a gate's tool calls honour its
 # configured budget without the gate having to thread it through explicitly.
-GATE_TIMEOUT: contextvars.ContextVar[int | None] = contextvars.ContextVar(
-    "gandalf_gate_timeout", default=None
-)
+GATE_TIMEOUT: contextvars.ContextVar[int | None] = contextvars.ContextVar("gandalf_gate_timeout", default=None)
 
 # Scanner tools run inside this image when not present on the host PATH, so the
 # host stays clean. Build it with `make tools` (gandalf/tools.Dockerfile).
@@ -74,8 +73,10 @@ def _tools_image_available() -> bool:
     """
     if not shutil.which("docker"):
         return False
-    r = subprocess.run(  # nosec B603 B607 - fixed docker argv, no shell
-        ["docker", "image", "inspect", TOOLS_IMAGE], capture_output=True, check=False
+    r = subprocess.run(  # noqa: S603 — fixed docker argv, never a shell
+        ["docker", "image", "inspect", TOOLS_IMAGE],  # noqa: S607 — docker is resolved from PATH on purpose
+        capture_output=True,
+        check=False,
     )
     return r.returncode == 0
 
@@ -91,8 +92,8 @@ def tools_image_id() -> str:
     """
     if not _tools_image_available():
         return ""
-    r = subprocess.run(  # nosec B603 B607 - fixed docker argv, no shell
-        ["docker", "image", "inspect", "-f", "{{.Id}}", TOOLS_IMAGE],
+    r = subprocess.run(  # nosec B603 B607 - fixed docker argv, no shell  # noqa: S603 — fixed argv, never a shell
+        ["docker", "image", "inspect", "-f", "{{.Id}}", TOOLS_IMAGE],  # noqa: S607 — resolved from PATH on purpose: the tool may be a host binary or a shim
         capture_output=True,
         text=True,
         check=False,
@@ -160,7 +161,7 @@ def _dockerize(cmd: list[str], workdir: str, name: str = "") -> list[str]:
         "--network",
         "host",
         "-v",
-        f"{os.path.abspath(workdir)}:/src",
+        f"{Path(workdir).resolve()}:/src",
         # Cache path matches the image's non-root user HOME (tools.Dockerfile).
         # New volume name so it's created fresh with gandalf ownership rather than
         # inheriting the old root-owned gandalf-cache volume.
@@ -199,13 +200,13 @@ async def _reap(proc: asyncio.subprocess.Process, cmd: list[str], name: str) -> 
             stderr=asyncio.subprocess.DEVNULL,
         )
         await asyncio.wait_for(killer.communicate(), timeout=15)
-    except (OSError, asyncio.TimeoutError) as exc:  # best effort; already degrading
+    except (TimeoutError, OSError) as exc:  # best effort; already degrading
         debug.log(f"could not kill container {name}: {exc}")
 
 
 async def communicate(
     proc: asyncio.subprocess.Process,
-    timeout: float,
+    timeout: float,  # noqa: ASYNC109 — the timeout is plumbed to asyncio.wait_for, which is the mechanism this rule asks for
     cmd: list[str] | None = None,
     container: str = "",
 ) -> tuple[bytes, bytes] | None:
@@ -222,14 +223,12 @@ async def communicate(
     """
     try:
         return await asyncio.wait_for(proc.communicate(), timeout=timeout)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         await _reap(proc, cmd or [""], container)
         return None
 
 
-async def run_tool(
-    cmd: list[str], cwd: str, timeout: int | None = None
-) -> tuple[int, str, str]:
+async def run_tool(cmd: list[str], cwd: str, timeout: int | None = None) -> tuple[int, str, str]:  # noqa: ASYNC109 — the timeout is plumbed to asyncio.wait_for, which is the mechanism this rule asks for
     """Run an external gate tool. On timeout the process is killed and _TIMEOUT_RC
     is returned so the gate degrades to WARN rather than hanging. With no explicit
     timeout, the per-gate budget (GATE_TIMEOUT contextvar) is used, else the
@@ -248,7 +247,7 @@ async def run_tool(
     )
     try:
         out, err = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         await _reap(proc, cmd, container)
         debug.log(f"timeout after {timeout}s: {cmd[0]}")
         return _TIMEOUT_RC, "", f"timed out after {timeout}s"
@@ -298,4 +297,4 @@ async def tool_versions(workdir: str) -> dict[str, str]:
     if not names:
         return {}
     got = await asyncio.gather(*(tool_version(n, workdir) for n in names))
-    return dict(zip(names, got))
+    return dict(zip(names, got, strict=False))

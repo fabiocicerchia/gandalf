@@ -24,8 +24,12 @@ def _git(args: list[str], cwd: str = ".") -> str:
     Fixed argv and no shell — every caller builds the argument list itself, so
     a branch or path with a space in it cannot become two arguments.
     """
-    return subprocess.run(  # nosec B603 B607 - fixed git argv, no shell
-        ["git", *args], cwd=cwd, capture_output=True, text=True, check=True
+    return subprocess.run(  # noqa: S603 — fixed git argv, never a shell
+        ["git", *args],  # noqa: S607 — git is resolved from PATH on purpose
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout
 
 
@@ -124,11 +128,7 @@ def _classify(paths: list[str]) -> set[str]:
         base = p.rsplit("/", 1)[-1]
         if base in _MARKER_LANG:
             langs.add(_MARKER_LANG[base])
-        if (
-            base == "Dockerfile"
-            or base.startswith("Dockerfile.")
-            or base.endswith(".dockerfile")
-        ):
+        if base == "Dockerfile" or base.startswith("Dockerfile.") or base.endswith(".dockerfile"):
             langs.add("docker")
         dot = base.rfind(".")
         if dot != -1:
@@ -147,7 +147,7 @@ def languages(workdir: str, changed_files: list[str]) -> set[str]:
     # already cached per workdir (every gate asks for it moments later), and it
     # splits on NUL — `.split()` broke any tracked path containing a space into
     # two bogus filenames.
-    from .plugins import tracked_files  # local: avoids a cycle
+    from .plugins import tracked_files  # noqa: PLC0415 — local: avoids an import cycle
 
     return _classify(list(tracked_files(workdir)))
 
@@ -156,13 +156,12 @@ def commit_info(ref: str, workdir: str = ".") -> dict:
     """Short/full sha + subject + author-date (UTC) of a commit. For staged and
     working-tree scopes this is HEAD (the latest commit)."""
     try:
-        out = _git(
-            ["log", "-1", "--format=%H%x1f%h%x1f%s%x1f%cI", ref], workdir
-        ).strip()
+        out = _git(["log", "-1", "--format=%H%x1f%h%x1f%s%x1f%cI", ref], workdir).strip()
         full, short, subject, cdate = out.split("\x1f")
-        return {"sha": full, "short": short, "subject": subject, "date": cdate}
     except (subprocess.CalledProcessError, ValueError):
         return {"sha": "", "short": "", "subject": "", "date": ""}
+    else:
+        return {"sha": full, "short": short, "subject": subject, "date": cdate}
 
 
 @dataclass
@@ -178,18 +177,16 @@ class Scope:
     workdir: str
     changed_files: list[str] = field(default_factory=list)
     diff: str = ""
-    commit: dict = field(
-        default_factory=dict
-    )  # ref commit (HEAD for staged/working-tree)
+    commit: dict = field(default_factory=dict)  # ref commit (HEAD for staged/working-tree)
     _worktree: str | None = field(default=None, repr=False)
 
     def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, *exc) -> None:
+    def __exit__(self, *exc: object) -> None:
         if self._worktree:
-            subprocess.run(  # nosec B603 B607 - fixed git argv, no shell
-                ["git", "worktree", "remove", "--force", self._worktree],
+            subprocess.run(  # nosec B603 B607 - fixed git argv, no shell  # noqa: S603 — fixed argv, never a shell
+                ["git", "worktree", "remove", "--force", self._worktree],  # noqa: S607 — resolved from PATH on purpose: the tool may be a host binary or a shim
                 capture_output=True,
                 check=False,
             )
@@ -205,12 +202,13 @@ def _narrow_to_path(sc: Scope, path: str) -> Scope:
     to fail loudly: `changed_files` empty means "whole tree" everywhere
     downstream, so silently narrowing to nothing would scan everything — the
     opposite of what --path asked for."""
-    from .plugins import ignore_patterns, is_ignored  # local: avoids a cycle
+    from .plugins import (  # noqa: PLC0415 — local: importing at module scope closes a cycle
+        ignore_patterns,
+        is_ignored,
+    )
 
     rel = path.strip().strip("/")
-    under = [
-        f for f in _git(["ls-files", "-z", "--", rel], sc.workdir).split("\0") if f
-    ]
+    under = [f for f in _git(["ls-files", "-z", "--", rel], sc.workdir).split("\0") if f]
     if not under:
         raise SystemExit(f"--path {path!r}: no git-tracked files under this folder")
     pats = ignore_patterns(sc.workdir)

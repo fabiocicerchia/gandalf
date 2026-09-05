@@ -24,12 +24,17 @@ token and repo the caller just writes the JSON for a later CI step to post.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .report import Verdict
+
 import json
 import os
 import re
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from . import findings, suggest
 from .base import GateOutcome, GateResult
@@ -43,6 +48,10 @@ _RAG_WORD = {
     GateOutcome.WARN: "🟡",
     GateOutcome.FAIL: "🔴",
 }
+
+
+# GitHub caps a review at this many inline comments per request.
+GITHUB_BATCH = 100
 
 
 def _brand() -> tuple[str, str]:
@@ -161,27 +170,21 @@ def build(
             if added:
                 anchorable = line in added.get(path, ())
             else:
-                anchorable = (
-                    bool(path) and line > 0 and (not changed or path in changed)
-                )
+                anchorable = bool(path) and line > 0 and (not changed or path in changed)
             if anchorable:
                 inline.setdefault((path, line), []).append((body, f))
             else:
                 where = f"{path}:{line}" if path and line else (path or r.name)
-                overflow.append(
-                    f"- {_RAG_WORD[r.outcome]} `{r.name}` {where} — {fmt_finding(f)}"
-                )
-    comments = [
-        _comment(p, ln, items, added.get(p), workdir)
-        for (p, ln), items in sorted(inline.items())
-    ]
+                overflow.append(f"- {_RAG_WORD[r.outcome]} `{r.name}` {where} — {fmt_finding(f)}")
+    comments = [_comment(p, ln, items, added.get(p), workdir) for (p, ln), items in sorted(inline.items())]
     return comments, overflow
 
 
-def review_payload(
+def review_payload(  # noqa: PLR0913 — these are the fields of the record it writes; a wrapper object would only rename them
     results: list[GateResult],
-    verdict,
+    verdict: Verdict,
     changed_files: list[str] | None = None,
+    *,
     max_overflow: int = 30,
     diff: str = "",
     workdir: str = "",
@@ -228,7 +231,7 @@ def review_payload(
         lines += ["", "</details>"]
     if not comments and not overflow:
         lines.append("No findings. ✅")
-    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    stamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
     lines += ["", f"<sub>Last updated {stamp}</sub>", "", _MARKER]
     # COMMENT (not REQUEST_CHANGES): GitHub forbids requesting changes on your own PR.
     return {"event": "COMMENT", "body": "\n".join(lines), "comments": comments}
@@ -241,15 +244,13 @@ def _ours(body: str | None) -> bool:
     return _MARKER in body or body.lstrip().startswith(f"**{_brand()[1]}**")
 
 
-def _api(
-    method: str, url: str, token: str, data: dict | None = None, timeout: int = 30
-) -> tuple[int, str]:
+def _api(method: str, url: str, token: str, data: dict | None = None, timeout: int = 30) -> tuple[int, str]:
     """One GitHub REST call, returning the status and the raw body.
 
     The status is handed back rather than raised on: several callers treat a
     404 or a 422 as an ordinary answer.
     """
-    req = urllib.request.Request(
+    req = urllib.request.Request(  # noqa: S310 — URL is api.github.com, built here, not user input
         url,
         data=None if data is None else json.dumps(data).encode(),
         method=method,
@@ -260,7 +261,7 @@ def _api(
             "X-GitHub-Api-Version": "2022-11-28",
         },
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec B310 — fixed https GitHub API URL
+    with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec B310 — fixed https GitHub API URL  # noqa: S310 — URL is api.github.com, built here, not user input
         return resp.status, resp.read().decode(errors="replace")
 
 
@@ -276,7 +277,7 @@ def _list_all(url: str, token: str, timeout: int) -> list[dict]:
         _, raw = _api("GET", f"{url}?per_page=100&page={page}", token, timeout=timeout)
         batch = json.loads(raw)
         out += batch
-        if len(batch) < 100:
+        if len(batch) < GITHUB_BATCH:
             break
     return out
 
@@ -357,9 +358,7 @@ def _our_threads(repo: str, pr: int, token: str, timeout: int) -> list[dict]:
     return out
 
 
-def _reconcile(
-    threads: list[dict], comments: list[dict]
-) -> tuple[list[str], list[dict]]:
+def _reconcile(threads: list[dict], comments: list[dict]) -> tuple[list[str], list[dict]]:
     """→ (thread ids to resolve, comments to post). An already-resolved thread
     counts as absent, so a finding that comes back gets a fresh comment rather
     than silently staying hidden."""
@@ -371,9 +370,7 @@ def _reconcile(
     )
 
 
-def _sync_inline(
-    repo: str, pr: int, comments: list[dict], token: str, timeout: int
-) -> str:
+def _sync_inline(repo: str, pr: int, comments: list[dict], token: str, timeout: int) -> str:
     """Reconcile inline comments with the PR: identical ones stay put (no reply
     thread lost, no notification), obsolete ones are *resolved* — never deleted,
     so the trail of what was flagged and any human reply survive — and new ones
@@ -413,9 +410,7 @@ def _sync_inline(
     return f"posted {posted} inline comment(s), {resolved} resolved{stuck}{tail}"
 
 
-def post(
-    repo: str, pr: int, payload: dict, token: str, timeout: int = 30
-) -> tuple[bool, str]:
+def post(repo: str, pr: int, payload: dict, token: str, timeout: int = 30) -> tuple[bool, str]:
     """Publish the review, replacing what the last run posted. Returns
     (ok, message). Never raises — a failed post must not fail the gandalf run."""
     if not (repo and token):

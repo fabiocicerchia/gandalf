@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 from gandalf import llm, skillgate, skills
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.plugins import discover_gates
@@ -21,7 +23,7 @@ def _r(outcome, score):
     return GateResult("x", outcome, score)
 
 
-def test_aggregate_rag():
+def test_aggregate_rag() -> None:
     assert aggregate([_r(P, 1.0), _r(P, 1.0)]).outcome is P  # all pass → green
     assert aggregate([_r(P, 1.0), _r(W, 0.8)]).outcome is W  # any warn → amber
     assert aggregate([_r(P, 1.0), _r(F, 0.0)]).outcome is F  # any fail → red
@@ -29,12 +31,12 @@ def test_aggregate_rag():
     assert aggregate([]).outcome is W  # nothing ran → amber
 
 
-def test_aggregate_score():
+def test_aggregate_score() -> None:
     assert aggregate([_r(P, 1.0), _r(P, 0.0)]).score == 50
     assert aggregate([_r(P, 1.0)]).score == 100
 
 
-def test_discovery_finds_builtins():
+def test_discovery_finds_builtins() -> None:
     names = {g.name for g in discover_gates()}
     expected = {
         # python
@@ -125,7 +127,7 @@ def test_discovery_finds_builtins():
     assert by_name["ruff"].blocking is False
 
 
-def test_skill_gates_discovered():
+def test_skill_gates_discovered() -> None:
     """The four embedded review skills are wired in as gates; only the
     quality-gate-review verdict is blocking."""
     gates = {g.name: g for g in discover_gates()}
@@ -142,7 +144,7 @@ def test_skill_gates_discovered():
     assert gates["security_assessment"].blocking is False
 
 
-def test_skill_playbooks_load():
+def test_skill_playbooks_load() -> None:
     """Every skill gate resolves its SKILL.md and the YAML frontmatter is stripped."""
     for name in (
         "pr-code-summarizer",
@@ -151,10 +153,11 @@ def test_skill_playbooks_load():
         "security-assessment",
     ):
         body = skills.load_skill(name)
-        assert body and not body.startswith("---")
+        assert body
+        assert not body.startswith("---")
 
 
-def test_skill_outcome_coercion():
+def test_skill_outcome_coercion() -> None:
     """Verdict vocabularies (GO/REVIEW/NO-GO) and pass/warn/fail map correctly;
     an unknown word falls back to score banding."""
     assert skills._coerce_outcome("GO", 0.4) is P
@@ -165,13 +168,13 @@ def test_skill_outcome_coercion():
     assert skills._coerce_outcome("???", 0.5) is F  # banding: <0.6
 
 
-def test_skill_json_parsing():
+def test_skill_json_parsing() -> None:
     """The judge tolerates fenced JSON and objects buried in prose."""
     assert skills._parse_json('```json\n{"score": 5}\n```')["score"] == 5
     assert skills._parse_json('noise {"outcome": "pass"} tail')["outcome"] == "pass"
 
 
-def test_language_detection():
+def test_language_detection() -> None:
     assert _classify(["cmd/main.go", "go.mod"]) == {"go"}
     assert _classify(["src/main.rs", "Cargo.toml"]) == {"rust"}
     assert _classify(["src/app.ts", "tsconfig.json"]) == {"ts"}
@@ -190,28 +193,22 @@ def test_repo_root_reports_git_failure_instead_of_raising(monkeypatch):
 
     from gandalf import scope
 
-    def not_a_repo(args, cwd="."):
-        raise subprocess.CalledProcessError(
-            128, ["git", *args], stderr="fatal: not a git repository (or any parent)\n"
-        )
+    def not_a_repo(args, cwd: str = "."):
+        raise subprocess.CalledProcessError(128, ["git", *args], stderr="fatal: not a git repository (or any parent)\n")
 
     monkeypatch.setattr(scope, "_git", not_a_repo)
-    try:
+    with pytest.raises(SystemExit) as excinfo:
         scope.repo_root()
-        raise AssertionError("expected SystemExit")
-    except SystemExit as exc:
-        assert "not a git repository (or any parent)" in str(exc)
-        assert "fatal:" not in str(exc)
+    assert "not a git repository (or any parent)" in str(excinfo.value)
+    assert "fatal:" not in str(excinfo.value)
 
-    def no_git(args, cwd="."):
+    def no_git(args, cwd: str = "."):
         raise FileNotFoundError(2, "No such file or directory", "git")
 
     monkeypatch.setattr(scope, "_git", no_git)
-    try:
+    with pytest.raises(SystemExit) as excinfo:
         scope.repo_root()
-        raise AssertionError("expected SystemExit")
-    except SystemExit as exc:
-        assert "git on PATH" in str(exc)
+    assert "git on PATH" in str(excinfo.value)
 
 
 def test_narrow_to_path(monkeypatch):
@@ -235,33 +232,32 @@ def test_narrow_to_path(monkeypatch):
         pass
 
 
-def test_language_filtering():
+def test_language_filtering() -> None:
     """A Go-only change runs go gates + generic ones, NOT eslint/mypy/ruff."""
     gates = {g.name: g for g in discover_gates()}
     detected = {"go"}
-    active = {
-        n
-        for n, g in gates.items()
-        if not getattr(g, "langs", None) or (set(g.langs) & detected)
-    }
-    assert "go_build" in active and "go_test" in active
-    assert "eslint" not in active and "tsc" not in active  # node/ts excluded
-    assert "mypy" not in active and "ruff" not in active  # python excluded
-    assert "gitleaks" in active and "semgrep" in active  # generic still run
+    active = {n for n, g in gates.items() if not getattr(g, "langs", None) or (set(g.langs) & detected)}
+    assert "go_build" in active
+    assert "go_test" in active
+    assert "eslint" not in active
+    assert "tsc" not in active  # node/ts excluded
+    assert "mypy" not in active
+    assert "ruff" not in active  # python excluded
+    assert "gitleaks" in active
+    assert "semgrep" in active  # generic still run
     assert "codeql" in active  # codeql tags go among its langs → active
 
 
-def test_rust_language_filtering():
+def test_rust_language_filtering() -> None:
     """A Rust-only change runs cargo gates, not go/node/python ones."""
     gates = {g.name: g for g in discover_gates()}
     detected = {"rust"}
-    active = {
-        n
-        for n, g in gates.items()
-        if not getattr(g, "langs", None) or (set(g.langs) & detected)
-    }
-    assert "cargo_build" in active and "clippy" in active and "cargo_test" in active
-    assert "go_build" not in active and "eslint" not in active
+    active = {n for n, g in gates.items() if not getattr(g, "langs", None) or (set(g.langs) & detected)}
+    assert "cargo_build" in active
+    assert "clippy" in active
+    assert "cargo_test" in active
+    assert "go_build" not in active
+    assert "eslint" not in active
 
 
 # ---- LLM skill gates (grill-me / improve-codebase-architecture / well-architected) ----
@@ -269,7 +265,7 @@ def test_rust_language_filtering():
 SKILL_GATES = ("grill_me", "codebase_architecture", "well_architected")
 
 
-def test_llm_skill_gates_discovered():
+def test_llm_skill_gates_discovered() -> None:
     """The three LLM skill gates each surface — generic (always run), non-blocking,
     and mapped to a category that renders in the scorecard."""
     gates = {g.name: g for g in discover_gates()}
@@ -282,7 +278,7 @@ def test_llm_skill_gates_discovered():
         assert cat in GROUP_ORDER, f"{cat} won't render in the scorecard"
 
 
-def test_skills_are_embedded():
+def test_skills_are_embedded() -> None:
     """Every slug a gate loads (skill + its dependencies) ships under skills/."""
     slugs = set()
     for g in discover_gates():
@@ -298,12 +294,12 @@ def test_skills_are_embedded():
         assert skillgate.load_skill(slug), f"skill {slug} not embedded / empty"
 
 
-def test_parse_json_tolerates_fences_and_prose():
+def test_parse_json_tolerates_fences_and_prose() -> None:
     assert skillgate.parse_json('```json\n{"score": 90}\n```')["score"] == 90
     assert skillgate.parse_json('sure:\n{"score": 5, "findings": []}\nok')["score"] == 5
 
 
-def test_normalize_findings_maps_keys():
+def test_normalize_findings_maps_keys() -> None:
     out = skillgate._normalize_findings(
         [
             {
@@ -333,7 +329,7 @@ def _run(gate, ctx):
     return asyncio.run(gate.run(ctx))
 
 
-def test_skill_gate_scores_and_maps_outcome(monkeypatch):
+def test_skill_gate_scores_and_maps_outcome(monkeypatch) -> None:
     """A high score → PASS, a low score → WARN (never FAIL), findings preserved."""
     from gandalf.gates.well_architected import WellArchitectedGate
 
@@ -343,7 +339,8 @@ def test_skill_gate_scores_and_maps_outcome(monkeypatch):
         lambda *a, **k: '{"score": 95, "summary": "solid", "findings": []}',
     )
     res = _run(WellArchitectedGate(), _ctx(diff="+ added a retry with backoff"))
-    assert res.outcome is GateOutcome.PASS and res.score == 0.95
+    assert res.outcome is GateOutcome.PASS
+    assert res.score == 0.95
 
     monkeypatch.setattr(
         llm,
@@ -359,7 +356,7 @@ def test_skill_gate_scores_and_maps_outcome(monkeypatch):
     assert any(f.get("finding") == "No DR" for f in res.findings)
 
 
-def test_skill_gate_warns_when_judge_unavailable(monkeypatch):
+def test_skill_gate_warns_when_judge_unavailable(monkeypatch) -> None:
     """LLM transport failure degrades to WARN — never a false PASS."""
     from gandalf.gates.codebase_architecture import CodebaseArchitectureGate
 
@@ -371,7 +368,7 @@ def test_skill_gate_warns_when_judge_unavailable(monkeypatch):
     assert res.outcome is GateOutcome.WARN
 
 
-def test_skill_gate_warns_with_nothing_in_scope(monkeypatch):
+def test_skill_gate_warns_with_nothing_in_scope(monkeypatch) -> None:
     """No diff, no files, no request → nothing to judge → WARN, no LLM call."""
     from gandalf.gates.grill_me import GrillMeGate
 
@@ -383,7 +380,7 @@ def test_skill_gate_warns_with_nothing_in_scope(monkeypatch):
     assert res.outcome is GateOutcome.WARN
 
 
-def test_communicate_kills_the_child_on_timeout():
+def test_communicate_kills_the_child_on_timeout() -> None:
     """A timed-out gate must not leave its tool running.
 
     asyncio.wait_for cancels the await, not the process — so this asserts on the
@@ -409,7 +406,7 @@ def test_communicate_kills_the_child_on_timeout():
     assert proc.returncode is not None, "child survived the timeout"
 
 
-def test_reap_kills_the_container_not_just_the_docker_client(monkeypatch):
+def test_reap_kills_the_container_not_just_the_docker_client(monkeypatch) -> None:
     """A timed-out image-backed tool (semgrep, trivy…) must have its container
     stopped: killing `docker run` kills the client and leaves the tool running."""
     from gandalf import toolrun
@@ -418,14 +415,15 @@ def test_reap_kills_the_container_not_just_the_docker_client(monkeypatch):
     monkeypatch.setattr(toolrun.shutil, "which", lambda b: None)
     cmd = toolrun._dockerize(["semgrep", "scan"], "/repo", "gandalf-1-0")
     assert cmd[:2] == ["docker", "run"]
-    assert "--name" in cmd and cmd[cmd.index("--name") + 1] == "gandalf-1-0"
+    assert "--name" in cmd
+    assert cmd[cmd.index("--name") + 1] == "gandalf-1-0"
 
     killed = []
 
     class FakeProc:
         returncode = -9
 
-        def kill(self):
+        def kill(self) -> None:
             pass
 
         async def wait(self):
@@ -448,7 +446,7 @@ def test_reap_kills_the_container_not_just_the_docker_client(monkeypatch):
     assert killed == []
 
 
-def test_atheris_gate_ignores_its_own_artifact_prefix_flag(monkeypatch, tmp_path):
+def test_atheris_gate_ignores_its_own_artifact_prefix_flag(monkeypatch, tmp_path) -> None:
     """A clean run must PASS even though the harness is invoked with
     -artifact_prefix=/tmp/atheris-crash-, which libFuzzer echoes back in its
     startup banner — a bare "crash" substring match would always self-match."""
@@ -468,19 +466,13 @@ def test_atheris_gate_ignores_its_own_artifact_prefix_flag(monkeypatch, tmp_path
     # This test is about reading libFuzzer's output, not about whether atheris
     # is installed on the machine running the suite — stub the probe so it does
     # not pass locally and fail in CI.
-    monkeypatch.setattr(
-        dynamic, "_atheris_installed", lambda *a, **k: asyncio.sleep(0, result=True)
-    )
-    monkeypatch.setattr(
-        dynamic, "_run", lambda *a, **k: asyncio.sleep(0, result=(0, clean_log, ""))
-    )
+    monkeypatch.setattr(dynamic, "_atheris_installed", lambda *a, **k: asyncio.sleep(0, result=True))
+    monkeypatch.setattr(dynamic, "_run", lambda *a, **k: asyncio.sleep(0, result=(0, clean_log, "")))
     res = _run(dynamic.AtherisGate(), ctx)
     assert res.outcome is GateOutcome.PASS
 
     crash_log = "==12345==ERROR: libFuzzer: deadly signal\n"
-    monkeypatch.setattr(
-        dynamic, "_run", lambda *a, **k: asyncio.sleep(0, result=(77, "", crash_log))
-    )
+    monkeypatch.setattr(dynamic, "_run", lambda *a, **k: asyncio.sleep(0, result=(77, "", crash_log)))
     res = _run(dynamic.AtherisGate(), ctx)
     assert res.outcome is GateOutcome.FAIL
 
@@ -488,7 +480,7 @@ def test_atheris_gate_ignores_its_own_artifact_prefix_flag(monkeypatch, tmp_path
 # --- eslint findings: the gate's own translation of a fixable message ----------
 
 
-def test_eslint_messages_carry_a_normalised_fix(tmp_path):
+def test_eslint_messages_carry_a_normalised_fix(tmp_path) -> None:
     """eslint reports a fix as character offsets; the gate turns them into the
     line/column vocabulary the report, SARIF and the PR suggestion all read."""
     from gandalf.gates.node import _messages
@@ -530,10 +522,11 @@ def test_eslint_messages_carry_a_normalised_fix(tmp_path):
             "text": ";",
         }
     ]
-    assert "_fix" not in plain and plain["rule_id"] == "eslint"
+    assert "_fix" not in plain
+    assert plain["rule_id"] == "eslint"
 
 
-def test_eslint_messages_survive_junk(tmp_path):
+def test_eslint_messages_survive_junk(tmp_path) -> None:
     """eslint's JSON is external input; a malformed entry must not sink a gate."""
     from gandalf.gates.node import _messages
 
@@ -568,6 +561,3 @@ if __name__ == "__main__":
     test_skills_are_embedded()
     test_parse_json_tolerates_fences_and_prose()
     test_normalize_findings_maps_keys()
-    print(
-        "ok (run `pytest gandalf/test_gandalf.py` for the monkeypatch-based gate tests)"
-    )

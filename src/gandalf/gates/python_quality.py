@@ -11,6 +11,9 @@ from gandalf.plugins import (
     tool_missing,
 )
 
+# More than this many issues fails rather than warns.
+MAX_ISSUES = 10
+
 
 def _has_python(ctx: GateContext) -> bool:
     return any(t == "." or t.endswith(".py") for t in _scan_targets(ctx, py_only=True))
@@ -47,7 +50,7 @@ class MypyGate:
         if n == 0:
             return GateResult(self.name, GateOutcome.PASS, 1.0, "mypy: no type errors")
         score = max(0.0, 1.0 - min(n, 20) / 20)
-        outcome = GateOutcome.FAIL if n > 10 else GateOutcome.WARN
+        outcome = GateOutcome.FAIL if n > MAX_ISSUES else GateOutcome.WARN
         return GateResult(
             self.name,
             outcome,
@@ -66,9 +69,7 @@ class VultureGate:
         if (m := missing_result(self.name, "vulture")) is not None:
             return m
         if not _has_python(ctx):
-            return GateResult(
-                self.name, GateOutcome.PASS, 1.0, "vulture: no Python files"
-            )
+            return GateResult(self.name, GateOutcome.PASS, 1.0, "vulture: no Python files")
         rc, out, _ = await run_tool(
             ["vulture", "--min-confidence", "80", *_scan_targets(ctx, py_only=True)],
             ctx.workdir,
@@ -101,9 +102,7 @@ class FormatGate:
         if (m := missing_result(self.name, "ruff")) is not None:
             return m
         if not _has_python(ctx):
-            return GateResult(
-                self.name, GateOutcome.PASS, 1.0, "format: no Python files"
-            )
+            return GateResult(self.name, GateOutcome.PASS, 1.0, "format: no Python files")
         rc, out, _ = await run_tool(
             [
                 "ruff",
@@ -116,13 +115,9 @@ class FormatGate:
         )
         if (to := timeout_result(self.name, rc)) is not None:
             return to
-        drift = [
-            ln for ln in (out or "").splitlines() if ln.startswith("Would reformat")
-        ]
+        drift = [ln for ln in (out or "").splitlines() if ln.startswith("Would reformat")]
         if rc == 0 or not drift:
-            return GateResult(
-                self.name, GateOutcome.PASS, 1.0, "format: all files formatted"
-            )
+            return GateResult(self.name, GateOutcome.PASS, 1.0, "format: all files formatted")
         n = len(drift)
         score = max(0.0, 1.0 - min(n, 10) / 10)
         return GateResult(

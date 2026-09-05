@@ -185,6 +185,7 @@ trust boundary, see
 # gandalf/gates/mygate.py
 from gandalf.base import GateContext, GateOutcome, GateResult
 
+
 class MyGate:
     name = "mygate"
     blocking = False
