@@ -191,7 +191,8 @@ end
 function M.report_lines(snapshot)
   local payload = snapshot.payload
   local lines = {
-    string.format('%s · %d/100    scope: %s', core.VERDICT_WORD[payload.verdict] or '?', payload.score or 0, payload.scope or '?'),
+    string.format('%s · %d/100    scope: %s',
+      core.VERDICT_WORD[payload.verdict] or '?', payload.score or 0, payload.scope or '?'),
     string.rep('─', 60),
     '',
   }
