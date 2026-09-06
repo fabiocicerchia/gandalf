@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Any
+
+import pytest
+
 from gandalf import cache
 from gandalf.base import GateOutcome, GateResult
 
 
-def test_content_hash_changes_with_file_content(tmp_path) -> None:
+def test_content_hash_changes_with_file_content(tmp_path: Path) -> None:
     (tmp_path / "a.py").write_text("x = 1\n")
     files = cache.target_files(str(tmp_path), ["a.py"])
     h1 = cache.content_hash(str(tmp_path), files)
@@ -16,7 +21,7 @@ def test_content_hash_changes_with_file_content(tmp_path) -> None:
 
 
 def test_get_put_roundtrip() -> None:
-    data: dict = {}
+    data: dict[str, Any] = {}
     r = GateResult("ruff", GateOutcome.WARN, 0.8, "ruff: 1 issue", [{"path": "a.py"}])
     cache.put(data, "ruff", "abc123", r)
     got = cache.get(data, "ruff", "abc123")
@@ -27,21 +32,23 @@ def test_get_put_roundtrip() -> None:
     assert cache.get(data, "eslint", "abc123") is None
 
 
-def test_load_save_roundtrip(tmp_path) -> None:
+def test_load_save_roundtrip(tmp_path: Path) -> None:
     path = str(tmp_path / ".gandalf-cache.json")
-    data: dict = {}
+    data: dict[str, Any] = {}
     cache.put(data, "bandit", "h1", GateResult("bandit", GateOutcome.PASS, 1.0, "clean"))
     cache.save(path, data)
     loaded = cache.load(path)
-    assert cache.get(loaded, "bandit", "h1").outcome is GateOutcome.PASS
+    hit = cache.get(loaded, "bandit", "h1")
+    assert hit is not None
+    assert hit.outcome is GateOutcome.PASS
 
 
-def test_load_missing_file_is_empty(tmp_path) -> None:
+def test_load_missing_file_is_empty(tmp_path: Path) -> None:
     assert cache.load(str(tmp_path / "nope.json")) == {}
 
 
 # --- key salt + expiry ------------------------------------------------------
-def test_salt_changes_the_key(tmp_path) -> None:
+def test_salt_changes_the_key(tmp_path: Path) -> None:
     """A cached answer is only valid for the toolchain that produced it."""
     (tmp_path / "a.py").write_text("x = 1\n")
     files = cache.target_files(str(tmp_path), ["a.py"])
@@ -52,7 +59,7 @@ def test_salt_changes_the_key(tmp_path) -> None:
     assert plain != other
 
 
-def test_toolchain_salt_tracks_the_image_id(monkeypatch) -> None:
+def test_toolchain_salt_tracks_the_image_id(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cache.plugins, "tools_image_id", lambda: "sha256:aaa")
     first = cache.toolchain_salt()
     monkeypatch.setattr(cache.plugins, "tools_image_id", lambda: "sha256:bbb")
@@ -87,7 +94,7 @@ def test_a_gate_may_override_its_own_ttl() -> None:
 def test_a_stale_advisory_entry_is_a_miss() -> None:
     """The reported bug: a fresh CVE against an unchanged lockfile must not be
     served from cache just because no byte moved."""
-    data: dict = {}
+    data: dict[str, Any] = {}
     r = GateResult("trivy", GateOutcome.PASS, 1.0, "no known vulns")
     cache.put(data, "trivy", "h1", r)
     assert cache.get(data, "trivy", "h1", cache.ADVISORY_TTL) == r

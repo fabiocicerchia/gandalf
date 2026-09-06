@@ -6,6 +6,8 @@ never has to render pixels itself. Point a README at:
 
 from __future__ import annotations
 
+from typing import Any
+
 from .base import GateOutcome
 from .report import Verdict
 
@@ -17,7 +19,7 @@ _COLOR = {
 }
 
 
-def to_badge(verdict: Verdict, label: str = "gandalf") -> dict:
+def to_badge(verdict: Verdict, label: str = "gandalf") -> dict[str, Any]:
     """Render a verdict as the endpoint JSON shields.io draws from.
 
     Score in the message, RAG outcome in the colour — the badge has to be

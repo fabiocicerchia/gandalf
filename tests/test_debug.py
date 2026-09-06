@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import io
 import sys
+from collections.abc import Callable
 
 from gandalf import debug
 
 
-def _capture(fn):
+def _capture(fn: Callable[[], None]) -> str:
     old, sys.stderr = sys.stderr, io.StringIO()
     try:
         fn()

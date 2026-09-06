@@ -20,13 +20,16 @@ from __future__ import annotations
 import asyncio
 from functools import cache
 from pathlib import Path
+from typing import Any, cast
 
 from gandalf.base import GateContext, GateOutcome, GateResult
+from gandalf.findings import Finding
+from gandalf.gates._toolchain import seq
 from gandalf.plugins import unavailable
 
 # One tolerant JSON parser for every LLM-judge gate; it hardens json.loads so
 # over-nested replies surface as JSONDecodeError instead of leaking RecursionError.
-from gandalf.skills import _parse_json as parse_json
+from gandalf.skills import parse_json
 
 # skills/ sits at the repo root, above the src/gandalf/ package; resolve relative
 # to this package so a gate reads the same file a human would `/`-invoke, wherever
@@ -54,7 +57,7 @@ def _rubric(slugs: tuple[str, ...]) -> str:
     """Concatenate the named skills into one rubric block. The first slug is the
     gate's skill; the rest are its embedded dependencies (e.g. grill-me → grilling,
     improve-codebase-architecture → codebase-design)."""
-    parts = []
+    parts: list[str] = []
     for slug in slugs:
         text = load_skill(slug)
         if text:
@@ -83,7 +86,7 @@ def _changed_file_contents(ctx: GateContext) -> str:
     return "\n\n".join(out)
 
 
-def _alias(item: dict, *keys: str) -> str:
+def _alias(item: Finding, *keys: str) -> str:
     """The first non-empty value among the names a model might have used for the
     same field. '' when it used none of them."""
     for k in keys:
@@ -93,22 +96,23 @@ def _alias(item: dict, *keys: str) -> str:
     return ""
 
 
-def _normalize_findings(raw: object) -> list[dict]:
+def _normalize_findings(raw: object) -> list[dict[str, Any]]:
     """Coerce the model's findings into dicts whose keys report.fmt_finding
     already understands (``file`` / ``finding`` / ``description``)."""
-    findings: list[dict] = []
-    for item in (raw or [])[:_MAX_FINDINGS]:
+    findings: list[dict[str, Any]] = []
+    for item in seq(raw)[:_MAX_FINDINGS]:
         if isinstance(item, str):
             findings.append({"finding": item.strip()})
             continue
         if not isinstance(item, dict):
             continue
+        record = cast("Finding", item)
         findings.append(
             {
-                "severity": _alias(item, "severity", "risk").lower(),
-                "finding": _alias(item, "title", "finding", "issue"),
-                "description": _alias(item, "detail", "description", "recommendation"),
-                "file": _alias(item, "location", "file", "module"),
+                "severity": _alias(record, "severity", "risk").lower(),
+                "finding": _alias(record, "title", "finding", "issue"),
+                "description": _alias(record, "detail", "description", "recommendation"),
+                "file": _alias(record, "location", "file", "module"),
             }
         )
     return [f for f in findings if f.get("finding") or f.get("description")]
@@ -171,7 +175,7 @@ class SkillGate:
             return unavailable(self.name, f"{self.name}: nothing in scope to judge — skipped")
         return None
 
-    def _verdict(self, data: dict) -> GateResult:
+    def _verdict(self, data: dict[str, Any]) -> GateResult:
         """The judge's JSON as a gate result. A score that will not parse is 0,
         never a pass — the gate must not go green because the model went off
         format."""

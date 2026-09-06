@@ -35,6 +35,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 # Imported after the sys.path tweak above, on purpose.
+from typing import Any
+
 from gandalf import findings as gfindings
 from gandalf import ignores, plugins, scope
 
@@ -81,13 +83,13 @@ def peak_mb(fn: Callable[[], object]) -> float:
 # --- the subjects ------------------------------------------------------------
 
 
-def bench_tree_filter() -> dict:
+def bench_tree_filter() -> dict[str, Any]:
     """The exclusion filter, applied to every path in the tree on every scan."""
     pats = (*plugins.ignore_patterns("."), "*.min.js", "src/generated", "vendor")
     paths = [f"src/pkg{i % 200}/mod{i}.py" for i in range(TREE_PATHS)]
-    ignores._compiled_ignores.cache_clear()
+    ignores.compiled_ignores.cache_clear()
 
-    def run() -> list:
+    def run() -> list[Any]:
         return [p for p in paths if not plugins.is_ignored(p, pats)]
 
     return {
@@ -98,7 +100,7 @@ def bench_tree_filter() -> dict:
     }
 
 
-def bench_content_hash(tmp: Path) -> dict:
+def bench_content_hash(tmp: Path) -> list[dict[str, Any]]:
     """The cache key: one hash over every scanned file's name and contents.
 
     `read_bytes()` pulled each file into memory whole; `file_digest` reads it in
@@ -115,7 +117,7 @@ def bench_content_hash(tmp: Path) -> dict:
     root = tmp / "hashtree"
     root.mkdir()
     small = b"x = 1\n" * 2_000  # ~12 KB, a plausible source file
-    files = []
+    files: list[str] = []
     for i in range(HASH_FILES):
         f = root / f"mod{i}.py"
         f.write_bytes(small)
@@ -158,7 +160,7 @@ def bench_content_hash(tmp: Path) -> dict:
     ]
 
 
-def _payload(n: int) -> dict:
+def _payload(n: int) -> dict[str, Any]:
     """A run record the size of a first scan of a large untended repo."""
     per_gate = n // 40
     return {
@@ -187,7 +189,7 @@ def _payload(n: int) -> dict:
     }
 
 
-def bench_report_write(tmp: Path) -> dict:
+def bench_report_write(tmp: Path) -> dict[str, Any]:
     """Writing the JSON report.
 
     `write_text(json.dumps(...))` renders the whole document into a string and
@@ -218,7 +220,7 @@ def bench_report_write(tmp: Path) -> dict:
     }
 
 
-def bench_annotate() -> dict:
+def bench_annotate() -> dict[str, Any]:
     """Reconciling every finding's path/line/rule — runs once per report."""
     raw = [g["findings"] for g in _payload(FINDINGS)["gates"]]
     flat = [f for gate in raw for f in gate]
@@ -231,7 +233,7 @@ def bench_annotate() -> dict:
     }
 
 
-def bench_languages(tmp: Path) -> dict:
+def bench_languages(tmp: Path) -> dict[str, Any]:
     """Detecting the languages in scope, on a whole-tree scan.
 
     The old implementation ran its own `git ls-files`; the gates then ran
@@ -257,7 +259,7 @@ def bench_languages(tmp: Path) -> dict:
     def old() -> set[str]:
         # scope.languages as it was: its own listing, split on whitespace.
         out = subprocess.run(["git", "ls-files"], cwd=root, capture_output=True, text=True, check=True).stdout
-        return scope._classify(out.split())
+        return scope.classify(out.split())
 
     def new() -> set[str]:
         return scope.languages(root, [])
@@ -277,7 +279,7 @@ def bench_languages(tmp: Path) -> dict:
 # --- the extension half ------------------------------------------------------
 
 
-def bench_extension(repo_root: Path) -> list[dict]:
+def bench_extension(repo_root: Path) -> list[dict[str, Any]]:
     """Run the VS Code extension's bench, if node and its deps are here.
 
     Skipped rather than failed when they aren't: the Python half is useful on
@@ -317,7 +319,7 @@ def bench_extension(repo_root: Path) -> list[dict]:
 # --- output ------------------------------------------------------------------
 
 
-def table(rows: list[dict]) -> str:
+def table(rows: list[dict[str, Any]]) -> str:
     width = max(len(r["label"]) for r in rows)
     out = [f"  {'':{width}}   {'before':>10}  {'after':>10}   change"]
     for r in rows:
@@ -333,14 +335,14 @@ def table(rows: list[dict]) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="bench", description=__doc__.split("\n")[0])
+    ap = argparse.ArgumentParser(prog="bench", description=(__doc__ or "").split("\n")[0])
     ap.add_argument("--json", action="store_true", help="emit the raw measurements")
     ap.add_argument("--svg", metavar="PATH", help="write the chart here")
     ap.add_argument("--no-extension", action="store_true", help="skip the VS Code half")
     args = ap.parse_args(argv)
 
     repo_root = Path(__file__).resolve().parent.parent
-    rows: list[dict] = []
+    rows: list[dict[str, Any]] = []
     with tempfile.TemporaryDirectory(prefix="gandalf-bench-") as tmp:
         d = Path(tmp)
         if not args.json:

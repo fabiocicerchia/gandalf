@@ -7,8 +7,30 @@ it as a clean pass.
 
 from __future__ import annotations
 
+from typing import Any
+
 from .base import GateOutcome, GateResult
-from .toolrun import _TIMEOUT_RC, tool_missing
+from .toolrun import TIMEOUT_RC, tool_missing
+
+
+def mark(r: GateResult, **meta: object) -> GateResult:
+    """Attach runner metadata to a result, under the underscore names the
+    readers below and in `stream`, `outputs`, `junit` and `render_text` look for.
+
+    Set out-of-band rather than declared on `GateResult`, which is the whole
+    point: the dataclass stays byte-identical to ai-harness's, so a gate file
+    still moves between the two projects untouched. This function is where that
+    deliberate looseness is confined, instead of a `setattr` in every caller.
+    """
+    for key, value in meta.items():
+        setattr(r, f"_{key}", value)
+    return r
+
+
+def meta(r: GateResult, name: str, default: Any = None) -> Any:
+    """A value `mark` attached, or `default`. The reader half of the pair, so
+    no caller has to spell the underscore name itself."""
+    return getattr(r, f"_{name}", default)
 
 
 def unavailable(name: str, summary: str) -> GateResult:
@@ -27,9 +49,7 @@ def unavailable(name: str, summary: str) -> GateResult:
     scorecard that says nothing about the code. `report.aggregate` leaves marked
     results out of the composite and the verdict; the report counts them instead.
     """
-    r = GateResult(name, GateOutcome.WARN, 0.8, summary)
-    r._unavailable = True  # type: ignore[attr-defined]
-    return r
+    return mark(GateResult(name, GateOutcome.WARN, 0.8, summary), unavailable=True)
 
 
 def carry_over(src: GateResult, dst: GateResult) -> GateResult:
@@ -52,13 +72,13 @@ def carry_over(src: GateResult, dst: GateResult) -> GateResult:
 def did_not_run(r: GateResult) -> bool:
     """Whether this result came from `unavailable` — the reader for the marker,
     so no caller has to know it is an underscore attribute."""
-    return bool(getattr(r, "_unavailable", False))
+    return bool(meta(r, "unavailable", False))
 
 
 def timeout_result(name: str, rc: int) -> GateResult | None:
     """WARN sentinel: the tool did not actually run (timeout, or a dockerized tool
     missing from the image). Never let that masquerade as a clean pass."""
-    if rc == _TIMEOUT_RC:
+    if rc == TIMEOUT_RC:
         return unavailable(name, f"{name}: did not run (timeout or tool unavailable) — skipped")
     return None
 

@@ -6,15 +6,17 @@ diffed either side of it instead — see `_tree_state`.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .base import Gate, GateContext
+    from .base import GateContext
 
 import hashlib
 import subprocess
 
 from . import debug
+from .plugins import NamedGate
 
 
 def _tree_state(workdir: str) -> dict[str, str]:
@@ -61,14 +63,14 @@ def _files_note(paths: list[str], limit: int = 5) -> str:
     return f"{shown}, …+{len(paths) - limit} more" if len(paths) > limit else shown
 
 
-async def run_fixers(gates: list[Gate], ctx: GateContext) -> list[tuple[str, bool, str]]:
+async def run_fixers(gates: Sequence[NamedGate], ctx: GateContext) -> list[tuple[str, bool, str]]:
     """Apply autofixes from gates that expose `async def fix(ctx)`. Sequential —
     fixers edit files (e.g. ruff --fix then ruff format on the same files), so
     order matters and concurrent writes would race. Returns [(name, changed, msg)].
 
     What each fixer changed is measured from the worktree rather than taken from
     its own word — see _tree_state."""
-    out = []
+    out: list[tuple[str, bool, str]] = []
     before = _tree_state(ctx.workdir)
     for g in gates:
         fix = getattr(g, "fix", None)

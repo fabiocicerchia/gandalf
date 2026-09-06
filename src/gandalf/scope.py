@@ -12,7 +12,7 @@ import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from typing import Self
@@ -116,7 +116,7 @@ _MARKER_LANG = {
 }
 
 
-def _classify(paths: list[str]) -> set[str]:
+def classify(paths: list[str]) -> set[str]:
     """The language tags present in a file list.
 
     Drives gate selection: a gate declaring `langs` only runs when one of its
@@ -142,17 +142,17 @@ def languages(workdir: str, changed_files: list[str]) -> set[str]:
     (--staged/--commit), else from the whole tracked tree (git ls-files, so the
     untracked vendored llama.cpp doesn't count)."""
     if changed_files:
-        return _classify(changed_files)
+        return classify(changed_files)
     # plugins.tracked_files, not a second `git ls-files`: it is the same listing,
     # already cached per workdir (every gate asks for it moments later), and it
     # splits on NUL — `.split()` broke any tracked path containing a space into
     # two bogus filenames.
     from .plugins import tracked_files  # noqa: PLC0415 — local: avoids an import cycle
 
-    return _classify(list(tracked_files(workdir)))
+    return classify(list(tracked_files(workdir)))
 
 
-def commit_info(ref: str, workdir: str = ".") -> dict:
+def commit_info(ref: str, workdir: str = ".") -> dict[str, Any]:
     """Short/full sha + subject + author-date (UTC) of a commit. For staged and
     working-tree scopes this is HEAD (the latest commit)."""
     try:
@@ -177,7 +177,7 @@ class Scope:
     workdir: str
     changed_files: list[str] = field(default_factory=list)
     diff: str = ""
-    commit: dict = field(default_factory=dict)  # ref commit (HEAD for staged/working-tree)
+    commit: dict[str, Any] = field(default_factory=dict)  # ref commit (HEAD for staged/working-tree)
     _worktree: str | None = field(default=None, repr=False)
 
     def __enter__(self) -> Self:

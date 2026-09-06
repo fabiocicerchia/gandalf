@@ -23,7 +23,7 @@ from . import debug
 
 # Bounded so a hung tool degrades to WARN instead of stalling the run.
 SUBPROCESS_TIMEOUT_SECONDS = int(os.environ.get("GANDALF_GATE_TIMEOUT", "120"))
-_TIMEOUT_RC = -1
+TIMEOUT_RC = -1
 
 # Per-gate timeout override, set by the runner before each gate runs (see
 # __main__._run_gates). run_tool reads it so a gate's tool calls honour its
@@ -65,7 +65,7 @@ IMAGE_TOOLS = frozenset(
 
 
 @lru_cache(maxsize=1)
-def _tools_image_available() -> bool:
+def tools_image_available() -> bool:
     """Whether the scanner-tools image is built and present locally.
 
     Checked, never pulled: a quality gate must not reach the network on its own
@@ -90,7 +90,7 @@ def tools_image_id() -> str:
     actually distinguishes one build from another, so it is the thing a report
     has to carry if "it passes on my machine" is ever going to be answerable.
     """
-    if not _tools_image_available():
+    if not tools_image_available():
         return ""
     r = subprocess.run(  # nosec B603 B607 - fixed docker argv, no shell  # noqa: S603 — fixed argv, never a shell
         # Resolved from PATH on purpose: the tool may be a host binary or a shim
@@ -104,7 +104,7 @@ def tools_image_id() -> str:
 
 def _via_image(binary: str) -> bool:
     """Whether a tool would run out of the image rather than off the host PATH."""
-    return binary in IMAGE_TOOLS and _tools_image_available()
+    return binary in IMAGE_TOOLS and tools_image_available()
 
 
 # binary → "host" | "image", for every tool a gate actually invoked this run.
@@ -232,7 +232,7 @@ async def communicate(
 
 # The timeout is plumbed to asyncio.wait_for, which is the mechanism this rule asks for
 async def run_tool(cmd: list[str], cwd: str, timeout: int | None = None) -> tuple[int, str, str]:  # noqa: ASYNC109
-    """Run an external gate tool. On timeout the process is killed and _TIMEOUT_RC
+    """Run an external gate tool. On timeout the process is killed and TIMEOUT_RC
     is returned so the gate degrades to WARN rather than hanging. With no explicit
     timeout, the per-gate budget (GATE_TIMEOUT contextvar) is used, else the
     global default."""
@@ -253,18 +253,18 @@ async def run_tool(cmd: list[str], cwd: str, timeout: int | None = None) -> tupl
     except TimeoutError:
         await _reap(proc, cmd, container)
         debug.log(f"timeout after {timeout}s: {cmd[0]}")
-        return _TIMEOUT_RC, "", f"timed out after {timeout}s"
+        return TIMEOUT_RC, "", f"timed out after {timeout}s"
     except asyncio.CancelledError:
         # Ctrl-C, or the editor's cancel button: same leak, same cleanup.
         await _reap(proc, cmd, container)
         raise
-    rc = proc.returncode if proc.returncode is not None else _TIMEOUT_RC
+    rc = proc.returncode if proc.returncode is not None else TIMEOUT_RC
     debug.log(f"done rc={rc} in {time.monotonic() - t0:.2f}s: {cmd[0]}")
     errs = err.decode(errors="replace")
     # A dockerized tool that isn't actually in the image (or a missing image) must
     # NOT be read as a clean run — its empty stdout would parse as "no findings".
     if rc and _DOCKER_UNAVAILABLE.search(errs):
-        return _TIMEOUT_RC, "", errs
+        return TIMEOUT_RC, "", errs
     return rc, out.decode(errors="replace"), errs
 
 

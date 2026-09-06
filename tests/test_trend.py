@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from gandalf import trend
 
 
-def test_previous_score_none_without_file(tmp_path) -> None:
+def test_previous_score_none_without_file(tmp_path: Path) -> None:
     assert trend.previous_score(str(tmp_path / "nope.jsonl"), "abc") is None
 
 
-def test_previous_score_skips_same_commit(tmp_path) -> None:
+def test_previous_score_skips_same_commit(tmp_path: Path) -> None:
     path = str(tmp_path / "trend.jsonl")
     trend.record(path, "aaa111", 80, "t1")
     # re-running the same commit isn't "previous"
@@ -19,7 +21,7 @@ def test_previous_score_skips_same_commit(tmp_path) -> None:
     assert trend.previous_score(path, "ccc333") == 90
 
 
-def test_record_appends_jsonl(tmp_path) -> None:
+def test_record_appends_jsonl(tmp_path: Path) -> None:
     path = str(tmp_path / "trend.jsonl")
     trend.record(path, "aaa111", 80, "t1")
     trend.record(path, "bbb222", 90, "t2")

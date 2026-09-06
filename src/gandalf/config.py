@@ -30,9 +30,12 @@ from __future__ import annotations
 
 import os
 import tomllib
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any, cast
 
 from . import console
+from .base import Gate
 
 CONFIG_FILENAME = ".gandalf.toml"
 
@@ -41,24 +44,27 @@ class Config:
     """The `[gandalf]` table, with typed accessors. `data` is the raw table so
     later features can read their own sub-sections without touching this class."""
 
-    def __init__(self, data: dict | None = None, path: str = "") -> None:
+    def __init__(self, data: dict[str, Any] | None = None, path: str = "") -> None:
         self.data = data or {}
         self.path = path
 
     # --- gate selection -----------------------------------------------------
     @property
     def only(self) -> set[str]:
-        return {str(x) for x in (self.data.get("only") or [])}
+        only: list[object] = self.data.get("only") or []
+        return {str(x) for x in only}
 
     @property
     def skip(self) -> set[str]:
-        return {str(x) for x in (self.data.get("skip") or [])}
+        skip: list[object] = self.data.get("skip") or []
+        return {str(x) for x in skip}
 
-    def select(self, gates: list) -> tuple[list, list[str]]:
+    def select(self, gates: Sequence[Gate]) -> tuple[list[Gate], list[str]]:
         """Apply only/skip. Returns (kept_gates, disabled_names). `only` is an
         allowlist (empty = allow all); `skip` always removes."""
         only, skip = self.only, self.skip
-        kept, disabled = [], []
+        kept: list[Gate] = []
+        disabled: list[str] = []
         for g in gates:
             if (only and g.name not in only) or g.name in skip:
                 disabled.append(g.name)
@@ -75,9 +81,9 @@ class Config:
             return None
 
     # --- sub-sections (used by later features) ------------------------------
-    def section(self, name: str) -> dict:
-        v = self.data.get(name)
-        return v if isinstance(v, dict) else {}
+    def section(self, name: str) -> dict[str, Any]:
+        v: object = self.data.get(name)
+        return cast("dict[str, Any]", v) if isinstance(v, dict) else {}
 
 
 def load(repo_root: str | None = None, explicit: str | None = None) -> Config:

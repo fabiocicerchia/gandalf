@@ -34,6 +34,7 @@ try:
     with atheris.instrument_imports():  # type: ignore[attr-defined]  # no stubs for atheris
         from gandalf import llm, report, severity, skills, suggest, suppress
 except ImportError:
+    atheris = None
     from gandalf import llm, report, severity, skills, suggest, suppress
 
 # Exceptions each adapter is CONTRACTED to raise on bad input — expected, not a
@@ -63,10 +64,10 @@ def _exercise(text: str) -> None:
 
     # documented: the tolerant parser still rejects non-JSON
     with contextlib.suppress(json.JSONDecodeError):
-        skills._parse_json(text)
+        skills.parse_json(text)
 
     # malformed "gate:rule:path:line" specs are rejected, not fatal
-    with contextlib.suppress(_EXPECTED):
+    with contextlib.suppress(*_EXPECTED):
         suppress._Rule(text)
 
 
@@ -104,6 +105,8 @@ def main() -> None:
         _selfcheck()
         return
 
+    if atheris is None:
+        raise SystemExit("atheris is not installed — run with --selfcheck, or pip install atheris")
     atheris.Setup(sys.argv, _test_one_input)
     atheris.Fuzz()
 

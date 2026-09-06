@@ -64,7 +64,7 @@ def set_extra_ignores(patterns: Iterable[str] | None) -> None:
     _extra.patterns = tuple(p.strip() for p in (patterns or []) if p and p.strip())
     ignore_patterns.cache_clear()
     scannable_files.cache_clear()
-    _compiled_ignores.cache_clear()
+    compiled_ignores.cache_clear()
 
 
 @lru_cache(maxsize=8)
@@ -74,7 +74,7 @@ def ignore_patterns(workdir: str) -> tuple[str, ...]:
     starting with ``#`` ignored), and anything passed to --exclude. Deduped,
     order preserved. A dir name (``data``), a path (``src/generated``) and a
     glob (``*.min.js``) all work — see is_ignored."""
-    pats = list(_DEFAULT_IGNORES)
+    pats: list[str] = list(_DEFAULT_IGNORES)
     f = Path(workdir) / ".gandalfignore"
     if f.is_file():
         for line in f.read_text(errors="replace").splitlines():
@@ -91,7 +91,7 @@ def _alternation(pats: list[str]) -> re.Pattern[str] | None:
 
 
 @lru_cache(maxsize=16)
-def _compiled_ignores(
+def compiled_ignores(
     patterns: tuple[str, ...],
 ) -> tuple[set[str], tuple[str, ...], re.Pattern[str] | None, re.Pattern[str] | None]:
     """Sort the patterns into the cheapest test each one allows.
@@ -145,7 +145,7 @@ def is_ignored(rel: str, patterns: tuple[str, ...]) -> bool:
     p = rel.replace("\\", "/").removeprefix("./")
     if not p:
         return False
-    names, prefixes, segment_re, path_re = _compiled_ignores(tuple(patterns))
+    names, prefixes, segment_re, path_re = compiled_ignores(tuple(patterns))
     segments = p.split("/")
     if names and not names.isdisjoint(segments):
         return True
@@ -175,7 +175,7 @@ def _changed_in_scope(ctx: GateContext, pats: tuple[str, ...], py_only: bool) ->
     ]
 
 
-def _scan_targets(ctx: GateContext, *, py_only: bool = False) -> list[str]:
+def scan_targets(ctx: GateContext, *, py_only: bool = False) -> list[str]:
     """Files to scan: the change's own files (bounded runtime, scoring reflects
     the diff not pre-existing repo issues), falling back to the git-tracked tree
     when the changed set is empty. Deletions/non-existent paths are dropped.

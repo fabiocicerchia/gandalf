@@ -15,6 +15,8 @@ Do not edit any of this without a baseline format version and a migration.
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 _FP_PATH_KEYS: tuple[str, ...] = ("path", "filename", "file", "file_path")
 _FP_RULE_KEYS: tuple[str, ...] = (
     "rule_id",
@@ -48,8 +50,9 @@ def _first_truthy(f: object, keys: tuple[str, ...]) -> str:
     """
     if not isinstance(f, dict):
         return ""
+    fields = cast("dict[str, Any]", f)
     for k in keys:
-        v = f.get(k)
+        v = fields.get(k)
         if v:
             return str(v)
     return ""
@@ -63,8 +66,10 @@ def fingerprint_keys(f: object) -> tuple[str, str, str]:
     """
     if not isinstance(f, dict):
         return "", "", str(f)
+    # Narrowed above; the cast is only so the key reads are typed.
+    fields = cast("dict[str, Any]", f)
     return (
-        _first_truthy(f, _FP_PATH_KEYS),
-        _first_truthy(f, _FP_RULE_KEYS),
-        _first_truthy(f, _FP_MESSAGE_KEYS),
+        _first_truthy(fields, _FP_PATH_KEYS),
+        _first_truthy(fields, _FP_RULE_KEYS),
+        _first_truthy(fields, _FP_MESSAGE_KEYS),
     )

@@ -26,14 +26,20 @@ surface and right in another.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
+from typing import Any, TypeGuard, cast
 
-from .fingerprint import fingerprint_keys  # noqa: F401 — findings.* is the surface
-from .locate import (  # noqa: F401 — findings.* is the surface
-    path_in_prose,
-    place_from_prose,
-    relpath,
-    text_location,
-)
+# Re-exported: `findings.*` is the surface every caller reads, so what lives in
+# a sibling module is reachable from here under its own name.
+from .fingerprint import fingerprint_keys as fingerprint_keys
+from .locate import path_in_prose as path_in_prose
+from .locate import place_from_prose as place_from_prose
+from .locate import relpath as relpath
+from .locate import text_location as text_location
+
+# One finding as its tool emitted it. The values are whatever that tool put in
+# its JSON, which is the whole reason this module exists.
+Finding = dict[str, Any]
 
 # Preference order, first truthy wins. Supersets of what the individual call
 # sites used to carry, so a finding any surface could place is now placeable by
@@ -151,7 +157,7 @@ LEVELS: tuple[str, ...] = ("critical", "high", "medium", "low", "info", "unknown
 _MESSAGE_LEVEL = re.compile(r"^\[([A-Za-z]+)\]\s*")
 
 
-def _is_mapping(f: object) -> bool:
+def _is_mapping(f: object) -> TypeGuard[Finding]:
     return isinstance(f, dict)
 
 
@@ -160,7 +166,7 @@ def first_str(f: object, keys: tuple[str, ...]) -> str:
     if not _is_mapping(f):
         return ""
     for k in keys:
-        v = f.get(k)  # type: ignore[union-attr]
+        v = f.get(k)
         if isinstance(v, str) and v.strip():
             return v.strip()
         if isinstance(v, bool):
@@ -175,7 +181,7 @@ def first_int(f: object, keys: tuple[str, ...]) -> int:
     if not _is_mapping(f):
         return 0
     for k in keys:
-        v = f.get(k)  # type: ignore[union-attr]
+        v = f.get(k)
         if isinstance(v, bool):
             continue
         if isinstance(v, int) and v > 0:
@@ -185,11 +191,11 @@ def first_int(f: object, keys: tuple[str, ...]) -> int:
     return 0
 
 
-def _nested(f: object, key: str) -> dict | None:
+def _nested(f: object, key: str) -> Finding | None:
     if not _is_mapping(f):
         return None
-    v = f.get(key)  # type: ignore[union-attr]
-    return v if isinstance(v, dict) else None
+    v: object = f.get(key)
+    return cast("Finding", v) if isinstance(v, dict) else None
 
 
 def _nested_position(f: object) -> tuple[int, int]:
@@ -266,7 +272,7 @@ def url(f: object) -> str:
     return first_str(f, URL_KEYS)
 
 
-def normalise(f: object, root: str = "") -> dict:
+def normalise(f: object, root: str = "") -> Finding:
     """Everything above, as one dict.
 
     This is what goes on the wire under ``_gandalf`` so a consumer — the VS Code
@@ -317,8 +323,8 @@ def annotate(f: object, root: str = "") -> object:
     """
     if not _is_mapping(f):
         return f
-    return {**f, "_gandalf": normalise(f, root)}  # type: ignore[dict-item]
+    return {**f, "_gandalf": normalise(f, root)}
 
 
-def annotate_all(items: list, root: str = "") -> list:
+def annotate_all(items: Sequence[object] | None, root: str = "") -> list[object]:
     return [annotate(f, root) for f in items or []]

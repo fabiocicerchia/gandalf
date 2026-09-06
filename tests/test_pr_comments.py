@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
+from typing import Any
 
 from gandalf import pr_comments, report
 from gandalf.base import GateOutcome, GateResult
@@ -135,7 +137,7 @@ def test_body_carries_marker_and_update_stamp() -> None:
     assert not pr_comments._ours("someone else's comment")
 
 
-def _thread(tid, key, resolved: bool = False):
+def _thread(tid: str, key: tuple[str, int, str], resolved: bool = False) -> dict[str, Any]:
     return {"id": tid, "resolved": resolved, "key": key}
 
 
@@ -204,7 +206,7 @@ if __name__ == "__main__":
 # on the comment, so the reviewer commits the fix from the PR page.
 
 
-def _fixable(row, col, end_col, content, **extra):
+def _fixable(row: int, col: int, end_col: int, content: str, **extra: Any) -> dict[str, Any]:
     return {
         "filename": "a.py",
         "code": "F401",
@@ -224,18 +226,18 @@ def _fixable(row, col, end_col, content, **extra):
 
 
 def _tree(
-    tmp_path,
+    tmp_path: Path,
     text: str = "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\neleven\nprint( x )\ny = 2\nz = 3\n",
 ):
     (tmp_path / "a.py").write_text(text)
     return str(tmp_path)
 
 
-def _fail(findings):
+def _fail(findings: list[dict[str, Any]]) -> list[GateResult]:
     return [GateResult("ruff", GateOutcome.FAIL, 0.3, "ruff", findings)]
 
 
-def test_comment_carries_the_tools_own_fix(tmp_path) -> None:
+def test_comment_carries_the_tools_own_fix(tmp_path: Path) -> None:
     root = _tree(tmp_path)
     results = _fail([_fixable(12, 7, 8, "")])  # drop the space in `print( x )`
     (comment,) = pr_comments.build(results, ["a.py"], _DIFF, workdir=root)[0]
@@ -243,7 +245,7 @@ def test_comment_carries_the_tools_own_fix(tmp_path) -> None:
     assert "start_line" not in comment  # single line: no range needed
 
 
-def test_multi_line_fix_makes_the_comment_span_the_range(tmp_path) -> None:
+def test_multi_line_fix_makes_the_comment_span_the_range(tmp_path: Path) -> None:
     root = _tree(tmp_path)
     joined = {
         "filename": "a.py",
@@ -266,7 +268,7 @@ def test_multi_line_fix_makes_the_comment_span_the_range(tmp_path) -> None:
     assert comment["body"].endswith("```suggestion\njoined\n```")
 
 
-def test_a_fix_reaching_outside_the_diff_is_left_as_prose(tmp_path) -> None:
+def test_a_fix_reaching_outside_the_diff_is_left_as_prose(tmp_path: Path) -> None:
     """GitHub rejects a comment whose range leaves the diff, and a rejected
     comment is a lost finding — so the prose stands on its own instead."""
     root = _tree(tmp_path)
@@ -290,13 +292,13 @@ def test_a_fix_reaching_outside_the_diff_is_left_as_prose(tmp_path) -> None:
     assert "```suggestion" not in comment["body"]  # 14 is not in the diff
 
 
-def test_findings_without_a_fix_are_unchanged(tmp_path) -> None:
+def test_findings_without_a_fix_are_unchanged(tmp_path: Path) -> None:
     root = _tree(tmp_path)
     comments, _ = pr_comments.build(_RESULTS, ["a.py", "b.py"], _DIFF, workdir=root)
     assert all("```suggestion" not in c["body"] for c in comments)
 
 
-def test_summary_counts_the_applicable_fixes(tmp_path) -> None:
+def test_summary_counts_the_applicable_fixes(tmp_path: Path) -> None:
     root = _tree(tmp_path)
     results = _fail([_fixable(12, 7, 8, "")])
     v = report.aggregate(results)

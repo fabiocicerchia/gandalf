@@ -13,6 +13,7 @@ Each self-skips when its tool is not installed.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.gates._toolchain import (
@@ -20,6 +21,8 @@ from gandalf.gates._toolchain import (
     counted,
     exit_code,
     merged,
+    obj,
+    objects,
     parsed,
     per_file,
     project_dir,
@@ -55,19 +58,19 @@ class RubySyntaxGate(ToolchainGate):
         return await per_file(self.name, ["ruby", "-c"], ctx, (".rb",), label="ruby -c")
 
 
-def _rubocop_findings(data: dict) -> list[dict]:
+def _rubocop_findings(data: object) -> list[dict[str, Any]]:
     """rubocop's per-file offence lists, flattened."""
     return [
         {
             "file": f.get("path", ""),
-            "line": (o.get("location") or {}).get("line", 0),
-            "column": (o.get("location") or {}).get("column", 0),
+            "line": obj(o.get("location")).get("line", 0),
+            "column": obj(o.get("location")).get("column", 0),
             "rule": o.get("cop_name", ""),
             "message": o.get("message", ""),
             "severity": o.get("severity", ""),
         }
-        for f in data.get("files") or []
-        for o in f.get("offenses") or []
+        for f in objects(obj(data).get("files"))
+        for o in objects(f.get("offenses"))
     ]
 
 
@@ -93,7 +96,7 @@ class RubocopGate(ToolchainGate):
                 f"rubocop: did not run — {tail(merged(out, err), 2)}",
             )
         findings = _rubocop_findings(data)
-        n = (data.get("summary") or {}).get("offense_count", len(findings))
+        n = obj(obj(data).get("summary")).get("offense_count", len(findings))
         return counted(self.name, n, "rubocop", findings[:50], noun="offence(s)")
 
     async def fix(self, ctx: GateContext) -> tuple[bool, str]:

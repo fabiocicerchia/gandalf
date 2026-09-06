@@ -31,10 +31,11 @@ import time
 from dataclasses import asdict, dataclass, field
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 from . import plugins
 from .base import GateOutcome, GateResult
-from .plugins import ignore_patterns, is_ignored, scannable_files
+from .plugins import NamedGate, ignore_patterns, is_ignored, scannable_files
 
 DEFAULT_CACHE = ".gandalf-cache.json"
 
@@ -89,7 +90,7 @@ def toolchain_salt() -> str:
     return f"v{CACHE_VERSION}|{_gandalf_version()}|{plugins.tools_image_id()}"
 
 
-def max_age(gate: Gate) -> float | None:
+def max_age(gate: NamedGate) -> float | None:
     """Seconds a cached result for this gate stays valid, or None for forever."""
     ttl = getattr(gate, "cache_ttl", None)
     if ttl is not None:
@@ -98,7 +99,7 @@ def max_age(gate: Gate) -> float | None:
 
 
 def target_files(workdir: str, changed_files: list[str]) -> list[str]:
-    """Same file-set logic as plugins._scan_targets: the change's own files,
+    """Same file-set logic as plugins.scan_targets: the change's own files,
     falling back to the whole tracked tree, minus anything excluded.
 
     Excluded files are left out on purpose — the hash decides whether a gate's
@@ -134,7 +135,7 @@ def content_hash(workdir: str, files: list[str], salt: str = "") -> str:
     return h.hexdigest()
 
 
-def load(path: str) -> dict:
+def load(path: str) -> dict[str, Any]:
     """Read the cache file, or an empty cache.
 
     A missing, unreadable or corrupt file is not an error — the worst it can
@@ -149,13 +150,13 @@ def load(path: str) -> dict:
         return {}
 
 
-def save(path: str, data: dict) -> None:
+def save(path: str, data: dict[str, Any]) -> None:
     """Write the cache back, pretty-printed so a diff on it is readable."""
     with Path(path).open("w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2, default=str)
 
 
-def get(cache: dict, gate_name: str, file_hash: str, max_age_s: float | None = None) -> GateResult | None:
+def get(cache: dict[str, Any], gate_name: str, file_hash: str, max_age_s: float | None = None) -> GateResult | None:
     """The cached result for a gate, if it was recorded against this hash and is
     not older than `max_age_s` (None = no expiry).
 
@@ -172,7 +173,7 @@ def get(cache: dict, gate_name: str, file_hash: str, max_age_s: float | None = N
         ts = entry.get("ts")
         if not isinstance(ts, (int, float)) or time.time() - ts > max_age_s:
             return None
-    r = entry.get("result") or {}
+    r: dict[str, Any] = entry.get("result") or {}
     try:
         return GateResult(
             r["name"],
@@ -185,7 +186,7 @@ def get(cache: dict, gate_name: str, file_hash: str, max_age_s: float | None = N
         return None
 
 
-def put(cache: dict, gate_name: str, file_hash: str, result: GateResult) -> None:
+def put(cache: dict[str, Any], gate_name: str, file_hash: str, result: GateResult) -> None:
     """Record a gate's result against the hash of the files it saw, and when.
 
     The timestamp is what lets a dependency verdict expire while the lockfile
@@ -209,16 +210,18 @@ class Plan:
     """
 
     path: str | None = None
-    data: dict = field(default_factory=dict)
+    data: dict[str, Any] = field(default_factory=dict)
     file_hash: str = ""
 
-    def pending(self, active: list) -> list:
+    def pending(self, active: list[Gate]) -> list[Gate]:
         """The gates with no live cache entry — all of them when caching is off."""
         if self.path is None:
             return active
         return [g for g in active if get(self.data, g.name, self.file_hash, max_age(g)) is None]
 
-    def merge(self, fresh: list[GateResult], active: list, ran: list) -> tuple[list, list]:
+    def merge(
+        self, fresh: list[GateResult], active: list[Gate], ran: list[Gate]
+    ) -> tuple[list[GateResult], list[GateResult]]:
         """Store what just ran → (every result in `active` order, the cached ones).
 
         The cached ones come back separately because they never ran, so nothing
@@ -229,6 +232,12 @@ class Plan:
         for r in fresh:
             put(self.data, r.name, self.file_hash, r)
         save(self.path, self.data)
-        cached = [get(self.data, g.name, self.file_hash, max_age(g)) for g in active if g not in ran]
+        # `get` returns None for an entry that expired between the pending
+        # check and here; those gates simply have no cached result to merge.
+        cached = [
+            found
+            for g in active
+            if g not in ran and (found := get(self.data, g.name, self.file_hash, max_age(g))) is not None
+        ]
         by_name = {r.name: r for r in fresh + cached}
         return [by_name[g.name] for g in active], cached

@@ -54,14 +54,19 @@ async def _run(cmd: list[str], cwd: str, timeout: int = _DAST_TIMEOUT) -> tuple[
     )
 
 
-def _guard(ctx: GateContext, name: str) -> tuple[str | None, GateResult | None]:
-    """Return (target_url, None) or (None, skip_result)."""
-    target = (ctx.meta or {}).get("target", "")
+def _guard(ctx: GateContext, name: str) -> str | GateResult:
+    """The target URL to scan, or the result to return instead of scanning.
+
+    One value rather than a (target, skip) pair: the two were never both
+    meaningful, and reading the target out of the pair meant every caller had
+    to know that a non-None skip made it None.
+    """
+    target = str((ctx.meta or {}).get("target", ""))
     if not target:
-        return None, unavailable(name, f"{name}: no target URL — skipped (pass --target)")
+        return unavailable(name, f"{name}: no target URL — skipped (pass --target)")
     if not _is_local(target) and not (ctx.meta or {}).get("allow_remote", False):
-        return None, unavailable(name, f"{name}: refusing active scan against non-local target '{target}'")
-    return target, None
+        return unavailable(name, f"{name}: refusing active scan against non-local target '{target}'")
+    return target
 
 
 def _endpoint(ctx: GateContext, target: str) -> tuple[str, str]:
@@ -156,9 +161,9 @@ class NiktoGate:
     blocking = False
 
     async def run(self, ctx: GateContext) -> GateResult:
-        target, skip = _guard(ctx, self.name)
-        if skip:
-            return skip
+        target = _guard(ctx, self.name)
+        if isinstance(target, GateResult):
+            return target
         if not shutil.which("nikto"):
             return unavailable(self.name, "nikto not installed — skipped")
         rc, out, _ = await _run(
@@ -186,9 +191,9 @@ class SqlmapGate:
     blocking = False
 
     async def run(self, ctx: GateContext) -> GateResult:
-        target, skip = _guard(ctx, self.name)
-        if skip:
-            return skip
+        target = _guard(ctx, self.name)
+        if isinstance(target, GateResult):
+            return target
         if not shutil.which("sqlmap"):
             return unavailable(self.name, "sqlmap not installed — skipped")
         api, bearer = _endpoint(ctx, target)
@@ -230,9 +235,9 @@ class DalfoxGate:
     blocking = False
 
     async def run(self, ctx: GateContext) -> GateResult:
-        target, skip = _guard(ctx, self.name)
-        if skip:
-            return skip
+        target = _guard(ctx, self.name)
+        if isinstance(target, GateResult):
+            return target
         if not shutil.which("dalfox"):
             return unavailable(self.name, "dalfox not installed — skipped")
         api, bearer = _endpoint(ctx, target)

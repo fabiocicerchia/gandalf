@@ -13,9 +13,11 @@ carries `automationDetails.id = "gandalf"` so its alerts stay a distinct set.
 from __future__ import annotations
 
 import hashlib
+from typing import Any
 
 from . import findings
 from .base import GateOutcome, GateResult
+from .findings import Finding
 from .report import fmt_finding
 from .suppress import fingerprint
 
@@ -70,7 +72,7 @@ _finding_line = findings.line
 _relpath = findings.relpath
 
 
-def _location(path: str, line: int, root: str = "") -> list[dict]:
+def _location(path: str, line: int, root: str = "") -> list[dict[str, Any]]:
     """SARIF locations for a finding, or [] when it names no file.
 
     A result with no location is not merely unhelpful: Code Scanning rejects
@@ -82,13 +84,13 @@ def _location(path: str, line: int, root: str = "") -> list[dict]:
     if not path:
         return []
     region = {"startLine": line} if line > 0 else {}
-    phys: dict[str, dict] = {"artifactLocation": {"uri": path}}
+    phys: dict[str, dict[str, Any]] = {"artifactLocation": {"uri": path}}
     if region:
         phys["region"] = region
     return [{"physicalLocation": phys}]
 
 
-def _bump_severity(rule: dict, score: str) -> None:
+def _bump_severity(rule: Finding, score: str) -> None:
     """Keep the highest security-severity seen for a rule (findings on one rule
     may carry different severities; GitHub ranks the alert by the rule's score)."""
     props = rule.setdefault("properties", {})
@@ -110,15 +112,15 @@ def _rule_id(gate: str, rule_name: str) -> str:
     return f"{rule_id[: _MAX_RULE_ID - len(digest) - 1]}~{digest}"
 
 
-def _collect(results: list[GateResult], root: str) -> tuple[dict[str, dict], list[dict], int]:
+def _collect(results: list[GateResult], root: str) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]], int]:
     """(rules by id, SARIF results, findings that could not be located).
 
     Findings without a resolvable location are counted rather than dropped — a
     total that quietly omits some of them is not a total, and one locationless
     result invalidates the entire upload.
     """
-    rules: dict[str, dict] = {}
-    sarif_results: list[dict] = []
+    rules: dict[str, dict[str, Any]] = {}
+    sarif_results: list[dict[str, Any]] = []
     without_location = 0
     for r in results:
         gate_level = _OUTCOME_LEVEL[r.outcome]
@@ -157,7 +159,7 @@ def _collect(results: list[GateResult], root: str) -> tuple[dict[str, dict], lis
     return rules, sarif_results, without_location
 
 
-def to_sarif(results: list[GateResult], meta: dict | None = None) -> dict:
+def to_sarif(results: list[GateResult], meta: dict[str, Any] | None = None) -> dict[str, Any]:
     """Render the results as a SARIF log.
 
     SARIF is what GitHub code scanning ingests, so this is how findings become
@@ -176,7 +178,7 @@ def to_sarif(results: list[GateResult], meta: dict | None = None) -> dict:
     version = meta.get("version")
     if version:
         driver["version"] = str(version)
-    run: dict = {
+    run: dict[str, Any] = {
         "tool": {"driver": driver},
         "automationDetails": {"id": "gandalf"},
         "results": sarif_results,

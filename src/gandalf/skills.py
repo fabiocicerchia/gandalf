@@ -23,6 +23,7 @@ import asyncio
 import json
 import re
 from pathlib import Path
+from typing import Any
 
 from gandalf import llm
 from gandalf.base import GateContext, GateOutcome, GateResult
@@ -54,7 +55,7 @@ def load_skill(name: str) -> str:
     return _FRONTMATTER.sub("", path.read_text(errors="replace")).strip()
 
 
-def _loads(s: str) -> dict:
+def _loads(s: str) -> dict[str, Any]:
     """json.loads, but input nested too deep for the C decoder surfaces as an
     ordinary parse error instead of leaking RecursionError to callers that only
     guard against JSONDecodeError."""
@@ -64,7 +65,7 @@ def _loads(s: str) -> dict:
         raise json.JSONDecodeError("input too deeply nested", s, 0) from exc
 
 
-def _parse_json(text: str) -> dict:
+def parse_json(text: str) -> dict[str, Any]:
     """Tolerant JSON extraction: strip markdown fences, else grab the first
     brace-delimited object. Raises json.JSONDecodeError on anything unparsable
     (including over-nested input). The compliance gate delegates here."""
@@ -146,13 +147,13 @@ async def judge(
         f"{playbook}\n\n---\n\n"
         + _INSTRUCTION.format(task=task, cap=_FINDINGS_CAP)
         + "\n"
-        + llm._context(ctx.workdir, label, diff[:_DIFF_LIMIT])
+        + llm.repo_context(ctx.workdir, label, diff[:_DIFF_LIMIT])
     )
 
     try:
         # llm.chat is blocking urllib — keep it off the event loop.
         text = await asyncio.to_thread(llm.chat, [{"role": "user", "content": prompt}], temperature=0.0)
-        data = _parse_json(text)
+        data = parse_json(text)
     except Exception as exc:
         return unavailable(
             gate_name,
@@ -165,6 +166,7 @@ async def judge(
         pct = 0
     score = pct / 100.0
     outcome = _coerce_outcome(data.get("outcome", ""), score)
-    findings = [{"finding": str(f).strip()} for f in (data.get("findings") or []) if str(f).strip()][:_FINDINGS_CAP]
+    raw: list[object] = data.get("findings") or []
+    findings = [{"finding": str(f).strip()} for f in raw if str(f).strip()][:_FINDINGS_CAP]
     summary = str(data.get("summary") or f"{pct}/100").strip()
     return GateResult(gate_name, outcome, score, summary, findings)

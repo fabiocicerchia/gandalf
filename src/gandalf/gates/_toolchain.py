@@ -24,10 +24,11 @@ import fnmatch
 import json
 import re
 from pathlib import Path
+from typing import Any, cast
 
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.plugins import (
-    _TIMEOUT_RC,
+    TIMEOUT_RC,
     run_tool,
     scannable_files,
     timeout_result,
@@ -105,7 +106,7 @@ def nonblank(out: str | None) -> list[str]:
     return [ln for ln in (out or "").splitlines() if ln.strip()]
 
 
-def parsed(out: str, empty: str = "{}") -> dict | list | None:
+def parsed(out: str, empty: str = "{}") -> dict[str, Any] | list[Any] | None:
     """A tool's JSON stdout, or None when it did not emit JSON at all.
 
     None rather than an empty document, because "the scanner printed something
@@ -118,11 +119,39 @@ def parsed(out: str, empty: str = "{}") -> dict | list | None:
         return None
 
 
+def obj(value: object) -> dict[str, Any]:
+    """`value` as a JSON object, or an empty one.
+
+    Every gate walks its tool's JSON the same way — `(data.get("x") or {})` —
+    and every one of those expressions has to answer the same question: is this
+    really an object? Asking here means a tool that answers with a list, a
+    string or null produces an empty report rather than an AttributeError
+    halfway through a scan.
+    """
+    return cast("dict[str, Any]", value) if isinstance(value, dict) else {}
+
+
+def seq(value: object) -> list[Any]:
+    """`value` as a JSON array, or an empty one. The sibling of `obj`."""
+    return cast("list[Any]", value) if isinstance(value, list) else []
+
+
+def objects(value: object) -> list[dict[str, Any]]:
+    """The JSON objects in an array, skipping anything that is not one.
+
+    A malformed entry — a bare string where a record was expected — is dropped
+    rather than reported as a finding with every field empty: a tool's output is
+    external input, and one broken entry must not sink the gate or invent a
+    finding nobody can act on.
+    """
+    return [cast("dict[str, Any]", i) for i in seq(value) if isinstance(i, dict)]
+
+
 def scored(  # noqa: PLR0913 — the parameters are the record this writes; a wrapper object here would only rename them
     gate: str,
     n: int,
     summary: str,
-    findings: list[dict] | None = None,
+    findings: list[dict[str, Any]] | None = None,
     *,
     fail: bool,
     cap: int = 10,
@@ -138,7 +167,7 @@ def counted(  # noqa: PLR0913 — the parameters are the record this writes; a w
     gate: str,
     n: int,
     label: str,
-    findings: list[dict] | None = None,
+    findings: list[dict[str, Any]] | None = None,
     *,
     warn_max: int = 3,
     noun: str = "issue(s)",
@@ -210,7 +239,7 @@ async def per_file(
     capped = files[:MAX_SYNTAX_FILES]
     limit = asyncio.Semaphore(_PARALLEL)
     results = await asyncio.gather(*(_check_one(rel, argv, ctx.workdir, limit) for rel in capped))
-    broken = [(rel, txt) for rel, rc, txt in results if rc not in (0, _TIMEOUT_RC)]
+    broken = [(rel, txt) for rel, rc, txt in results if rc not in (0, TIMEOUT_RC)]
     scanned = f"{len(capped)} file(s)" + (f" (of {len(files)}, capped)" if len(files) > len(capped) else "")
     if not broken:
         return GateResult(gate, GateOutcome.PASS, 1.0, f"{label}: {scanned} parse")

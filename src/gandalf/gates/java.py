@@ -24,6 +24,7 @@ from gandalf.gates._toolchain import (
     ToolchainGate,
     counted,
     exit_code,
+    objects,
     project_dir,
     tail,
 )
@@ -160,8 +161,8 @@ class KtlintGate(ToolchainGate):
                 "rule": e.get("rule", ""),
                 "message": e.get("message", ""),
             }
-            for entry in report
-            for e in entry.get("errors") or []
+            for entry in objects(report)
+            for e in objects(entry.get("errors"))
         ]
         return counted(self.name, len(findings), "ktlint", findings[:50])
 

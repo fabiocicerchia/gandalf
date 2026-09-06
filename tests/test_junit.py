@@ -55,7 +55,7 @@ def test_warn_stays_passing_with_system_out() -> None:
     assert bandit.find("failure") is None
     out = bandit.find("system-out")
     assert out is not None
-    assert "1 issue" in out.text
+    assert "1 issue" in (out.text or "")
 
 
 def test_passing_gate_has_no_failure_or_system_out() -> None:

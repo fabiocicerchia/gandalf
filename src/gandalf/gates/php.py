@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.gates._toolchain import (
@@ -21,6 +22,8 @@ from gandalf.gates._toolchain import (
     counted,
     exit_code,
     merged,
+    obj,
+    objects,
     parsed,
     per_file,
     project_dir,
@@ -59,7 +62,7 @@ class PhpSyntaxGate(ToolchainGate):
         return await per_file(self.name, ["php", "-l", "-n"], ctx, (".php",), label="php -l")
 
 
-def _phpcs_findings(data: dict) -> list[dict]:
+def _phpcs_findings(data: object) -> list[dict[str, Any]]:
     """phpcs' per-file message lists, flattened."""
     return [
         {
@@ -68,10 +71,10 @@ def _phpcs_findings(data: dict) -> list[dict]:
             "column": m.get("column", 0),
             "rule": m.get("source", ""),
             "message": m.get("message", ""),
-            "severity": (m.get("type") or "").lower(),
+            "severity": str(m.get("type") or "").lower(),
         }
-        for path, f in (data.get("files") or {}).items()
-        for m in f.get("messages") or []
+        for path, f in obj(obj(data).get("files")).items()
+        for m in objects(obj(f).get("messages"))
     ]
 
 
@@ -101,7 +104,7 @@ class PhpcsGate(ToolchainGate):
         if data is None:
             return unavailable(self.name, f"phpcs: did not run — {tail(merged(out, err), 2)}")
         findings = _phpcs_findings(data)
-        totals = data.get("totals") or {}
+        totals = obj(obj(data).get("totals"))
         n = totals.get("errors", 0) + totals.get("warnings", 0) or len(findings)
         return counted(self.name, n, "phpcs", findings[:50], noun="violation(s)")
 
@@ -145,8 +148,8 @@ class ComposerAuditGate(ToolchainGate):
                 "url": a.get("link", ""),
                 "severity": a.get("severity", ""),
             }
-            for pkg, items in (data.get("advisories") or {}).items()
-            for a in items
+            for pkg, items in obj(obj(data).get("advisories")).items()
+            for a in objects(items)
         ]
         if not advisories:
             return GateResult(self.name, GateOutcome.PASS, 1.0, "composer audit: no known advisories")

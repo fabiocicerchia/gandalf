@@ -12,6 +12,7 @@ it costs almost nothing.
 
 from __future__ import annotations
 
+from typing import Any
 from xml.sax.saxutils import escape
 
 # Validated with the dataviz palette validator (six checks, both modes):
@@ -73,11 +74,11 @@ def _fmt(v: float) -> str:
     return f"{v:.2f}".rstrip("0").rstrip(".")
 
 
-def _row_height(row: dict) -> int:
+def _row_height(row: dict[str, Any]) -> int:
     return BAR * 2 + PAIR_GAP if row.get("before") is not None else BAR
 
 
-def _row_svg(row: dict, ry: int, plot: int, ceiling: float, unit: str) -> list[str]:
+def _row_svg(row: dict[str, Any], ry: int, plot: int, ceiling: float, unit: str) -> list[str]:
     """One row: its label, one or two bars, and the before/after factor."""
     out = [
         (
@@ -112,7 +113,7 @@ def _row_svg(row: dict, ry: int, plot: int, ceiling: float, unit: str) -> list[s
     return out
 
 
-def _panel(rows: list[dict], unit: str, title: str, top: int) -> tuple[list[str], int]:
+def _panel(rows: list[dict[str, Any]], unit: str, title: str, top: int) -> tuple[list[str], int]:
     """One panel: a titled group of bars sharing a single axis."""
     out: list[str] = []
     plot = WIDTH - GUTTER - RIGHT
@@ -126,7 +127,7 @@ def _panel(rows: list[dict], unit: str, title: str, top: int) -> tuple[list[str]
     y += 20
 
     axis_top = y
-    body_rows: list[tuple[dict, int]] = []
+    body_rows: list[tuple[dict[str, Any], int]] = []
     for row in rows:
         body_rows.append((row, y))
         y += _row_height(row) + ROW_GAP
@@ -147,9 +148,9 @@ def _panel(rows: list[dict], unit: str, title: str, top: int) -> tuple[list[str]
     return out, axis_bottom + 24
 
 
-def render(rows: list[dict]) -> str:
+def render(rows: list[dict[str, Any]]) -> str:
     """The whole figure. `rows` is what bench.py measured."""
-    by_unit: dict[str, list[dict]] = {}
+    by_unit: dict[str, list[dict[str, Any]]] = {}
     for r in rows:
         by_unit.setdefault(r["unit"], []).append(r)
     for group in by_unit.values():

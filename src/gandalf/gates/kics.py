@@ -16,8 +16,10 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from gandalf.base import GateContext, GateOutcome, GateResult
+from gandalf.gates._toolchain import obj
 from gandalf.plugins import (
     ignore_patterns,
     run_tool,
@@ -61,7 +63,7 @@ def _argv(workdir: str, outdir: str, have_host: bool) -> list[str]:
     ]
 
 
-def _findings(data: dict) -> list[dict]:
+def _findings(data: dict[str, Any]) -> list[dict[str, Any]]:
     """Every matched file of every failing query, as file/line/message."""
     return [
         {
@@ -74,9 +76,9 @@ def _findings(data: dict) -> list[dict]:
     ]
 
 
-def _result(gate: str, data: dict) -> GateResult:
+def _result(gate: str, data: dict[str, Any]) -> GateResult:
     """Score the report: a HIGH counts double and any HIGH makes the gate red."""
-    sev = data.get("severity_counters", {}) or {}
+    sev = obj(data.get("severity_counters"))
     high, med, low = sev.get("HIGH", 0), sev.get("MEDIUM", 0), sev.get("LOW", 0)
     findings = _findings(data)
     if high + med + low + sev.get("INFO", 0) == 0 and not findings:

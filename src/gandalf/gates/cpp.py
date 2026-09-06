@@ -18,6 +18,7 @@ import re
 import shutil
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.gates._toolchain import (
@@ -105,7 +106,7 @@ class CppcheckGate(ToolchainGate):
         if (to := timeout_result(self.name, rc)) is not None:
             return to
         # cppcheck reports on stderr and exits 0 unless it could not run at all.
-        findings = []
+        findings: list[dict[str, Any]] = []
         for line in ((err or "") + (out or "")).splitlines():
             m = _HIT.match(line.strip())
             if m:

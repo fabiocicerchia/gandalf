@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from gandalf import suggest
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.findings import relpath
-from gandalf.gates._toolchain import merged, parsed, scored
+from gandalf.gates._toolchain import merged, obj, objects, parsed, scored, seq
 from gandalf.plugins import (
     run_tool,
     timeout_result,
@@ -34,7 +35,7 @@ def _no_pkg(ctx: GateContext) -> bool:
     return not (Path(ctx.workdir) / "package.json").exists()
 
 
-def _item(m: dict, rel: str) -> dict:
+def _item(m: dict[str, Any], rel: str) -> dict[str, Any]:
     """One eslint message, in the keys the report, SARIF and the PR comments
     all read."""
     return {
@@ -47,14 +48,13 @@ def _item(m: dict, rel: str) -> dict:
     }
 
 
-def _fix_range(m: dict) -> list | None:
+def _fix_range(m: dict[str, Any]) -> list[Any] | None:
     """The character-offset span of the rule's own autofix, when it has one."""
-    fix = m.get("fix") if isinstance(m.get("fix"), dict) else {}
-    rng = fix.get("range")
-    return rng if isinstance(rng, list) and len(rng) == RANGE_PAIR else None
+    rng = seq(obj(m.get("fix")).get("range"))
+    return rng if len(rng) == RANGE_PAIR else None
 
 
-def _messages(results: list, workdir: str) -> list[dict]:
+def _messages(results: list[dict[str, Any]], workdir: str) -> list[dict[str, Any]]:
     """eslint's per-message findings, flattened — and, for a rule eslint knows
     how to fix, a `_fix` block so the pull request can carry the fix as a
     suggestion.
@@ -63,28 +63,24 @@ def _messages(results: list, workdir: str) -> list[dict]:
     downstream speaks offsets, so the translation happens here, once, where the
     file that produced them is at hand.
     """
-    out: list[dict] = []
-    for res in results:
-        if not isinstance(res, dict):
-            continue
+    out: list[dict[str, Any]] = []
+    for res in objects(results):
         rel = relpath(res.get("filePath", ""), workdir)
         source: str | None = None
-        for m in res.get("messages") or []:
-            if not isinstance(m, dict):
-                continue
+        for m in objects(res.get("messages")):
             item = _item(m, rel)
             rng = _fix_range(m)
             if rng:
                 if source is None:  # read once per file, only if a fix needs it
                     source = _read(workdir, rel)
-                edit = suggest.utf16_edit(source, rng[0], rng[1], m["fix"].get("text"))
+                edit = suggest.utf16_edit(source, rng[0], rng[1], obj(m.get("fix")).get("text"))
                 if edit:
                     item["_fix"] = {"edits": [edit]}
             out.append(item)
     return out
 
 
-def _eslint_counts(results: list) -> tuple[int, int]:
+def _eslint_counts(results: list[dict[str, Any]]) -> tuple[int, int]:
     """(errors, warnings) across eslint's per-file results."""
     return (
         sum(r.get("errorCount", 0) for r in results),
@@ -119,7 +115,7 @@ class EslintGate:
         results = parsed(out, "")
         if results is None:
             return unavailable(self.name, "eslint: not configured in project — skipped")
-        errors, warns = _eslint_counts(results)
+        errors, warns = _eslint_counts(objects(results))
         total = errors + warns
         if total == 0:
             return GateResult(self.name, GateOutcome.PASS, 1.0, "eslint: clean")
@@ -127,7 +123,7 @@ class EslintGate:
             self.name,
             total,
             f"eslint: {errors} error(s), {warns} warning(s)",
-            _messages(results, ctx.workdir),
+            _messages(objects(results), ctx.workdir),
             fail=errors > 0,
         )
 

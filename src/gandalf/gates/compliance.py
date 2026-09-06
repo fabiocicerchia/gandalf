@@ -8,10 +8,12 @@ no request/diff it degrades to WARN. Passes at >= 85% compliance.
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 from gandalf.base import GateContext, GateOutcome, GateResult
+from gandalf.gates._toolchain import seq
 from gandalf.plugins import unavailable
-from gandalf.skills import _parse_json as _parse_judge
+from gandalf.skills import parse_json as parse_judge
 
 COMPLIANCE_THRESHOLD = 0.85
 _DIFF_LIMIT = 24_000
@@ -56,7 +58,7 @@ def _prompt(ctx: GateContext) -> str | None:
     return _PROMPT.format(title=title, body=body_trunc, diff=diff_trunc)
 
 
-def _verdict(gate: str, data: dict) -> GateResult:
+def _verdict(gate: str, data: dict[str, Any]) -> GateResult:
     """The judge's JSON as a gate result. A score that will not parse is 0 —
     never a pass."""
     try:
@@ -64,7 +66,7 @@ def _verdict(gate: str, data: dict) -> GateResult:
     except (TypeError, ValueError):
         pct = 0
     score = pct / 100.0
-    missing = [str(m).strip() for m in (data.get("missing") or []) if str(m).strip()]
+    missing = [str(m).strip() for m in seq(data.get("missing")) if str(m).strip()]
     outcome = GateOutcome.PASS if score >= COMPLIANCE_THRESHOLD else GateOutcome.FAIL
     summary = f"{pct}% compliant" + (f" · {len(missing)} unmet point(s)" if missing else "")
     findings = [{"missing": m} for m in missing]
@@ -86,7 +88,7 @@ class ComplianceGate:
         try:
             # llm.chat is blocking (urllib) — run it off the event loop.
             text = await asyncio.to_thread(llm.chat, [{"role": "user", "content": prompt}], temperature=0.0)
-            data = _parse_judge(text)
+            data = parse_judge(text)
         except Exception as exc:
             return GateResult(
                 self.name,

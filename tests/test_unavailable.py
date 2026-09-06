@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from gandalf import render_html, render_text, report, severity, suppress
 from gandalf.base import GateOutcome, GateResult
-from gandalf.plugins import did_not_run, unavailable
+from gandalf.plugins import did_not_run, mark, meta, unavailable
 
 P, W, F = GateOutcome.PASS, GateOutcome.WARN, GateOutcome.FAIL
 
@@ -102,7 +102,7 @@ def test_marker_survives_partial_suppression() -> None:
         "2 issues",
         [{"path": "a.py", "code": "E501"}, {"path": "b.py", "code": "F401"}],
     )
-    r._unavailable = False
+    mark(r, unavailable=False)
     assert not did_not_run(sup.apply(r))
     assert sup.apply(unavailable("trivy", "missing")) is not None
 
@@ -112,16 +112,16 @@ def _decorated() -> GateResult:
     """A result as the runner hands it on: score-carrying fields plus the
     metadata it attaches out of band."""
     r = GateResult("trivy", W, 0.5, "2 vulns", [{"severity": "HIGH", "code": "X"}])
-    r._blocking, r._category, r._duration = True, "Dependencies", 1.25
+    mark(r, blocking=True, category="Dependencies", duration=1.25)
     return r
 
 
 def test_reweighting_keeps_the_duration() -> None:
     """It never did: --severity-weight wrote a null duration for every gate."""
     out = severity.reweight(_decorated())
-    assert out._duration == 1.25
-    assert out._blocking is True
-    assert out._category == "Dependencies"
+    assert meta(out, "duration") == 1.25
+    assert meta(out, "blocking") is True
+    assert meta(out, "category") == "Dependencies"
 
 
 def test_partial_suppression_keeps_the_duration() -> None:
@@ -129,16 +129,16 @@ def test_partial_suppression_keeps_the_duration() -> None:
     r = _decorated()
     r.findings.append({"severity": "LOW", "code": "Y", "path": "b.py"})
     out = sup.apply(r)
-    assert out._duration == 1.25
-    assert out._blocking is True
+    assert meta(out, "duration") == 1.25
+    assert meta(out, "blocking") is True
 
 
 def test_full_suppression_keeps_the_metadata_too() -> None:
     sup = suppress.build({"rules": ["trivy"]}, None)
     out = sup.apply(_decorated())
     assert out.outcome is P  # everything muted
-    assert out._duration == 1.25
-    assert out._category == "Dependencies"
+    assert meta(out, "duration") == 1.25
+    assert meta(out, "category") == "Dependencies"
 
 
 def test_carry_over_ignores_the_dataclass_fields() -> None:
@@ -151,4 +151,4 @@ def test_carry_over_ignores_the_dataclass_fields() -> None:
     assert dst.score == 1.0
     assert dst.summary == "rebuilt"
     assert dst.findings == []
-    assert dst._duration == 1.25
+    assert meta(dst, "duration") == 1.25

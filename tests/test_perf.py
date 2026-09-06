@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import subprocess
 import time
+from pathlib import Path
 
 from gandalf import plugins, scope
-from gandalf.ignores import _compiled_ignores
+from gandalf.ignores import compiled_ignores
 from gandalf.plugins import (
     ignore_patterns,
     is_ignored,
@@ -25,7 +26,7 @@ from gandalf.plugins import (
 )
 
 
-def _repo(tmp_path, files):
+def _repo(tmp_path: Path, files: list[str]) -> Path:
     repo = tmp_path / "repo"
     repo.mkdir()
     for rel in files:
@@ -48,7 +49,7 @@ def _reset_caches() -> None:
     tracked_files.cache_clear()
     scannable_files.cache_clear()
     ignore_patterns.cache_clear()
-    _compiled_ignores.cache_clear()
+    compiled_ignores.cache_clear()
 
 
 def test_ignore_patterns_are_compiled_once_for_a_whole_tree_walk() -> None:
@@ -60,12 +61,12 @@ def test_ignore_patterns_are_compiled_once_for_a_whole_tree_walk() -> None:
     for i in range(5_000):
         is_ignored(f"src/pkg{i % 50}/mod{i}.py", pats)
 
-    info = _compiled_ignores.cache_info()
+    info = compiled_ignores.cache_info()
     assert info.misses == 1, f"compiled {info.misses} times for one pattern set"
     assert info.hits == 4_999
 
 
-def test_the_tracked_listing_is_read_from_git_once_per_workdir(tmp_path) -> None:
+def test_the_tracked_listing_is_read_from_git_once_per_workdir(tmp_path: Path) -> None:
     """Every gate asks for the same file list. Shelling out to git per gate is
     ~35 subprocesses for one answer that cannot have changed mid-run."""
     _reset_caches()
@@ -78,7 +79,7 @@ def test_the_tracked_listing_is_read_from_git_once_per_workdir(tmp_path) -> None
     assert scannable_files.cache_info().misses == 1, "and one filter pass over it"
 
 
-def test_languages_reuses_that_listing_instead_of_asking_git_again(tmp_path) -> None:
+def test_languages_reuses_that_listing_instead_of_asking_git_again(tmp_path: Path) -> None:
     """`languages()` runs immediately before the gates do, against the same tree.
 
     It used to issue its own `git ls-files`, so every whole-tree scan paid for
@@ -97,7 +98,7 @@ def test_languages_reuses_that_listing_instead_of_asking_git_again(tmp_path) -> 
     assert after.hits == before.hits + 1, "it read the cached one"
 
 
-def test_a_scoped_run_never_touches_the_tracked_listing_at_all(tmp_path) -> None:
+def test_a_scoped_run_never_touches_the_tracked_listing_at_all(tmp_path: Path) -> None:
     """With a changed set in hand there is nothing to list — a --staged scan of
     three files must not enumerate a 25k-file tree to classify them."""
     _reset_caches()

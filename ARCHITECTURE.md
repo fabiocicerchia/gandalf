@@ -383,7 +383,7 @@ The section above reasons about the import graph, where an edge either exists or
 
 <details><summary>Evidence</summary>
 
-- `src/gandalf/ignores.py:82` — `_compiled_ignores`, depth 4
+- `src/gandalf/ignores.py:82` — `compiled_ignores`, depth 4
 - `src/gandalf/plugins.py:114` — `discover_gates`, depth 4
 - `src/gandalf/pr_comments.py:71` — `added_lines`, depth 4
 - `src/gandalf/pr_comments.py:133` — `build`, depth 4

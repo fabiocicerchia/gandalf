@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.plugins import (
-    _scan_targets,
     missing_result,
     run_tool,
+    scan_targets,
     timeout_result,
     tool_missing,
 )
@@ -16,7 +16,7 @@ MAX_ISSUES = 10
 
 
 def _has_python(ctx: GateContext) -> bool:
-    return any(t == "." or t.endswith(".py") for t in _scan_targets(ctx, py_only=True))
+    return any(t == "." or t.endswith(".py") for t in scan_targets(ctx, py_only=True))
 
 
 class MypyGate:
@@ -39,7 +39,7 @@ class MypyGate:
                 # Don't drop a .mypy_cache into the scanned repo (matches ruff's
                 # --no-cache); also avoids a stale root-owned cache breaking reruns.
                 "--cache-dir=/dev/null",
-                *_scan_targets(ctx, py_only=True),
+                *scan_targets(ctx, py_only=True),
             ],
             ctx.workdir,
         )
@@ -71,7 +71,7 @@ class VultureGate:
         if not _has_python(ctx):
             return GateResult(self.name, GateOutcome.PASS, 1.0, "vulture: no Python files")
         rc, out, _ = await run_tool(
-            ["vulture", "--min-confidence", "80", *_scan_targets(ctx, py_only=True)],
+            ["vulture", "--min-confidence", "80", *scan_targets(ctx, py_only=True)],
             ctx.workdir,
         )
         if (to := timeout_result(self.name, rc)) is not None:
@@ -109,7 +109,7 @@ class FormatGate:
                 "format",
                 "--no-cache",
                 "--check",
-                *_scan_targets(ctx, py_only=True),
+                *scan_targets(ctx, py_only=True),
             ],
             ctx.workdir,
         )
@@ -133,7 +133,7 @@ class FormatGate:
         if tool_missing("ruff"):
             return (False, "ruff unavailable — nothing formatted")
         _rc, out, err = await run_tool(
-            ["ruff", "format", "--no-cache", *_scan_targets(ctx, py_only=True)],
+            ["ruff", "format", "--no-cache", *scan_targets(ctx, py_only=True)],
             ctx.workdir,
         )
         line = next(

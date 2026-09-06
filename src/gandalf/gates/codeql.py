@@ -31,15 +31,16 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.gates._toolchain import scored
+from gandalf.gates._toolchain import obj, objects, scored
 from gandalf.plugins import (
     run_tool,
     timeout_result,
     unavailable,
 )
-from gandalf.scope import _classify
+from gandalf.scope import classify
 
 _IMAGE = os.environ.get("GANDALF_CODEQL_IMAGE", "mcr.microsoft.com/cstsectools/codeql-container:latest")
 _TIMEOUT = int(os.environ.get("GANDALF_CODEQL_TIMEOUT", "600"))
@@ -65,7 +66,7 @@ def _codeql_langs(changed_files: list[str] | None) -> list[str]:
     can build here (all of them) — the per-language create simply produces an
     empty DB for a language with no sources.
     """
-    detected = _classify(changed_files) if changed_files else None
+    detected = classify(changed_files) if changed_files else None
     return sorted({_LANG_MAP[t] for t in (detected or set(_LANG_MAP)) if t in _LANG_MAP})
 
 
@@ -114,11 +115,11 @@ class CodeqlGate:
 
     async def _collect(
         self, ctx: GateContext, work: str, cq_langs: list[str], have_host: bool
-    ) -> tuple[list[str], int, int, list[dict]]:
+    ) -> tuple[list[str], int, int, list[dict[str, Any]]]:
         """Analyze each language in turn → (languages that produced a SARIF we
         could read, error count, warning count, findings)."""
         ran: list[str] = []
-        findings: list[dict] = []
+        findings: list[dict[str, Any]] = []
         errors = warnings = 0
         for lang in cq_langs:
             sarif = str(Path(work) / f"{lang}.sarif")
@@ -230,13 +231,13 @@ class CodeqlGate:
         return Path(sarif).exists()  # noqa: ASYNC240
 
 
-def _parse_sarif(data: dict) -> tuple[int, int, list[dict]]:
+def _parse_sarif(data: dict[str, Any]) -> tuple[int, int, list[dict[str, Any]]]:
     """Pull (error-count, warning-count, findings) out of a SARIF 2.x document.
     `note`-level results are informational and don't count toward the score."""
     errors = warnings = 0
-    findings: list[dict] = []
-    for run in data.get("runs", []) or []:
-        for res in run.get("results", []) or []:
+    findings: list[dict[str, Any]] = []
+    for run in objects(obj(data).get("runs")):
+        for res in objects(run.get("results")):
             level = res.get("level", "warning")
             if level == "error":
                 errors += 1
@@ -244,14 +245,14 @@ def _parse_sarif(data: dict) -> tuple[int, int, list[dict]]:
                 pass
             else:
                 warnings += 1
-            loc = (res.get("locations") or [{}])[0]
-            phys = loc.get("physicalLocation", {}) or {}
+            locations = objects(res.get("locations"))
+            phys = obj(locations[0].get("physicalLocation") if locations else None)
             findings.append(
                 {
-                    "file": phys.get("artifactLocation", {}).get("uri", ""),
-                    "line": phys.get("region", {}).get("startLine", ""),
+                    "file": obj(phys.get("artifactLocation")).get("uri", ""),
+                    "line": obj(phys.get("region")).get("startLine", ""),
                     "rule": res.get("ruleId", ""),
-                    "message": f"[{level}] {res.get('message', {}).get('text', '')}",
+                    "message": f"[{level}] {obj(res.get('message')).get('text', '')}",
                 }
             )
     return errors, warnings, findings

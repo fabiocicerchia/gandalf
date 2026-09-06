@@ -13,6 +13,7 @@ import re
 from pathlib import Path
 
 from gandalf.base import GateContext, GateOutcome, GateResult
+from gandalf.gates._toolchain import obj, objects
 from gandalf.plugins import (
     run_tool,
     timeout_result,
@@ -71,7 +72,7 @@ class GolangciLintGate:
         if (to := timeout_result(self.name, rc)) is not None:
             return to
         try:
-            issues = json.loads(out or "{}").get("Issues") or []
+            issues = objects(obj(json.loads(out or "{}")).get("Issues"))
         except json.JSONDecodeError:
             issues = []
         n = len(issues)
