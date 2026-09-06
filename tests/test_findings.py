@@ -38,7 +38,7 @@ MYPY = {"error": 'src/d.py:552: error: "Gate" has no attribute "langs"  [attr-de
 FORMAT = {"file": "Would reformat: src/e.py"}
 
 
-def test_bandit_rule_is_the_test_id_not_the_source_snippet():
+def test_bandit_rule_is_the_test_id_not_the_source_snippet() -> None:
     """The regression this module exists for: `code` must not beat `test_id`.
 
     The VS Code extension's own key list omitted test_id, so every bandit
@@ -48,21 +48,21 @@ def test_bandit_rule_is_the_test_id_not_the_source_snippet():
     assert "\n" not in findings.rule(BANDIT)
 
 
-def test_rule_reading_across_tools():
+def test_rule_reading_across_tools() -> None:
     assert findings.rule(RUFF) == "E501"
     assert findings.rule(SEMGREP) == "py.lang.x"
     assert findings.rule(TRIVY) == "CVE-2021-1"
     assert findings.rule(MYPY) == ""
 
 
-def test_nested_positions():
+def test_nested_positions() -> None:
     assert (findings.line(RUFF), findings.column(RUFF)) == (12, 4)
     assert (findings.line(SEMGREP), findings.column(SEMGREP)) == (7, 3)
     assert findings.line(BANDIT) == 42
     assert findings.line(TRIVY) == 0
 
 
-def test_severity_normalisation():
+def test_severity_normalisation() -> None:
     assert findings.severity(BANDIT) == "high"
     assert findings.severity(TRIVY) == "critical"
     # semgrep nests it; only severity.py used to look there.
@@ -73,7 +73,7 @@ def test_severity_normalisation():
     assert findings.severity({"severity": "nonsense"}) == ""
 
 
-def test_every_normalised_severity_is_a_known_level():
+def test_every_normalised_severity_is_a_known_level() -> None:
     for word in (
         "CRITICAL",
         "high",
@@ -87,7 +87,7 @@ def test_every_normalised_severity_is_a_known_level():
         assert findings.severity({"severity": word}) in findings.LEVELS
 
 
-def test_normalise_shape():
+def test_normalise_shape() -> None:
     n = findings.normalise(BANDIT)
     assert n == {
         "path": "src/c.py",
@@ -100,30 +100,24 @@ def test_normalise_shape():
     }
 
 
-def test_severity_folded_into_the_message():
+def test_severity_folded_into_the_message() -> None:
     """kics and the licenses gate write `[HIGH] ...` rather than a severity key."""
     n = findings.normalise({"finding": "[HIGH] world-readable secret"})
     assert (n["severity"], n["message"]) == ("high", "world-readable secret")
 
 
-def test_bracket_that_is_not_a_severity_is_left_alone():
+def test_bracket_that_is_not_a_severity_is_left_alone() -> None:
     for text in ("[B603] subprocess call", "x has no attribute [attr-defined]"):
         n = findings.normalise({"finding": text})
         assert (n["severity"], n["message"]) == ("", text)
 
 
-def test_rule_documentation_url():
-    assert (
-        findings.normalise({"finding": "x", "url": "https://d/r"})["url"]
-        == "https://d/r"
-    )
-    assert (
-        findings.normalise({"finding": "x", "PrimaryURL": "https://d/c"})["url"]
-        == "https://d/c"
-    )
+def test_rule_documentation_url() -> None:
+    assert findings.normalise({"finding": "x", "url": "https://d/r"})["url"] == "https://d/r"
+    assert findings.normalise({"finding": "x", "PrimaryURL": "https://d/c"})["url"] == "https://d/c"
 
 
-def test_location_scraped_from_prose_and_trimmed(tmp_path):
+def test_location_scraped_from_prose_and_trimmed(tmp_path) -> None:
     """mypy/tsc/codeql carry their location only in the message text."""
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "d.py").write_text("x = 1\n")
@@ -133,14 +127,13 @@ def test_location_scraped_from_prose_and_trimmed(tmp_path):
     assert n["message"].startswith("error:")
 
 
-def test_prose_that_merely_looks_like_a_path_is_not_trusted(tmp_path):
-    n = findings.normalise(
-        {"finding": "see docs/missing.md:12 for details"}, str(tmp_path)
-    )
-    assert n["path"] == "" and n["line"] == 0
+def test_prose_that_merely_looks_like_a_path_is_not_trusted(tmp_path) -> None:
+    n = findings.normalise({"finding": "see docs/missing.md:12 for details"}, str(tmp_path))
+    assert n["path"] == ""
+    assert n["line"] == 0
 
 
-def test_sentence_in_a_location_key_becomes_the_message(tmp_path):
+def test_sentence_in_a_location_key_becomes_the_message(tmp_path) -> None:
     """The format gate puts the whole finding in `file`."""
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "e.py").write_text("x = 1\n")
@@ -149,13 +142,13 @@ def test_sentence_in_a_location_key_becomes_the_message(tmp_path):
     assert n["path"] == "src/e.py"
 
 
-def test_relpath_rebases_container_paths():
+def test_relpath_rebases_container_paths() -> None:
     assert findings.relpath("/src/a.py", "/src") == "a.py"
     assert findings.relpath("./a.py") == "a.py"
     assert findings.relpath("a\\b.py") == "a/b.py"
 
 
-def test_annotate_keeps_the_tools_own_keys():
+def test_annotate_keeps_the_tools_own_keys() -> None:
     out = findings.annotate(BANDIT)
     assert out["test_id"] == "B105"  # untouched
     assert out["_gandalf"]["rule"] == "B105"
@@ -163,7 +156,7 @@ def test_annotate_keeps_the_tools_own_keys():
     assert findings.annotate("a bare string") == "a bare string"
 
 
-def test_non_dict_findings_are_survivable():
+def test_non_dict_findings_are_survivable() -> None:
     for reader in (findings.path, findings.rule, findings.message, findings.severity):
         assert reader("a bare string") == ""
     assert findings.line(None) == 0
@@ -172,7 +165,7 @@ def test_non_dict_findings_are_survivable():
 # --- the frozen half ---------------------------------------------------------
 
 
-def test_fingerprint_vocabulary_is_frozen():
+def test_fingerprint_vocabulary_is_frozen() -> None:
     """Widening the shared lists must not move a fingerprint: a baseline file is
     a list of these hashes sitting in someone's repository."""
     # `Target` is readable by the shared reader but deliberately invisible here.
@@ -183,35 +176,20 @@ def test_fingerprint_vocabulary_is_frozen():
     assert findings.fingerprint_keys({"check": "X"})[1] == ""
 
 
-def test_fingerprint_is_stable_for_known_findings():
+def test_fingerprint_is_stable_for_known_findings() -> None:
     """Golden hashes, taken from the implementation that predates findings.py.
 
     If one of these moves, every `.gandalf-baseline.json` in existence stops
     matching the findings it accepted — so they are here to make that a failing
     test rather than a support question.
     """
-    assert (
-        suppress.fingerprint("ruff", RUFF) == "7b959079a6b363f06dd56522357092823810133f"
-    )
-    assert (
-        suppress.fingerprint("bandit", BANDIT)
-        == "e18dc25e2f9d074cc726c914f925f3db3432da56"
-    )
-    assert (
-        suppress.fingerprint("semgrep", SEMGREP)
-        == "1f95489d888b00dbcf02041e0eff8383dc40b548"
-    )
-    assert (
-        suppress.fingerprint("trivy", TRIVY)
-        == "c4f79753892ee22c50032f9c77cdee3a33fe6cc3"
-    )
+    assert suppress.fingerprint("ruff", RUFF) == "7b959079a6b363f06dd56522357092823810133f"
+    assert suppress.fingerprint("bandit", BANDIT) == "e18dc25e2f9d074cc726c914f925f3db3432da56"
+    assert suppress.fingerprint("semgrep", SEMGREP) == "1f95489d888b00dbcf02041e0eff8383dc40b548"
+    assert suppress.fingerprint("trivy", TRIVY) == "c4f79753892ee22c50032f9c77cdee3a33fe6cc3"
 
 
-def test_fingerprint_still_line_insensitive():
-    a = suppress.fingerprint(
-        "ruff", {"path": "a.py", "code": "E501", "message": "x", "line": 1}
-    )
-    b = suppress.fingerprint(
-        "ruff", {"path": "a.py", "code": "E501", "message": "x", "line": 99}
-    )
+def test_fingerprint_still_line_insensitive() -> None:
+    a = suppress.fingerprint("ruff", {"path": "a.py", "code": "E501", "message": "x", "line": 1})
+    b = suppress.fingerprint("ruff", {"path": "a.py", "code": "E501", "message": "x", "line": 99})
     assert a == b

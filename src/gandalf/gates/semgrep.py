@@ -12,6 +12,9 @@ from gandalf.plugins import (
     unavailable,
 )
 
+# More than a handful of findings fails, regardless of severity.
+MAX_FINDINGS = 5
+
 
 def _flat(f: dict) -> dict:
     return {
@@ -41,9 +44,7 @@ def _autofix(f: dict) -> dict:
 
 def _has_error(findings: list) -> bool:
     """Whether any finding is semgrep's ERROR severity, which makes the gate red."""
-    return any(
-        f.get("extra", {}).get("severity", "WARNING") == "ERROR" for f in findings
-    )
+    return any(f.get("extra", {}).get("severity", "WARNING") == "ERROR" for f in findings)
 
 
 def _flatten(findings: list) -> list[dict]:
@@ -98,9 +99,7 @@ class SemgrepGate:
         errors = data.get("errors", [])
         n = len(findings)
         if errors and n == 0:
-            return unavailable(
-                self.name, f"semgrep: {len(errors)} rule error(s), no findings"
-            )
+            return unavailable(self.name, f"semgrep: {len(errors)} rule error(s), no findings")
         if n == 0:
             return GateResult(self.name, GateOutcome.PASS, 1.0, "semgrep: clean")
         return scored(
@@ -108,5 +107,5 @@ class SemgrepGate:
             n,
             f"semgrep: {n} finding(s)",
             _flatten(findings),
-            fail=_has_error(findings) or n > 5,
+            fail=_has_error(findings) or n > MAX_FINDINGS,
         )

@@ -36,7 +36,12 @@ _FINDINGS_CAP = 12
 _FRONTMATTER = re.compile(r"^---\n.*?\n---\n", re.DOTALL)
 
 
-class SkillNotFound(Exception):
+# RAG bands for a skill score.
+GREEN_SCORE = 0.8
+AMBER_SCORE = 0.6
+
+
+class SkillNotFoundError(Exception):
     """The named skill has no SKILL.md under skills/ — a packaging error, not a
     runtime condition, so it's raised rather than degraded to WARN."""
 
@@ -45,7 +50,7 @@ def load_skill(name: str) -> str:
     """Return a skill's SKILL.md body with its YAML frontmatter stripped."""
     path = _SKILLS_DIR / name / "SKILL.md"
     if not path.is_file():
-        raise SkillNotFound(f"no skill playbook at {path}")
+        raise SkillNotFoundError(f"no skill playbook at {path}")
     return _FRONTMATTER.sub("", path.read_text(errors="replace")).strip()
 
 
@@ -96,9 +101,9 @@ def _coerce_outcome(raw: str, score: float) -> GateOutcome:
     hit = _OUTCOMES.get(str(raw).strip().lower())
     if hit is not None:
         return hit
-    if score >= 0.8:
+    if score >= GREEN_SCORE:
         return GateOutcome.PASS
-    if score >= 0.6:
+    if score >= AMBER_SCORE:
         return GateOutcome.WARN
     return GateOutcome.FAIL
 
@@ -146,11 +151,9 @@ async def judge(
 
     try:
         # llm.chat is blocking urllib — keep it off the event loop.
-        text = await asyncio.to_thread(
-            llm.chat, [{"role": "user", "content": prompt}], temperature=0.0
-        )
+        text = await asyncio.to_thread(llm.chat, [{"role": "user", "content": prompt}], temperature=0.0)
         data = _parse_json(text)
-    except Exception as exc:  # noqa: BLE001 — the judge must never sink the run
+    except Exception as exc:
         return unavailable(
             gate_name,
             f"{gate_name}: skill judge unavailable ({str(exc)[:80]}) — skipped",
@@ -162,10 +165,6 @@ async def judge(
         pct = 0
     score = pct / 100.0
     outcome = _coerce_outcome(data.get("outcome", ""), score)
-    findings = [
-        {"finding": str(f).strip()}
-        for f in (data.get("findings") or [])
-        if str(f).strip()
-    ][:_FINDINGS_CAP]
+    findings = [{"finding": str(f).strip()} for f in (data.get("findings") or []) if str(f).strip()][:_FINDINGS_CAP]
     summary = str(data.get("summary") or f"{pct}/100").strip()
     return GateResult(gate_name, outcome, score, summary, findings)

@@ -110,9 +110,7 @@ def _rule_id(gate: str, rule_name: str) -> str:
     return f"{rule_id[: _MAX_RULE_ID - len(digest) - 1]}~{digest}"
 
 
-def _collect(
-    results: list[GateResult], root: str
-) -> tuple[dict[str, dict], list[dict], int]:
+def _collect(results: list[GateResult], root: str) -> tuple[dict[str, dict], list[dict], int]:
     """(rules by id, SARIF results, findings that could not be located).
 
     Findings without a resolvable location are counted rather than dropped — a

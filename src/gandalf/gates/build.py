@@ -38,11 +38,7 @@ class BuildGate:
 
     async def run(self, ctx: GateContext) -> GateResult:
         pats = ignore_patterns(ctx.workdir)
-        py_files = [
-            f
-            for f in ctx.changed_files
-            if f.endswith(".py") and not is_ignored(f, pats)
-        ]
+        py_files = [f for f in ctx.changed_files if f.endswith(".py") and not is_ignored(f, pats)]
         if not py_files:
             # Whole-tree scope has no changed_files → compile every scannable .py.
             # Tracked-only skips untracked/vendored trees (.venv, node_modules,
@@ -57,6 +53,4 @@ class BuildGate:
             first = errors[0]
             summary = f"{len(errors)} file(s) fail to compile — {first['path']}: {first['message']}"
             return GateResult(self.name, GateOutcome.FAIL, 0.0, summary, errors)
-        return GateResult(
-            self.name, GateOutcome.PASS, 1.0, f"{len(py_files)} file(s) compile"
-        )
+        return GateResult(self.name, GateOutcome.PASS, 1.0, f"{len(py_files)} file(s) compile")

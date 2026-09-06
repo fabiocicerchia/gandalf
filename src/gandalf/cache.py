@@ -20,6 +20,11 @@ change gate behavior without changing any file.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .base import Gate
+
 import hashlib
 import json
 import time
@@ -84,7 +89,7 @@ def toolchain_salt() -> str:
     return f"v{CACHE_VERSION}|{_gandalf_version()}|{plugins.tools_image_id()}"
 
 
-def max_age(gate) -> float | None:
+def max_age(gate: Gate) -> float | None:
     """Seconds a cached result for this gate stays valid, or None for forever."""
     ttl = getattr(gate, "cache_ttl", None)
     if ttl is not None:
@@ -100,9 +105,7 @@ def target_files(workdir: str, changed_files: list[str]) -> list[str]:
     cached result still holds, and a file no gate reads cannot change it."""
     root = Path(workdir)
     pats = ignore_patterns(workdir)
-    files = [
-        f for f in changed_files if (root / f).is_file() and not is_ignored(f, pats)
-    ]
+    files = [f for f in changed_files if (root / f).is_file() and not is_ignored(f, pats)]
     if files:
         return files
     return [f for f in scannable_files(workdir) if (root / f).is_file()]
@@ -152,9 +155,7 @@ def save(path: str, data: dict) -> None:
         json.dump(data, fh, indent=2, default=str)
 
 
-def get(
-    cache: dict, gate_name: str, file_hash: str, max_age_s: float | None = None
-) -> GateResult | None:
+def get(cache: dict, gate_name: str, file_hash: str, max_age_s: float | None = None) -> GateResult | None:
     """The cached result for a gate, if it was recorded against this hash and is
     not older than `max_age_s` (None = no expiry).
 
@@ -215,15 +216,9 @@ class Plan:
         """The gates with no live cache entry — all of them when caching is off."""
         if self.path is None:
             return active
-        return [
-            g
-            for g in active
-            if get(self.data, g.name, self.file_hash, max_age(g)) is None
-        ]
+        return [g for g in active if get(self.data, g.name, self.file_hash, max_age(g)) is None]
 
-    def merge(
-        self, fresh: list[GateResult], active: list, ran: list
-    ) -> tuple[list, list]:
+    def merge(self, fresh: list[GateResult], active: list, ran: list) -> tuple[list, list]:
         """Store what just ran → (every result in `active` order, the cached ones).
 
         The cached ones come back separately because they never ran, so nothing
@@ -234,10 +229,6 @@ class Plan:
         for r in fresh:
             put(self.data, r.name, self.file_hash, r)
         save(self.path, self.data)
-        cached = [
-            get(self.data, g.name, self.file_hash, max_age(g))
-            for g in active
-            if g not in ran
-        ]
+        cached = [get(self.data, g.name, self.file_hash, max_age(g)) for g in active if g not in ran]
         by_name = {r.name: r for r in fresh + cached}
         return [by_name[g.name] for g in active], cached

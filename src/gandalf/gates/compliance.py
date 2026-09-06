@@ -7,6 +7,8 @@ no request/diff it degrades to WARN. Passes at >= 85% compliance.
 
 from __future__ import annotations
 
+import asyncio
+
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.plugins import unavailable
 from gandalf.skills import _parse_json as _parse_judge
@@ -49,12 +51,8 @@ def _prompt(ctx: GateContext) -> str | None:
     diff = (meta.get("diff") or "").strip()
     if not diff or not (title or body):
         return None
-    diff_trunc = diff[:_DIFF_LIMIT] + (
-        "\n…[diff truncated]" if len(diff) > _DIFF_LIMIT else ""
-    )
-    body_trunc = body[:_BODY_LIMIT] + (
-        "\n…[truncated]" if len(body) > _BODY_LIMIT else ""
-    )
+    diff_trunc = diff[:_DIFF_LIMIT] + ("\n…[diff truncated]" if len(diff) > _DIFF_LIMIT else "")
+    body_trunc = body[:_BODY_LIMIT] + ("\n…[truncated]" if len(body) > _BODY_LIMIT else "")
     return _PROMPT.format(title=title, body=body_trunc, diff=diff_trunc)
 
 
@@ -68,9 +66,7 @@ def _verdict(gate: str, data: dict) -> GateResult:
     score = pct / 100.0
     missing = [str(m).strip() for m in (data.get("missing") or []) if str(m).strip()]
     outcome = GateOutcome.PASS if score >= COMPLIANCE_THRESHOLD else GateOutcome.FAIL
-    summary = f"{pct}% compliant" + (
-        f" · {len(missing)} unmet point(s)" if missing else ""
-    )
+    summary = f"{pct}% compliant" + (f" · {len(missing)} unmet point(s)" if missing else "")
     findings = [{"missing": m} for m in missing]
     if data.get("summary"):
         findings.append({"judge_summary": str(data["summary"])})
@@ -82,22 +78,16 @@ class ComplianceGate:
     blocking = False
 
     async def run(self, ctx: GateContext) -> GateResult:
-        import asyncio
-
-        from gandalf import llm
+        from gandalf import llm  # noqa: PLC0415 — local import: importing at module scope closes a cycle
 
         prompt = _prompt(ctx)
         if prompt is None:
-            return unavailable(
-                self.name, "compliance: no request/diff to judge (pass --title/--body)"
-            )
+            return unavailable(self.name, "compliance: no request/diff to judge (pass --title/--body)")
         try:
             # llm.chat is blocking (urllib) — run it off the event loop.
-            text = await asyncio.to_thread(
-                llm.chat, [{"role": "user", "content": prompt}], temperature=0.0
-            )
+            text = await asyncio.to_thread(llm.chat, [{"role": "user", "content": prompt}], temperature=0.0)
             data = _parse_judge(text)
-        except Exception as exc:  # noqa: BLE001 — never crash the run on the judge
+        except Exception as exc:
             return GateResult(
                 self.name,
                 GateOutcome.FAIL,

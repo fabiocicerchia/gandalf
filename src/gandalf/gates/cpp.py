@@ -57,16 +57,13 @@ class CppBuildGate(ToolchainGate):
     async def check(self, ctx: GateContext, root: str) -> GateResult:
         out_dir = tempfile.mkdtemp(prefix="gandalf-cmake-")
         try:
-            rc, out, err = await run_tool(
-                ["cmake", "-S", root, "-B", out_dir, "-DCMAKE_BUILD_TYPE=Debug"], root
-            )
+            rc, out, err = await run_tool(["cmake", "-S", root, "-B", out_dir, "-DCMAKE_BUILD_TYPE=Debug"], root)
             if (to := timeout_result(self.name, rc)) is not None:
                 return to
             if rc != 0:
                 return unavailable(
                     self.name,
-                    f"cmake: configure failed (toolchain or deps) — "
-                    f"{tail((out or '') + (err or ''), 3)}",
+                    f"cmake: configure failed (toolchain or deps) — {tail((out or '') + (err or ''), 3)}",
                 )
             return await exit_code(
                 self.name,
@@ -80,9 +77,7 @@ class CppBuildGate(ToolchainGate):
 
 
 # `--template` output: path:line:severity:id:message
-_HIT = re.compile(
-    r"^(?P<file>[^:]+):(?P<line>\d+):(?P<sev>\w+):(?P<id>\w+):(?P<msg>.*)$"
-)
+_HIT = re.compile(r"^(?P<file>[^:]+):(?P<line>\d+):(?P<sev>\w+):(?P<id>\w+):(?P<msg>.*)$")
 
 
 class CppcheckGate(ToolchainGate):
@@ -158,6 +153,4 @@ class CtestGate(ToolchainGate):
                     bad="ctest: failed",
                     fail_re=r"^\s*\d+ - .*\(Failed\)",
                 )
-        return GateResult(
-            self.name, GateOutcome.PASS, 1.0, "ctest: no configured build tree"
-        )
+        return GateResult(self.name, GateOutcome.PASS, 1.0, "ctest: no configured build tree")
