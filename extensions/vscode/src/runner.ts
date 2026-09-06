@@ -7,19 +7,19 @@
  * its tests are written against `./runner` and that spelling is not worth
  * churning.
  */
-import * as fs from 'fs';
-import * as vscode from 'vscode';
+import * as fs from "fs";
+import * as vscode from "vscode";
 
-import { buildArgs, RunRequest } from './argv';
-import { Settings } from './config';
-import { EventParser } from './events';
-import { exec } from './exec';
-import { resolveLauncher } from './launcher';
-import { log } from './log';
-import { ProgressParser } from './progress';
-import { Payload } from './types';
+import { buildArgs, RunRequest } from "./argv";
+import { Settings } from "./config";
+import { EventParser } from "./events";
+import { exec } from "./exec";
+import { resolveLauncher } from "./launcher";
+import { log } from "./log";
+import { ProgressParser } from "./progress";
+import { Payload } from "./types";
 
-export { buildArgs, RunRequest } from './argv';
+export { buildArgs, RunRequest } from "./argv";
 export {
   findOnPath,
   GandalfNotFoundError,
@@ -29,7 +29,7 @@ export {
   resetLauncherCache,
   resolveLauncher,
   ScanKind,
-} from './launcher';
+} from "./launcher";
 
 /** Raised when a scan cannot apply, but nothing is wrong (e.g. untracked file). */
 export class ScanSkippedError extends Error {}
@@ -54,39 +54,35 @@ const HTML_LINE = /^HTML report:\s*(.+)$/m;
 const EMPTY_SCOPE = /no git-tracked files under this folder|every path under it is excluded/i;
 
 function tail(text: string, lines = TAIL_LINES): string {
-  return text.trimEnd().split('\n').slice(-lines).join('\n');
+  return text.trimEnd().split("\n").slice(-lines).join("\n");
 }
 
-export async function runGandalf(
-  req: RunRequest,
-  s: Settings,
-  token: vscode.CancellationToken,
-): Promise<RunResult> {
+export async function runGandalf(req: RunRequest, s: Settings, token: vscode.CancellationToken): Promise<RunResult> {
   const launcher = await resolveLauncher(req.folder, s);
   const args = buildArgs(req, s, launcher);
   const started = Date.now();
 
   await fs.promises.mkdir(req.outDir, { recursive: true });
-  log().info(`scan (${req.reason}): ${launcher.command} ${args.join(' ')}`);
+  log().info(`scan (${req.reason}): ${launcher.command} ${args.join(" ")}`);
 
   // The progress line and real stderr share the stream, so the parser splits
   // them: progress drives the UI, the rest is what an error report quotes.
   const progress = new ProgressParser();
   const events = new EventParser();
-  let diagnostics = '';
+  let diagnostics = "";
   // Only the non-event stdout is kept: the scorecard and the two report paths.
   // Capped because it is a diagnostic aid, not a document.
-  let plain = '';
+  let plain = "";
   const { code, stderr } = await exec(launcher.command, args, {
     cwd: req.folder.uri.fsPath,
     env: {
       ...launcher.env,
       // Progress is TTY-gated; this turns it on for a piped child.
-      GANDALF_PROGRESS: '1',
+      GANDALF_PROGRESS: "1",
       // The skill-backed gates call the LLM whatever --no-llm says, and retry
       // with backoff when it is unreachable. gandalf's default of 3 is right for
       // CI and costs 11s per scan in an editor; one retry still absorbs a blip.
-      GANDALF_LLM_RETRIES: process.env.GANDALF_LLM_RETRIES ?? '1',
+      GANDALF_LLM_RETRIES: process.env.GANDALF_LLM_RETRIES ?? "1",
     },
     timeoutMs: s.timeoutSeconds * 1000,
     token,
@@ -101,7 +97,7 @@ export async function runGandalf(
       plain += text;
       if (plain.length > MAX_PLAIN_CHARS) plain = plain.slice(-MAX_PLAIN_CHARS);
       for (const event of found) {
-        if (event.event === 'start') req.onStart?.(event.gates, event.scope);
+        if (event.event === "start") req.onStart?.(event.gates, event.scope);
         else req.onGate?.(event);
       }
     },
@@ -118,16 +114,14 @@ export async function runGandalf(
     // Exit 1 is a red verdict (normal); anything without a report is a real error.
     const detail = diagnostics || stderr;
     log().error(`gandalf produced no report (exit ${code})\n${tail(detail || plain)}`);
-    throw new Error(`gandalf failed (exit ${code}): ${tail(detail || plain, 3) || 'no output'}`);
+    throw new Error(`gandalf failed (exit ${code}): ${tail(detail || plain, 3) || "no output"}`);
   }
 
   const jsonPath = jsonMatch[1].trim();
-  const htmlPath = (HTML_LINE.exec(plain)?.[1] ?? '').trim();
-  const payload = JSON.parse(await fs.promises.readFile(jsonPath, 'utf8')) as Payload;
+  const htmlPath = (HTML_LINE.exec(plain)?.[1] ?? "").trim();
+  const payload = JSON.parse(await fs.promises.readFile(jsonPath, "utf8")) as Payload;
   const durationMs = Date.now() - started;
-  log().info(
-    `scan done in ${(durationMs / 1000).toFixed(1)}s — ${payload.verdict.toUpperCase()} ${payload.score}/100`,
-  );
+  log().info(`scan done in ${(durationMs / 1000).toFixed(1)}s — ${payload.verdict.toUpperCase()} ${payload.score}/100`);
   return { payload, jsonPath, htmlPath, exitCode: code, durationMs };
 }
 

@@ -6,11 +6,11 @@
  * failure. So the cooldown and the once-only "gandalf is not installed" notice
  * are state, and they live here with the decision that reads them.
  */
-import * as vscode from 'vscode';
+import * as vscode from "vscode";
 
-import { log } from './log';
-import { GandalfNotFoundError, promptInstall, ScanSkippedError } from './runner';
-import { Job, jobLabel } from './scheduler';
+import { log } from "./log";
+import { GandalfNotFoundError, promptInstall, ScanSkippedError } from "./runner";
+import { Job, jobLabel } from "./scheduler";
 
 const ERROR_COOLDOWN_MS = 60_000;
 
@@ -40,8 +40,8 @@ export class FailureNotifier {
     log().error(message);
     if (job.manual || Date.now() - this.lastErrorAt > ERROR_COOLDOWN_MS) {
       this.lastErrorAt = Date.now();
-      void vscode.window.showErrorMessage(`Gandalf: ${message}`, 'Show log').then((choice) => {
-        if (choice === 'Show log') log().show(true);
+      void vscode.window.showErrorMessage(`Gandalf: ${message}`, "Show log").then((choice) => {
+        if (choice === "Show log") log().show(true);
       });
     }
   }
