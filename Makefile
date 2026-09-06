@@ -103,8 +103,9 @@ ext-publish: ext-package ## Publish the .vsix to both marketplaces
 build: ## Build sdist and wheel
 	python -m build
 
-format: ## Rewrite the sources to canonical form
+format: ## Rewrite the sources to canonical form — Python and TypeScript
 	ruff format .
+	npx --yes @biomejs/biome@2.5.7 format --write .
 
 run: ## Run gandalf over the working tree
 	python -m gandalf --help
