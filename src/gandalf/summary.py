@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import shutil
+from typing import TYPE_CHECKING
 
-from . import plugins, render_text
+from . import console, plugins, render_text
 from .base import GateOutcome
+
+if TYPE_CHECKING:  # import-time cycle: these are only needed for annotations
+    from .config import Config
+    from .report import Run
 
 
 def _image_part(tools: dict, image: int) -> str:
@@ -33,9 +38,7 @@ def _versions_block(resolved: dict) -> str:
     versioned = {n: v["version"] for n, v in resolved.items() if v.get("version")}
     if not versioned:
         return ""
-    return "\n" + "\n".join(
-        f"  {n} ({resolved[n]['source']}) {v}" for n, v in sorted(versioned.items())
-    )
+    return "\n" + "\n".join(f"  {n} ({resolved[n]['source']}) {v}" for n, v in sorted(versioned.items()))
 
 
 def _tools_line(tools: dict) -> str:
@@ -46,62 +49,38 @@ def _tools_line(tools: dict) -> str:
     return _sources_line(tools, resolved) + _versions_block(resolved)
 
 
-def print_summary(
-    sc,
-    results,
-    verdict,
-    advice,
-    meta_line,
-    detected,
-    skipped,
-    disabled,
-    fixes,
-    cfg,
-    passed,
-    reason,
-    tools,
-    explain,
-) -> None:
+def print_summary(run: Run, meta_line: dict, cfg: Config, *, explain: bool) -> None:
     """Terminal scorecard + the language / fixes / config / policy footer lines."""
-    print(render_text.render_terminal(sc.label, results, verdict, advice, meta_line))
+    console.out(render_text.render_terminal(run.scope.label, run.results, run.verdict, run.advice, meta_line))
     if explain:
-        print(render_text.explain_score(results, verdict))
+        console.out(render_text.explain_score(run.results, run.verdict))
     # Before the per-run footer: on a host with no scanners this is the only line
     # that tells the user anything actionable, so it must not be the last thing
     # after a wall of gate rows.
     if banner := render_text.setup_banner(
-        results,
+        run.results,
         plugins._tools_image_available(),
         bool(shutil.which("docker")),
     ):
-        print(banner)
-    print(
-        f"\nLanguages: {', '.join(sorted(detected)) or 'none detected'}"
+        console.out(banner)
+    console.out(
+        f"\nLanguages: {', '.join(sorted(run.detected)) or 'none detected'}"
         + (
-            f"  ·  skipped {len(skipped)} irrelevant gate(s): {', '.join(sorted(skipped))}"
-            if skipped
+            f"  ·  skipped {len(run.skipped)} irrelevant gate(s): {', '.join(sorted(run.skipped))}"
+            if run.skipped
             else ""
         )
-        + (
-            f"  ·  disabled {len(disabled)} by config: {', '.join(disabled)}"
-            if disabled
-            else ""
-        )
+        + (f"  ·  disabled {len(run.disabled)} by config: {', '.join(run.disabled)}" if run.disabled else "")
     )
-    if fixes:
+    if run.fixes:
         # `removeprefix`: a fixer that names its own gate ("ruff: 2 autofixed")
         # would otherwise print it twice.
-        applied = [
-            f"{n}: {m.removeprefix(f'{n}: ')}" for n, changed, m in fixes if changed
-        ]
-        print(
-            "\nFixes applied:\n"
-            + ("\n".join(f"  ✔ {a}" for a in applied) if applied else "  (none)")
-        )
-    if tools_line := _tools_line(tools):
-        print(tools_line)
+        applied = [f"{n}: {m.removeprefix(f'{n}: ')}" for n, changed, m in run.fixes if changed]
+        console.out("\nFixes applied:\n" + ("\n".join(f"  ✔ {a}" for a in applied) if applied else "  (none)"))
+    if tools_line := _tools_line(run.tools):
+        console.out(tools_line)
     if cfg.path:
-        print(f"Config: {cfg.path}")
-    if not passed and verdict.outcome != GateOutcome.FAIL:
+        console.out(f"Config: {cfg.path}")
+    if not run.passed and run.verdict.outcome != GateOutcome.FAIL:
         # RAG isn't red but policy fails the run — say so explicitly.
-        print(f"Policy: run FAILED — {reason}")
+        console.out(f"Policy: run FAILED — {run.reason}")

@@ -19,8 +19,9 @@ import inspect
 import os
 import sys
 from pathlib import Path
+from types import ModuleType
 
-from . import debug
+from . import console, debug
 from .base import Gate
 from .ignores import (  # noqa: F401 — the gate-facing import surface
     _scan_targets,
@@ -67,14 +68,12 @@ def _gate_dirs() -> list[Path]:
     execute code as whatever user gandalf runs as. See docs/configuration.md.
     """
     dirs = [Path(__file__).parent / "gates"]
-    for extra in filter(
-        None, os.environ.get("GANDALF_GATES_PATH", "").split(os.pathsep)
-    ):
+    for extra in filter(None, os.environ.get("GANDALF_GATES_PATH", "").split(os.pathsep)):
         dirs.append(Path(extra))
     return [d for d in dirs if d.is_dir()]
 
 
-def _load_module(path: Path):
+def _load_module(path: Path) -> ModuleType:
     """Import one gate file by path, under a namespaced module name.
 
     Namespaced so two gate directories can hold files with the same basename
@@ -93,7 +92,7 @@ def _load_module(path: Path):
     return mod
 
 
-def _gates_in(mod) -> list[Gate]:
+def _gates_in(mod: ModuleType) -> list[Gate]:
     """Every Gate-shaped class the module itself defines, instantiated.
 
     Classes it merely imported (GateResult, a shared base) are skipped — they
@@ -128,10 +127,6 @@ def discover_gates() -> list[Gate]:
                     # swap a scanner — but it must never be silent: a gate named
                     # `gitleaks` that reports a clean pass is otherwise
                     # indistinguishable from the real one in every output.
-                    print(
-                        f"gandalf: gate '{inst.name}' overridden by "
-                        f"{path} (GANDALF_GATES_PATH)",
-                        file=sys.stderr,
-                    )
+                    console.err(f"gandalf: gate '{inst.name}' overridden by {path} (GANDALF_GATES_PATH)")
                 gates[inst.name] = inst  # name wins on collision → override built-ins
     return list(gates.values())
