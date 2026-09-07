@@ -35,7 +35,8 @@ function M.parse_log(stdout)
 end
 
 local TICKS =
-  { '\226\150\129', '\226\150\130', '\226\150\131', '\226\150\132', '\226\150\133', '\226\150\134', '\226\150\135', '\226\150\136' }
+  { '\226\150\129', '\226\150\130', '\226\150\131', '\226\150\132',
+    '\226\150\133', '\226\150\134', '\226\150\135', '\226\150\136' }
 
 --- A score history as one line of text. Scaled across the observed range, not
 --- 0-100: the interesting movement in a repository that sits in the eighties is

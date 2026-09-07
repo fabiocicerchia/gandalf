@@ -11,14 +11,14 @@
  *    are not part of this tier — they are properties of a whole run, and only
  *    the final report has them.
  */
-import * as vscode from 'vscode';
+import * as vscode from "vscode";
 
-import { compareFindings } from './parse';
-import { Finding, Snapshot } from './types';
+import { compareFindings } from "./parse";
+import { Finding, Snapshot } from "./types";
 
 export interface LastRun {
   scope: string;
-  verdict: Snapshot['payload']['verdict'];
+  verdict: Snapshot["payload"]["verdict"];
   score: number;
   at: number;
   durationMs: number;
@@ -71,7 +71,6 @@ export class ResultStore {
     }
   }
 
-
   setProject(folder: vscode.WorkspaceFolder, snapshot: Snapshot, durationMs: number): void {
     const k = key(folder);
     this.revision += 1;
@@ -88,12 +87,7 @@ export class ResultStore {
     this.changed.fire();
   }
 
-  setFile(
-    folder: vscode.WorkspaceFolder,
-    absPath: string,
-    snapshot: Snapshot,
-    durationMs: number,
-  ): void {
+  setFile(folder: vscode.WorkspaceFolder, absPath: string, snapshot: Snapshot, durationMs: number): void {
     const k = key(folder);
     this.revision += 1;
     let perFile = this.files.get(k);
@@ -154,9 +148,7 @@ export class ResultStore {
 
   folders(): vscode.WorkspaceFolder[] {
     const all = vscode.workspace.workspaceFolders ?? [];
-    return all.filter(
-      (f) => this.projects.has(key(f)) || this.files.has(key(f)) || this.streams.has(key(f)),
-    );
+    return all.filter((f) => this.projects.has(key(f)) || this.files.has(key(f)) || this.streams.has(key(f)));
   }
 
   clear(): void {

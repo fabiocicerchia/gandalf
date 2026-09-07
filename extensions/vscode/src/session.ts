@@ -8,25 +8,25 @@
  * been shown, and the label of the scan in flight — and it belongs with the
  * components that read it.
  */
-import * as fs from 'fs';
-import * as path from 'path';
-import * as vscode from 'vscode';
+import * as fs from "fs";
+import * as path from "path";
+import * as vscode from "vscode";
 
-import { Coalescer } from './coalescer';
-import { readSettings, Settings } from './config';
-import { DiagnosticGroup, DiagnosticPublisher } from './diagnostics';
-import { FailureNotifier } from './failures';
-import { FindingsView } from './findingsView';
-import { log } from './log';
-import { gatesByDuration, gatesByStatus, normalize, normalizeGate, pathCache, slim } from './parse';
-import { describeProgress, ScanProgress } from './progress';
-import { ReportView } from './report';
-import { probe, runGandalf, ScanKind } from './runner';
-import { ContentGuard, Job, jobLabel, Scheduler } from './scheduler';
-import { StatusBar } from './status';
-import { excludesFor, outDirFor, pruneReports, scannable } from './storage';
-import { ResultStore } from './store';
-import { Snapshot } from './types';
+import { Coalescer } from "./coalescer";
+import { readSettings, Settings } from "./config";
+import { DiagnosticGroup, DiagnosticPublisher } from "./diagnostics";
+import { FailureNotifier } from "./failures";
+import { FindingsView } from "./findingsView";
+import { log } from "./log";
+import { gatesByDuration, gatesByStatus, normalize, normalizeGate, pathCache, slim } from "./parse";
+import { describeProgress, ScanProgress } from "./progress";
+import { ReportView } from "./report";
+import { probe, runGandalf, ScanKind } from "./runner";
+import { ContentGuard, Job, jobLabel, Scheduler } from "./scheduler";
+import { StatusBar } from "./status";
+import { excludesFor, outDirFor, pruneReports, scannable } from "./storage";
+import { ResultStore } from "./store";
+import { Snapshot } from "./types";
 
 /** Slowest gates named in the log when a project scan finishes. */
 const TIMINGS_LOGGED = 5;
@@ -79,10 +79,7 @@ export class Session {
 
   primaryFolder(): vscode.WorkspaceFolder | undefined {
     const active = vscode.window.activeTextEditor?.document.uri;
-    return (
-      (active ? vscode.workspace.getWorkspaceFolder(active) : undefined) ??
-      vscode.workspace.workspaceFolders?.[0]
-    );
+    return (active ? vscode.workspace.getWorkspaceFolder(active) : undefined) ?? vscode.workspace.workspaceFolders?.[0];
   }
 
   paint(): void {
@@ -109,10 +106,10 @@ export class Session {
 
   /** Where the result of one run belongs: the board, or a report on its own. */
   private keep(job: Job, snapshot: Snapshot, htmlPath: string, durationMs: number): void {
-    if (job.kind === 'commit') {
+    if (job.kind === "commit") {
       // A different scope entirely: it produces a report, not a new board.
       if (htmlPath) this.reportView.current = htmlPath;
-    } else if (job.kind === 'file' && job.absPath) {
+    } else if (job.kind === "file" && job.absPath) {
       this.store.setFile(job.folder, job.absPath, snapshot, durationMs);
     } else {
       this.store.setProject(job.folder, snapshot, durationMs);
@@ -125,24 +122,24 @@ export class Session {
    * so a slow scan can name its own culprits instead of leaving the user to
    * guess which of ~30 gates to disable.
    */
-  private logTimings(payload: Snapshot['payload'], totalMs: number): void {
+  private logTimings(payload: Snapshot["payload"], totalMs: number): void {
     const timed = gatesByDuration(payload);
     if (timed.length === 0) return;
     const top = timed
       .slice(0, TIMINGS_LOGGED)
       .map((g) => `${g.name} ${(g.duration ?? 0).toFixed(1)}s`)
-      .join(', ');
+      .join(", ");
     log().info(`slowest gates (of ${timed.length}) in ${(totalMs / 1000).toFixed(1)}s: ${top}`);
   }
 
   private async execute(job: Job, token: vscode.CancellationToken): Promise<void> {
     const s = this.settingsFor(job.folder);
-    const isProjectScope = job.kind !== 'file';
+    const isProjectScope = job.kind !== "file";
 
     // Hashed once: the answer to "did this change" is also what gets committed
     // if the run succeeds.
     const scanned = job.absPath ? await this.guard.inspect(job.absPath) : undefined;
-    if (job.kind === 'file' && !job.manual && scanned?.unchanged) {
+    if (job.kind === "file" && !job.manual && scanned?.unchanged) {
       log().debug(`unchanged since last scan, skipping: ${job.relPath}`);
       return;
     }
@@ -175,11 +172,7 @@ export class Session {
           onProgress,
           onStart: () => this.store.beginStream(job.folder),
           onGate: (gate) => {
-            this.store.pushStream(
-              job.folder,
-              gate.name,
-              normalizeGate(gate, job.folder.uri.fsPath, paths),
-            );
+            this.store.pushStream(job.folder, gate.name, normalizeGate(gate, job.folder.uri.fsPath, paths));
             coalescer.soon();
           },
         },
@@ -212,7 +205,7 @@ export class Session {
       // The report (or the failure) is now the whole truth — drop the partials.
       this.store.endStream(job.folder);
       this.scanning = undefined;
-      this.findingsView.setScanning('');
+      this.findingsView.setScanning("");
       this.paint();
     }
   }
@@ -222,21 +215,19 @@ export class Session {
   private manualJob(kind: ScanKind, extra: Partial<Job> = {}): Job | undefined {
     const doc = vscode.window.activeTextEditor?.document;
     const folder =
-      kind === 'file'
-        ? doc?.uri.scheme === 'file'
+      kind === "file"
+        ? doc?.uri.scheme === "file"
           ? vscode.workspace.getWorkspaceFolder(doc.uri)
           : undefined
         : this.primaryFolder();
     if (!folder) {
       void vscode.window.showWarningMessage(
-        kind === 'file'
-          ? 'Gandalf: open a file inside a workspace folder first.'
-          : 'Gandalf: open a folder to scan.',
+        kind === "file" ? "Gandalf: open a file inside a workspace folder first." : "Gandalf: open a folder to scan.",
       );
       return undefined;
     }
-    const job: Job = { folder, kind, reason: 'command', manual: true, ...extra };
-    if (kind === 'file' && doc) {
+    const job: Job = { folder, kind, reason: "command", manual: true, ...extra };
+    if (kind === "file" && doc) {
       job.absPath = doc.uri.fsPath;
       job.relPath = path.relative(folder.uri.fsPath, doc.uri.fsPath);
     }
@@ -250,7 +241,7 @@ export class Session {
     // A whole-tree scan runs for minutes, so it gets a notification with a real
     // bar and a Cancel button. A one-file scan is seconds — the status bar is
     // enough, and a popup for it would be noise.
-    const heavy = kind !== 'file';
+    const heavy = kind !== "file";
     await vscode.window.withProgress(
       {
         location: heavy ? vscode.ProgressLocation.Notification : vscode.ProgressLocation.Window,
@@ -277,16 +268,14 @@ export class Session {
     const folder = this.primaryFolder();
     if (!folder) return;
     if (llm || !this.reportView.current || !fs.existsSync(this.reportView.current)) {
-      const ok = await this.run('workspace', {
+      const ok = await this.run("workspace", {
         llm: llm || undefined,
-        reason: llm ? 'report + LLM summary' : 'report',
+        reason: llm ? "report + LLM summary" : "report",
       });
       if (!ok) return;
     }
     if (!this.reportView.current) {
-      void vscode.window.showWarningMessage(
-        'Gandalf: no report available — the scan did not complete.',
-      );
+      void vscode.window.showWarningMessage("Gandalf: no report available — the scan did not complete.");
       return;
     }
     const snapshot = this.store.project(folder);
@@ -297,15 +286,10 @@ export class Session {
 
   armSweep(): void {
     const s = this.settingsFor(this.primaryFolder());
-    this.scheduler.setSweep(
-      s.trigger === 'interval' || s.trigger === 'onSaveAndInterval',
-      () => {
-        const folder = this.primaryFolder();
-        return folder
-          ? { folder, kind: 'workspace' as ScanKind, reason: 'periodic sweep', manual: false }
-          : undefined;
-      },
-    );
+    this.scheduler.setSweep(s.trigger === "interval" || s.trigger === "onSaveAndInterval", () => {
+      const folder = this.primaryFolder();
+      return folder ? { folder, kind: "workspace" as ScanKind, reason: "periodic sweep", manual: false } : undefined;
+    });
   }
 
   /** The extension's own configuration changed: re-read everything derived from it. */
@@ -318,27 +302,23 @@ export class Session {
   }
 
   async onSave(doc: vscode.TextDocument): Promise<void> {
-    if (doc.uri.scheme !== 'file') return;
+    if (doc.uri.scheme !== "file") return;
     const folder = vscode.workspace.getWorkspaceFolder(doc.uri);
     if (!folder) return;
     const s = this.settingsFor(folder);
-    if (s.trigger !== 'onSave' && s.trigger !== 'onSaveAndInterval') return;
+    if (s.trigger !== "onSave" && s.trigger !== "onSaveAndInterval") return;
 
     const relPath = path.relative(folder.uri.fsPath, doc.uri.fsPath);
     if (!scannable(relPath)) return;
     // gandalf scans git-tracked files only — `--path` resolves through `git
     // ls-files` — so saving something git ignores (build output, a scratch
     // file) has nothing to scan, and scheduling a run just fails it.
-    const tracked = await probe(
-      'git',
-      ['ls-files', '--error-unmatch', '--', relPath],
-      folder.uri.fsPath,
-    );
+    const tracked = await probe("git", ["ls-files", "--error-unmatch", "--", relPath], folder.uri.fsPath);
     if (!tracked.ok) return;
 
     this.scheduler.schedule({
       folder,
-      kind: 'file',
+      kind: "file",
       reason: `saved ${relPath}`,
       manual: false,
       relPath,
@@ -350,14 +330,14 @@ export class Session {
   start(): vscode.Disposable[] {
     this.armSweep();
     this.paint();
-    log().info('Gandalf extension activated');
+    log().info("Gandalf extension activated");
 
     const s = this.settingsFor(this.primaryFolder());
-    if (!s.scanOnStartup || s.trigger === 'manual') return [];
+    if (!s.scanOnStartup || s.trigger === "manual") return [];
     const timer = setTimeout(() => {
       const folder = this.primaryFolder();
       if (folder) {
-        this.scheduler.schedule({ folder, kind: 'workspace', reason: 'startup', manual: false });
+        this.scheduler.schedule({ folder, kind: "workspace", reason: "startup", manual: false });
       }
     }, STARTUP_DELAY_MS);
     return [{ dispose: () => clearTimeout(timer) }];

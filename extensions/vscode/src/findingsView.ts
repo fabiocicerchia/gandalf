@@ -8,17 +8,17 @@
  * the pane looking like the Problems panel next to it rather than like a web
  * page embedded in an editor.
  */
-import * as path from 'path';
-import * as vscode from 'vscode';
+import * as path from "path";
+import * as vscode from "vscode";
 
-import { LEVEL_LABEL, LEVELS, SEVERITIES, SEVERITY_LABEL, VERDICT_WORD } from './parse';
-import { ResultStore } from './store';
-import { Finding, Level, Severity } from './types';
+import { LEVEL_LABEL, LEVELS, SEVERITIES, SEVERITY_LABEL, VERDICT_WORD } from "./parse";
+import { ResultStore } from "./store";
+import { Finding, Level, Severity } from "./types";
 
-type ScopeFilter = 'file' | 'project';
+type ScopeFilter = "file" | "project";
 
 interface FileNode {
-  kind: 'file';
+  kind: "file";
   id: string;
   label: string;
   uri?: vscode.Uri;
@@ -26,7 +26,7 @@ interface FileNode {
 }
 
 interface FindingNode {
-  kind: 'finding';
+  kind: "finding";
   id: string;
   finding: Finding;
 }
@@ -38,22 +38,22 @@ export type Node = FileNode | FindingNode;
  * instead of collapsing into three editor severities. Unrated findings fall back
  * to their gate's outcome — that is genuinely all that is known about them.
  */
-const LEVEL_ICONS: Record<Exclude<Level, 'unrated'>, { id: string; color: string }> = {
-  critical: { id: 'flame', color: 'charts.red' },
-  high: { id: 'error', color: 'problemsErrorIcon.foreground' },
-  medium: { id: 'warning', color: 'problemsWarningIcon.foreground' },
-  low: { id: 'info', color: 'problemsInfoIcon.foreground' },
-  info: { id: 'circle-outline', color: 'descriptionForeground' },
+const LEVEL_ICONS: Record<Exclude<Level, "unrated">, { id: string; color: string }> = {
+  critical: { id: "flame", color: "charts.red" },
+  high: { id: "error", color: "problemsErrorIcon.foreground" },
+  medium: { id: "warning", color: "problemsWarningIcon.foreground" },
+  low: { id: "info", color: "problemsInfoIcon.foreground" },
+  info: { id: "circle-outline", color: "descriptionForeground" },
 };
 
 const UNRATED_ICONS: Record<Severity, { id: string; color: string }> = {
-  error: { id: 'circle-filled', color: 'problemsErrorIcon.foreground' },
-  warning: { id: 'circle-filled', color: 'problemsWarningIcon.foreground' },
-  info: { id: 'circle-outline', color: 'descriptionForeground' },
+  error: { id: "circle-filled", color: "problemsErrorIcon.foreground" },
+  warning: { id: "circle-filled", color: "problemsWarningIcon.foreground" },
+  info: { id: "circle-outline", color: "descriptionForeground" },
 };
 
 function iconFor(f: Finding): vscode.ThemeIcon {
-  const icon = f.level === 'unrated' ? UNRATED_ICONS[f.severity] : LEVEL_ICONS[f.level];
+  const icon = f.level === "unrated" ? UNRATED_ICONS[f.severity] : LEVEL_ICONS[f.level];
   return new vscode.ThemeIcon(icon.id, new vscode.ThemeColor(icon.color));
 }
 
@@ -62,13 +62,13 @@ interface Model {
 }
 
 export class FindingsView implements vscode.TreeDataProvider<Node> {
-  static readonly viewId = 'gandalf.findings';
+  static readonly viewId = "gandalf.findings";
 
   private view?: vscode.TreeView<Node>;
-  private scope: ScopeFilter = 'project';
+  private scope: ScopeFilter = "project";
   private levels = new Set<Level>(LEVELS);
   private severities = new Set<Severity>(SEVERITIES);
-  private scanLabel = '';
+  private scanLabel = "";
   /**
    * Bumped by Expand All. Tree item ids carry it, so a bump makes every node
    * new to the editor, which then applies our Expanded collapsible state instead
@@ -96,14 +96,14 @@ export class FindingsView implements vscode.TreeDataProvider<Node> {
       treeDataProvider: this,
       showCollapseAll: true,
     });
-    void vscode.commands.executeCommand('setContext', 'gandalf.scope', this.scope);
+    void vscode.commands.executeCommand("setContext", "gandalf.scope", this.scope);
     this.refresh();
     return this.view;
   }
 
   setScope(scope: ScopeFilter): void {
     this.scope = scope;
-    void vscode.commands.executeCommand('setContext', 'gandalf.scope', scope);
+    void vscode.commands.executeCommand("setContext", "gandalf.scope", scope);
     this.refresh();
   }
 
@@ -131,15 +131,15 @@ export class FindingsView implements vscode.TreeDataProvider<Node> {
 
     type Item = vscode.QuickPickItem & { level?: Level; severity?: Severity };
     const items: Item[] = [
-      { label: 'Reported level', kind: vscode.QuickPickItemKind.Separator },
+      { label: "Reported level", kind: vscode.QuickPickItemKind.Separator },
       ...LEVELS.map((l) => ({
         label: LEVEL_LABEL[l],
         description: `${countLevel(l)}`,
-        detail: l === 'unrated' ? 'Findings whose tool reported no severity' : undefined,
+        detail: l === "unrated" ? "Findings whose tool reported no severity" : undefined,
         picked: this.levels.has(l),
         level: l,
       })),
-      { label: 'Editor severity', kind: vscode.QuickPickItemKind.Separator },
+      { label: "Editor severity", kind: vscode.QuickPickItemKind.Separator },
       ...SEVERITIES.map((s) => ({
         label: SEVERITY_LABEL[s],
         description: `${countSeverity(s)}`,
@@ -150,8 +150,8 @@ export class FindingsView implements vscode.TreeDataProvider<Node> {
 
     const chosen = await vscode.window.showQuickPick(items, {
       canPickMany: true,
-      title: 'Gandalf: show which findings',
-      placeHolder: 'A finding has to match a selected level and a selected severity',
+      title: "Gandalf: show which findings",
+      placeHolder: "A finding has to match a selected level and a selected severity",
     });
     if (!chosen) return;
 
@@ -202,9 +202,9 @@ export class FindingsView implements vscode.TreeDataProvider<Node> {
     const folder = this.folder();
     if (!folder) return [];
     const all = this.store.findings(folder);
-    if (this.scope !== 'file') return all;
+    if (this.scope !== "file") return all;
     const active = vscode.window.activeTextEditor?.document.uri;
-    if (!active || active.scheme !== 'file') return [];
+    if (!active || active.scheme !== "file") return [];
     return all.filter((f) => f.resolvedPath === active.fsPath);
   }
 
@@ -213,9 +213,7 @@ export class FindingsView implements vscode.TreeDataProvider<Node> {
     const all = this.all();
     // Nothing filtered out: hand back the same array rather than a copy of it.
     if (!this.filtered) return (this.visibleFindings = all);
-    return (this.visibleFindings = all.filter(
-      (f) => this.levels.has(f.level) && this.severities.has(f.severity),
-    ));
+    return (this.visibleFindings = all.filter((f) => this.levels.has(f.level) && this.severities.has(f.severity)));
   }
 
   /**
@@ -226,29 +224,29 @@ export class FindingsView implements vscode.TreeDataProvider<Node> {
     const findings = this.visible();
     const rev = this.expansion;
 
-    if (this.scope === 'file') {
+    if (this.scope === "file") {
       return {
-        roots: findings.map((f) => ({ kind: 'finding', id: `${rev}:finding:${f.id}`, finding: f })),
+        roots: findings.map((f) => ({ kind: "finding", id: `${rev}:finding:${f.id}`, finding: f })),
       };
     }
 
-    const root = this.folder()?.uri.fsPath ?? '';
+    const root = this.folder()?.uri.fsPath ?? "";
     const groups = new Map<string, FileNode>();
     for (const f of findings) {
-      const key = f.resolvedPath || '';
+      const key = f.resolvedPath || "";
       let node = groups.get(key);
       if (!node) {
         node = {
-          kind: 'file',
+          kind: "file",
           id: `${rev}:file:${key}`,
-          label: key ? path.relative(root, key) : 'Project-level (no file)',
+          label: key ? path.relative(root, key) : "Project-level (no file)",
           uri: key ? vscode.Uri.file(key) : undefined,
           children: [],
         };
         groups.set(key, node);
       }
       const child: FindingNode = {
-        kind: 'finding',
+        kind: "finding",
         id: `${rev}:finding:${node.children.length}:${f.id}`,
         finding: f,
       };
@@ -271,36 +269,33 @@ export class FindingsView implements vscode.TreeDataProvider<Node> {
 
   getChildren(element?: Node): Node[] {
     if (!element) return this.tree.roots;
-    return element.kind === 'file' ? element.children : [];
+    return element.kind === "file" ? element.children : [];
   }
 
-
   getTreeItem(node: Node): vscode.TreeItem {
-    if (node.kind === 'file') {
+    if (node.kind === "file") {
       const item = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.Expanded);
       item.id = node.id;
       item.resourceUri = node.uri;
-      item.iconPath = node.uri ? vscode.ThemeIcon.File : new vscode.ThemeIcon('project');
+      item.iconPath = node.uri ? vscode.ThemeIcon.File : new vscode.ThemeIcon("project");
       item.description = `${node.children.length}`;
-      item.contextValue = 'gandalfFile';
-      item.tooltip = node.uri?.fsPath ?? 'Findings that are not tied to a file';
+      item.contextValue = "gandalfFile";
+      item.tooltip = node.uri?.fsPath ?? "Findings that are not tied to a file";
       return item;
     }
 
     const f = node.finding;
-    const item = new vscode.TreeItem(f.message.split('\n')[0], vscode.TreeItemCollapsibleState.None);
+    const item = new vscode.TreeItem(f.message.split("\n")[0], vscode.TreeItemCollapsibleState.None);
     item.id = node.id;
     item.iconPath = iconFor(f);
-    item.description = [f.severityLabel, f.gate, f.rule, f.line ? `line ${f.line}` : '']
-      .filter(Boolean)
-      .join(' · ');
+    item.description = [f.severityLabel, f.gate, f.rule, f.line ? `line ${f.line}` : ""].filter(Boolean).join(" · ");
     item.tooltip = this.tooltip(f);
-    item.contextValue = 'gandalfFinding';
+    item.contextValue = "gandalfFinding";
     if (f.resolvedPath) {
       item.resourceUri = vscode.Uri.file(f.resolvedPath);
       item.command = {
-        command: 'vscode.open',
-        title: 'Open',
+        command: "vscode.open",
+        title: "Open",
         arguments: [
           vscode.Uri.file(f.resolvedPath),
           {
@@ -323,7 +318,7 @@ export class FindingsView implements vscode.TreeDataProvider<Node> {
     const facts = [`**gate** ${f.gate}`, `**category** ${f.category}`];
     facts.push(`**level** ${f.severityLabel || LEVEL_LABEL[f.level].toLowerCase()}`);
     if (f.rule) facts.push(`**rule** \`${f.rule}\``);
-    md.appendMarkdown(facts.join(' · '));
+    md.appendMarkdown(facts.join(" · "));
     if (f.url) md.appendMarkdown(`\n\n[Rule documentation](${f.url})`);
     return md;
   }
@@ -340,10 +335,10 @@ export class FindingsView implements vscode.TreeDataProvider<Node> {
     const state = run ? `${VERDICT_WORD[run.verdict]} · ${run.score}/100 · ${run.scope}` : undefined;
     view.description = this.scanLabel
       ? `scanning ${this.scanLabel}…`
-      : [state, this.filtered ? 'filtered' : ''].filter(Boolean).join(' · ') || undefined;
+      : [state, this.filtered ? "filtered" : ""].filter(Boolean).join(" · ") || undefined;
 
     let errors = 0;
-    for (const f of findings) if (f.severity === 'error') errors += 1;
+    for (const f of findings) if (f.severity === "error") errors += 1;
     view.badge = errors ? { value: errors, tooltip: `${errors} error(s)` } : undefined;
 
     view.message = this.message(findings.length, Boolean(run));
@@ -355,15 +350,15 @@ export class FindingsView implements vscode.TreeDataProvider<Node> {
     const snapshot = folder ? this.store.project(folder) : undefined;
 
     if (!scanned) {
-      lines.push('Nothing scanned yet — run “Gandalf: Scan Workspace”.');
+      lines.push("Nothing scanned yet — run “Gandalf: Scan Workspace”.");
     } else if (shown === 0) {
       const hidden = this.all().length;
       lines.push(
         hidden > 0
           ? `${hidden} finding(s) hidden by the current filter — “Gandalf: Filter Findings”.`
-          : this.scope === 'file'
-            ? 'No findings in this file.'
-            : 'No findings — every gate that ran is green.',
+          : this.scope === "file"
+            ? "No findings in this file."
+            : "No findings — every gate that ran is green.",
       );
     }
 
@@ -371,7 +366,7 @@ export class FindingsView implements vscode.TreeDataProvider<Node> {
       const { blocked, inapplicable } = snapshot;
       if (blocked.length) {
         lines.push(
-          `⚠ ${blocked.length} gate(s) could not run (${blocked.join(', ')}) — run “Gandalf: Check Environment”.`,
+          `⚠ ${blocked.length} gate(s) could not run (${blocked.join(", ")}) — run “Gandalf: Check Environment”.`,
         );
       }
       const quiet: string[] = [];
@@ -382,9 +377,9 @@ export class FindingsView implements vscode.TreeDataProvider<Node> {
       if (snapshot.payload.disabled_gates?.length) {
         quiet.push(`${snapshot.payload.disabled_gates.length} disabled by config`);
       }
-      if (quiet.length) lines.push(`Gates not counted: ${quiet.join(', ')}.`);
+      if (quiet.length) lines.push(`Gates not counted: ${quiet.join(", ")}.`);
     }
-    return lines.length ? lines.join('\n') : undefined;
+    return lines.length ? lines.join("\n") : undefined;
   }
 
   dispose(): void {

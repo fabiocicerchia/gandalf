@@ -12,7 +12,7 @@
 
 /** VS Code exclude maps are `{glob: true}`, `{glob: false}` or `{glob: {when}}`. */
 export function enabledGlobs(map: unknown): string[] {
-  if (!map || typeof map !== 'object') return [];
+  if (!map || typeof map !== "object") return [];
   // Only an unconditional `true`: a `when` clause depends on sibling files,
   // which is a question about the workspace, not a pattern gandalf could apply.
   return Object.entries(map as Record<string, unknown>)
@@ -26,14 +26,14 @@ export function enabledGlobs(map: unknown): string[] {
  * half-expanded — better an unexpanded pattern than a wrong one.
  */
 export function expandBraces(glob: string): string[] {
-  const open = glob.indexOf('{');
-  const close = glob.indexOf('}', open + 1);
+  const open = glob.indexOf("{");
+  const close = glob.indexOf("}", open + 1);
   if (open === -1 || close === -1) return [glob];
   const inner = glob.slice(open + 1, close);
-  if (inner.includes('{')) return [glob];
+  if (inner.includes("{")) return [glob];
   const prefix = glob.slice(0, open);
   const suffix = glob.slice(close + 1);
-  return inner.split(',').flatMap((choice) => expandBraces(prefix + choice.trim() + suffix));
+  return inner.split(",").flatMap((choice) => expandBraces(prefix + choice.trim() + suffix));
 }
 
 /**
@@ -43,12 +43,12 @@ export function expandBraces(glob: string): string[] {
  * as two literal stars.
  */
 export function toGandalfPattern(glob: string): string {
-  let pattern = glob.trim().replace(/\\/g, '/');
-  while (pattern.startsWith('**/')) pattern = pattern.slice(3);
-  while (pattern.endsWith('/**')) pattern = pattern.slice(0, -3);
-  pattern = pattern.replace(/\/+$/, '');
+  let pattern = glob.trim().replace(/\\/g, "/");
+  while (pattern.startsWith("**/")) pattern = pattern.slice(3);
+  while (pattern.endsWith("/**")) pattern = pattern.slice(0, -3);
+  pattern = pattern.replace(/\/+$/, "");
   // A bare `**` excludes everything; that is never what someone means here.
-  return pattern === '**' || pattern === '*' ? '' : pattern;
+  return pattern === "**" || pattern === "*" ? "" : pattern;
 }
 
 /** Everything the editor and the settings say to skip, translated and deduped. */

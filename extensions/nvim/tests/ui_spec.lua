@@ -37,7 +37,8 @@ describe('the scorecard float', function()
         score = 71,
         scope = 'working tree',
         gates = {
-          { name = 'ruff', outcome = 'warn', summary = 'ruff: 2 issue(s)', category = 'Code quality', findings = { {} } },
+          { name = 'ruff', outcome = 'warn', summary = 'ruff: 2 issue(s)',
+            category = 'Code quality', findings = { {} } },
           { name = 'trivy', outcome = 'pass', summary = 'clean', category = 'Security', findings = {} },
         },
       },

@@ -199,9 +199,12 @@ describe('the ladder', function()
     local payload = {
       gates = {
         gate({ name = 'a', findings = { norm({}, { path = 'a.py', line = 1, message = 'low', severity = 'low' }) } }),
-        gate({ name = 'b', findings = { norm({}, { path = 'a.py', line = 2, message = 'crit', severity = 'critical' }) } }),
-        gate({ name = 'c', outcome = 'fail', findings = { norm({}, { path = 'a.py', line = 3, message = 'unrated' }) } }),
-        gate({ name = 'd', findings = { norm({}, { path = 'a.py', line = 4, message = 'med', severity = 'medium' }) } }),
+        gate({ name = 'b',
+          findings = { norm({}, { path = 'a.py', line = 2, message = 'crit', severity = 'critical' }) } }),
+        gate({ name = 'c', outcome = 'fail',
+          findings = { norm({}, { path = 'a.py', line = 3, message = 'unrated' }) } }),
+        gate({ name = 'd',
+          findings = { norm({}, { path = 'a.py', line = 4, message = 'med', severity = 'medium' }) } }),
       },
     }
     assert.same(
@@ -216,7 +219,8 @@ end)
 describe('gates that assessed nothing', function()
   local payload = {
     gates = {
-      gate({ name = 'trivy', findings = {}, summary = 'trivy unavailable (no host binary or gandalf-tools image) — skipped' }),
+      gate({ name = 'trivy',
+        findings = {}, summary = 'trivy unavailable (no host binary or gandalf-tools image) — skipped' }),
       gate({ name = 'ci_act', findings = {}, summary = "'act' not found; CI not verified locally" }),
       gate({ name = 'dalfox', findings = {}, summary = 'dalfox: no target URL — skipped (pass --target)' }),
       gate({ name = 'ruff', findings = {}, outcome = 'pass', summary = 'ruff clean' }),
