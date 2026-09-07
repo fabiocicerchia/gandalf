@@ -118,21 +118,15 @@ class CheckstyleGate(ToolchainGate):
     async def check(self, ctx: GateContext, root: str) -> GateResult:
         src = Path(root) / "src"
         target = "src" if src.is_dir() else "."
-        rc, out, err = await run_tool(
-            ["checkstyle", "-c", self._config(root), target], root
-        )
+        rc, out, err = await run_tool(["checkstyle", "-c", self._config(root), target], root)
         if (to := timeout_result(self.name, rc)) is not None:
             return to
         combined = (out or "") + (err or "")
         # A bad config, a missing style file: checkstyle exits non-zero with no
         # violations to show. That is the tool failing, not the code.
-        lines = [
-            ln for ln in combined.splitlines() if ln.startswith(("[WARN]", "[ERROR]"))
-        ]
+        lines = [ln for ln in combined.splitlines() if ln.startswith(("[WARN]", "[ERROR]"))]
         if rc != 0 and not lines:
-            return unavailable(
-                self.name, f"checkstyle: did not run — {tail(combined, 2)}"
-            )
+            return unavailable(self.name, f"checkstyle: did not run — {tail(combined, 2)}")
         return counted(
             self.name,
             len(lines),
@@ -151,9 +145,7 @@ class KtlintGate(ToolchainGate):
     binary = "ktlint"
 
     async def check(self, ctx: GateContext, root: str) -> GateResult:
-        rc, out, _err = await run_tool(
-            ["ktlint", "--reporter=json", "--relative"], root
-        )
+        rc, out, _err = await run_tool(["ktlint", "--reporter=json", "--relative"], root)
         if (to := timeout_result(self.name, rc)) is not None:
             return to
         try:

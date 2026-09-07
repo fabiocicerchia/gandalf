@@ -79,9 +79,9 @@ export const workspace = {
   getConfiguration: (section: string, _scope?: unknown) => ({
     get: <T>(key: string): T | undefined => configuration[section]?.[key] as T | undefined,
   }),
-  onDidSaveTextDocument: listenerFor('onDidSaveTextDocument'),
-  onDidChangeConfiguration: listenerFor('onDidChangeConfiguration'),
-  onDidChangeWorkspaceFolders: listenerFor('onDidChangeWorkspaceFolders'),
+  onDidSaveTextDocument: listenerFor("onDidSaveTextDocument"),
+  onDidChangeConfiguration: listenerFor("onDidChangeConfiguration"),
+  onDidChangeWorkspaceFolders: listenerFor("onDidChangeWorkspaceFolders"),
 };
 
 // --- the findings pane -------------------------------------------------------
@@ -98,7 +98,7 @@ export enum QuickPickItemKind {
 }
 
 export class ThemeIcon {
-  static readonly File = new ThemeIcon('file');
+  static readonly File = new ThemeIcon("file");
   constructor(
     readonly id: string,
     readonly color?: unknown,
@@ -110,7 +110,7 @@ export class ThemeColor {
 }
 
 export class MarkdownString {
-  value = '';
+  value = "";
   appendMarkdown(md: string): this {
     this.value += md;
     return this;
@@ -187,15 +187,15 @@ const notify =
 export const logLines: string[] = [];
 
 class FakeLogChannel {
-  readonly name = 'Gandalf';
+  readonly name = "Gandalf";
   private write = (level: string) => (message: string) => logLines.push(`${level} ${message}`);
-  trace = this.write('trace');
-  debug = this.write('debug');
-  info = this.write('info');
-  warn = this.write('warn');
+  trace = this.write("trace");
+  debug = this.write("debug");
+  info = this.write("info");
+  warn = this.write("warn");
   error = (e: string | Error) => logLines.push(`error ${e instanceof Error ? e.message : e}`);
   show(_preserveFocus?: boolean): void {
-    logLines.push('show');
+    logLines.push("show");
   }
   dispose(): void {
     logLines.length = 0;
@@ -203,10 +203,10 @@ class FakeLogChannel {
 }
 
 export class FakeStatusBarItem {
-  text = '';
+  text = "";
   tooltip: unknown;
   command: unknown;
-  name = '';
+  name = "";
   backgroundColor: unknown;
   shown = 0;
   disposed = 0;
@@ -243,7 +243,7 @@ export const window = {
   },
   createOutputChannel: (_name: string, _opts?: unknown) => new FakeLogChannel(),
   createTerminal: (opts: string | { name: string }) => {
-    const terminal = { name: typeof opts === 'string' ? opts : opts.name, sent: [] as string[] };
+    const terminal = { name: typeof opts === "string" ? opts : opts.name, sent: [] as string[] };
     created.terminals.push(terminal);
     return {
       show: (_preserveFocus?: boolean) => undefined,
@@ -252,20 +252,20 @@ export const window = {
     };
   },
   createWebviewPanel: (_type: string, _title: string, _column: unknown, _opts: unknown) => {
-    throw new Error('vscode-shim: no webview in these tests');
+    throw new Error("vscode-shim: no webview in these tests");
   },
   withProgress: <T>(
     _opts: unknown,
     task: (
       progress: { report(v: { message?: string; increment?: number }): void },
-      token: CancellationTokenSource['token'],
+      token: CancellationTokenSource["token"],
     ) => Thenable<T>,
   ): Thenable<T> => task({ report: () => undefined }, new CancellationTokenSource().token),
-  showErrorMessage: notify('error'),
-  showWarningMessage: notify('warning'),
-  showInformationMessage: notify('information'),
+  showErrorMessage: notify("error"),
+  showWarningMessage: notify("warning"),
+  showInformationMessage: notify("information"),
   showSaveDialog: (_opts: unknown): Promise<unknown> => Promise.resolve(undefined),
-  onDidChangeActiveTextEditor: listenerFor('onDidChangeActiveTextEditor'),
+  onDidChangeActiveTextEditor: listenerFor("onDidChangeActiveTextEditor"),
 };
 
 /** Command id -> the handler activate() registered for it. */
@@ -293,7 +293,7 @@ export const env = {
     return Promise.resolve(true);
   },
   clipboard: {
-    text: '',
+    text: "",
     writeText: (text: string): Promise<void> => {
       env.clipboard.text = text;
       return Promise.resolve();
@@ -319,7 +319,7 @@ export function resetShim(): void {
   quickPick.lastItems = [];
   workspace.workspaceFolders = [];
   window.activeTextEditor = undefined;
-  env.clipboard.text = '';
+  env.clipboard.text = "";
 }
 
 // --- diagnostics -------------------------------------------------------------

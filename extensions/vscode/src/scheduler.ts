@@ -15,13 +15,13 @@
  *  - **focus gate** — periodic sweeps skip while the window is in the
  *    background, so a laptop left open doesn't sweep all afternoon.
  */
-import * as crypto from 'crypto';
-import * as fs from 'fs';
-import * as vscode from 'vscode';
+import * as crypto from "crypto";
+import * as fs from "fs";
+import * as vscode from "vscode";
 
-import { log } from './log';
-import { ScanProgress } from './progress';
-import { ScanKind } from './runner';
+import { log } from "./log";
+import { ScanProgress } from "./progress";
+import { ScanKind } from "./runner";
 
 export interface Job {
   folder: vscode.WorkspaceFolder;
@@ -38,8 +38,8 @@ export interface Job {
 }
 
 export function jobLabel(job: Job): string {
-  if (job.kind === 'file') return job.relPath ?? 'file';
-  if (job.kind === 'commit') return `commit ${job.commit ?? ''}`.trim();
+  if (job.kind === "file") return job.relPath ?? "file";
+  if (job.kind === "commit") return `commit ${job.commit ?? ""}`.trim();
   return job.folder.name;
 }
 
@@ -55,7 +55,7 @@ export class ContentGuard {
 
   private async hash(absPath: string): Promise<string> {
     const buf = await fs.promises.readFile(absPath);
-    return crypto.createHash('sha1').update(buf).digest('hex');
+    return crypto.createHash("sha1").update(buf).digest("hex");
   }
 
   /**
@@ -64,11 +64,11 @@ export class ContentGuard {
    * second time to answer the same question would double the I/O of every save.
    */
   async inspect(absPath: string): Promise<{ unchanged: boolean; hash: string }> {
-    let hash = '';
+    let hash = "";
     try {
       hash = await this.hash(absPath);
     } catch {
-      return { unchanged: false, hash: '' };
+      return { unchanged: false, hash: "" };
     }
     return { unchanged: this.hashes.get(absPath) === hash, hash };
   }
@@ -145,7 +145,7 @@ export class Scheduler {
     const periodMs = this.settings().intervalMinutes * 60_000;
     this.sweep = setInterval(() => {
       if (!vscode.window.state.focused) {
-        log().debug('sweep skipped — window not focused');
+        log().debug("sweep skipped — window not focused");
         return;
       }
       if (Date.now() - this.lastCompletedAt < periodMs * 0.9) return; // Already fresh.

@@ -6,17 +6,15 @@
  * one call, and everything either of them does lives in `session.ts` or
  * `commands.ts`.
  */
-import * as vscode from 'vscode';
+import * as vscode from "vscode";
 
-import { commandHandlers } from './commands';
-import { disposeLog } from './log';
-import { resetLauncherCache } from './runner';
-import { Session } from './session';
+import { commandHandlers } from "./commands";
+import { disposeLog } from "./log";
+import { resetLauncherCache } from "./runner";
+import { Session } from "./session";
 
 function registerCommands(session: Session): vscode.Disposable[] {
-  return Object.entries(commandHandlers(session)).map(([id, handler]) =>
-    vscode.commands.registerCommand(id, handler),
-  );
+  return Object.entries(commandHandlers(session)).map(([id, handler]) => vscode.commands.registerCommand(id, handler));
 }
 
 function registerListeners(session: Session): vscode.Disposable[] {
@@ -24,7 +22,7 @@ function registerListeners(session: Session): vscode.Disposable[] {
     vscode.window.onDidChangeActiveTextEditor(() => session.findingsView.refresh()),
     vscode.workspace.onDidSaveTextDocument((doc) => void session.onSave(doc)),
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (!e.affectsConfiguration('gandalf')) return;
+      if (!e.affectsConfiguration("gandalf")) return;
       // The launcher is cached per folder, and `gandalf.path` may have moved.
       session.reconfigure(resetLauncherCache);
     }),

@@ -12,14 +12,14 @@
  * cuts both ways: it is how the Intl.Collator "optimization" was caught being
  * five times slower than the localeCompare it was meant to replace.
  */
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
 
-import { compareFindings, normalize, normalizeGate, pathCache } from './parse';
-import { ResultStore } from './store';
-import { Finding, Payload, RawFinding, RawGate, Snapshot } from './types';
-import { workspace } from './test/vscode-shim';
+import { compareFindings, normalize, normalizeGate, pathCache } from "./parse";
+import { ResultStore } from "./store";
+import { Finding, Payload, RawFinding, RawGate, Snapshot } from "./types";
+import { workspace } from "./test/vscode-shim";
 
 const FINDINGS = 20_000;
 const GATES = 40;
@@ -48,33 +48,36 @@ function rawGates(): RawGate[] {
   const perGate = FINDINGS / GATES;
   return Array.from({ length: GATES }, (_, g) => ({
     name: `gate${g}`,
-    outcome: 'warn' as const,
+    outcome: "warn" as const,
     score: 0.5,
     summary: `gate${g}: ${perGate} finding(s)`,
-    category: 'Code quality',
-    findings: Array.from({ length: perGate }, (_, i): RawFinding => ({
-      path: `src/pkg${i % 200}/mod${i % 500}.py`,
-      line: (i % 400) + 1,
-      message: `finding ${g}-${i} — something the tool wants changed`,
-      severity: (['HIGH', 'MEDIUM', 'LOW'] as const)[i % 3],
-      rule_id: `R${String(i % 90).padStart(3, '0')}`,
-      _gandalf: {
+    category: "Code quality",
+    findings: Array.from(
+      { length: perGate },
+      (_, i): RawFinding => ({
         path: `src/pkg${i % 200}/mod${i % 500}.py`,
         line: (i % 400) + 1,
-        column: 0,
-        rule: `R${String(i % 90).padStart(3, '0')}`,
         message: `finding ${g}-${i} — something the tool wants changed`,
-        severity: (['high', 'medium', 'low'] as const)[i % 3],
-        url: '',
-      },
-    })),
+        severity: (["HIGH", "MEDIUM", "LOW"] as const)[i % 3],
+        rule_id: `R${String(i % 90).padStart(3, "0")}`,
+        _gandalf: {
+          path: `src/pkg${i % 200}/mod${i % 500}.py`,
+          line: (i % 400) + 1,
+          column: 0,
+          rule: `R${String(i % 90).padStart(3, "0")}`,
+          message: `finding ${g}-${i} — something the tool wants changed`,
+          severity: (["high", "medium", "low"] as const)[i % 3],
+          url: "",
+        },
+      }),
+    ),
   })).map((g) => ({ ...g, findings: g.findings }));
 }
 
 function payloadOf(gates: RawGate[]): Payload {
   return {
-    scope: 'working-tree',
-    verdict: 'warn',
+    scope: "working-tree",
+    verdict: "warn",
     score: 61,
     skipped_gates: [],
     disabled_gates: [],
@@ -88,22 +91,22 @@ function snapshotOf(findings: Finding[], gates: RawGate[]): Snapshot {
     findings,
     blocked: [],
     inapplicable: [],
-    jsonPath: '',
-    htmlPath: '',
-    scope: 'working-tree',
+    jsonPath: "",
+    htmlPath: "",
+    scope: "working-tree",
     at: 0,
   };
 }
 
 function main(): void {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gandalf-bench-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gandalf-bench-"));
   // A real tree behind the findings, so path resolution does real work.
   for (let i = 0; i < 200; i += 1) {
     const dir = path.join(root, `src/pkg${i}`);
     fs.mkdirSync(dir, { recursive: true });
-    for (let k = 0; k < 3; k += 1) fs.writeFileSync(path.join(dir, `mod${i + k}.py`), 'x = 1\n');
+    for (let k = 0; k < 3; k += 1) fs.writeFileSync(path.join(dir, `mod${i + k}.py`), "x = 1\n");
   }
-  const folder = { uri: { fsPath: root, toString: () => `file://${root}` }, name: 'repo', index: 0 };
+  const folder = { uri: { fsPath: root, toString: () => `file://${root}` }, name: "repo", index: 0 };
   workspace.workspaceFolders = [folder as never];
 
   const gates = rawGates();
@@ -111,9 +114,9 @@ function main(): void {
   const rows: Row[] = [];
 
   rows.push({
-    id: 'normalize',
+    id: "normalize",
     label: `Normalize ${FINDINGS / 1000}k findings`,
-    unit: 'ms',
+    unit: "ms",
     after: timed(() => normalize(payloadOf(gates), root, pathCache()), 3),
   });
 
@@ -121,9 +124,9 @@ function main(): void {
   // usual advice — measured 5x *slower*, and the finding is recorded where
   // someone would go to make the change (see compareFindings in parse.ts).
   rows.push({
-    id: 'sort',
+    id: "sort",
     label: `Sort ${FINDINGS / 1000}k findings`,
-    unit: 'ms',
+    unit: "ms",
     after: timed(() => [...findings].sort(compareFindings)),
   });
 
@@ -139,14 +142,14 @@ function main(): void {
     }
   };
   rows.push({
-    id: 'streamed-board',
+    id: "streamed-board",
     label: `Rebuild the board, ${GATES} streamed gates`,
-    unit: 'ms',
+    unit: "ms",
     after: timed(streamedRun, 3),
   });
 
   fs.rmSync(root, { recursive: true, force: true });
-  process.stdout.write(JSON.stringify(rows, null, 2) + '\n');
+  process.stdout.write(JSON.stringify(rows, null, 2) + "\n");
 }
 
 main();

@@ -19,6 +19,10 @@ from gandalf.plugins import (
 _DIALECT = os.environ.get("GANDALF_SQL_DIALECT", "ansi")
 
 
+# Up to this many lint issues is a warning; more is a failure.
+WARN_LIMIT = 10
+
+
 class SqlfluffGate:
     name = "sqlfluff"
     blocking = False
@@ -28,9 +32,7 @@ class SqlfluffGate:
     async def run(self, ctx: GateContext) -> GateResult:
         sqls = named(ctx, "*.sql")
         if not sqls:
-            return GateResult(
-                self.name, GateOutcome.PASS, 1.0, "sqlfluff: no SQL files"
-            )
+            return GateResult(self.name, GateOutcome.PASS, 1.0, "sqlfluff: no SQL files")
         if (m := missing_result(self.name, "sqlfluff")) is not None:
             return m
         rc, out, _ = await run_tool(
@@ -54,14 +56,10 @@ class SqlfluffGate:
         ]
         n = len(findings)
         if n == 0:
-            return GateResult(
-                self.name, GateOutcome.PASS, 1.0, f"sqlfluff: {len(sqls)} file(s) clean"
-            )
+            return GateResult(self.name, GateOutcome.PASS, 1.0, f"sqlfluff: {len(sqls)} file(s) clean")
         score = max(0.0, 1.0 - min(n, 20) / 20)
-        outcome = GateOutcome.WARN if n <= 10 else GateOutcome.FAIL
-        return GateResult(
-            self.name, outcome, score, f"sqlfluff: {n} lint issue(s)", findings
-        )
+        outcome = GateOutcome.WARN if n <= WARN_LIMIT else GateOutcome.FAIL
+        return GateResult(self.name, outcome, score, f"sqlfluff: {n} lint issue(s)", findings)
 
     async def fix(self, ctx: GateContext) -> tuple[bool, str]:
         """Rewrite the SQL with `sqlfluff fix`. Called only under `--fix`.

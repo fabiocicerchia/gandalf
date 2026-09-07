@@ -43,9 +43,7 @@ class InterrogateGate:
             return to
         match = re.search(r"actual:\s*([\d.]+)%", (out or "") + (err or ""))
         if not match:
-            return GateResult(
-                self.name, GateOutcome.PASS, 1.0, "interrogate: no Python to document"
-            )
+            return GateResult(self.name, GateOutcome.PASS, 1.0, "interrogate: no Python to document")
         actual = float(match.group(1))
         score = actual / 100
         if actual >= _MIN:

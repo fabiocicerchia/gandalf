@@ -29,6 +29,4 @@ class SecurityAssessmentGate:
     category = "Security"
 
     async def run(self, ctx: GateContext) -> GateResult:
-        return await skills.judge(
-            ctx, skill="security-assessment", gate_name=self.name, task=_TASK
-        )
+        return await skills.judge(ctx, skill="security-assessment", gate_name=self.name, task=_TASK)

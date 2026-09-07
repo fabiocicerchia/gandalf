@@ -38,7 +38,7 @@ export interface ScanProgress {
 }
 
 function parseLine(raw: string): ScanProgress | undefined {
-  const line = raw.replace(ANSI, '').trimEnd();
+  const line = raw.replace(ANSI, "").trimEnd();
   const stage = STAGE.exec(line);
   if (!stage) return undefined;
 
@@ -49,7 +49,7 @@ function parseLine(raw: string): ScanProgress | undefined {
   let label = stage[3];
   let gatesDone = 0;
   let gatesTotal = 0;
-  let gate = '';
+  let gate = "";
   const bar = BAR.exec(label);
   if (bar) {
     label = bar[1].trim();
@@ -78,7 +78,7 @@ function same(a: ScanProgress | undefined, b: ScanProgress): boolean {
 }
 
 export class ProgressParser {
-  private tail = '';
+  private tail = "";
   private last: ScanProgress | undefined;
 
   /**
@@ -88,7 +88,7 @@ export class ProgressParser {
    */
   feed(chunk: string): { progress?: ScanProgress; noise: string } {
     const segments = (this.tail + chunk).split(/[\r\n]/);
-    this.tail = segments.pop() ?? ''; // No delimiter yet — wait for the rest.
+    this.tail = segments.pop() ?? ""; // No delimiter yet — wait for the rest.
 
     let progress: ScanProgress | undefined;
     const noise: string[] = [];
@@ -96,19 +96,19 @@ export class ProgressParser {
       if (!segment.trim()) continue;
       const parsed = parseLine(segment);
       if (parsed) progress = parsed;
-      else noise.push(segment.replace(ANSI, ''));
+      else noise.push(segment.replace(ANSI, ""));
     }
 
     if (progress && same(this.last, progress)) progress = undefined;
     if (progress) this.last = progress;
-    return { progress, noise: noise.length ? noise.join('\n') + '\n' : '' };
+    return { progress, noise: noise.length ? noise.join("\n") + "\n" : "" };
   }
 
   /** Any trailing text left unterminated when the process exited. */
   flush(): string {
     const rest = this.tail;
-    this.tail = '';
-    return rest.trim() && !parseLine(rest) ? rest.replace(ANSI, '') + '\n' : '';
+    this.tail = "";
+    return rest.trim() && !parseLine(rest) ? rest.replace(ANSI, "") + "\n" : "";
   }
 }
 

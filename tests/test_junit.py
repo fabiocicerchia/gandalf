@@ -31,7 +31,7 @@ def _doc():
     return junit.to_junit(_RESULTS, {})
 
 
-def test_shape_and_parseable():
+def test_shape_and_parseable() -> None:
     doc = _doc()
     root = ET.fromstring(doc)  # must be well-formed XML
     assert root.tag == "testsuite"
@@ -40,7 +40,7 @@ def test_shape_and_parseable():
     assert len(root.findall("testcase")) == 3
 
 
-def test_fail_becomes_failure_element():
+def test_fail_becomes_failure_element() -> None:
     root = ET.fromstring(_doc())
     ruff = next(tc for tc in root.findall("testcase") if tc.attrib["name"] == "ruff")
     failure = ruff.find("failure")
@@ -49,21 +49,18 @@ def test_fail_becomes_failure_element():
     assert "long" in (failure.text or "")
 
 
-def test_warn_stays_passing_with_system_out():
+def test_warn_stays_passing_with_system_out() -> None:
     root = ET.fromstring(_doc())
-    bandit = next(
-        tc for tc in root.findall("testcase") if tc.attrib["name"] == "bandit"
-    )
+    bandit = next(tc for tc in root.findall("testcase") if tc.attrib["name"] == "bandit")
     assert bandit.find("failure") is None
     out = bandit.find("system-out")
-    assert out is not None and "1 issue" in out.text
+    assert out is not None
+    assert "1 issue" in out.text
 
 
-def test_passing_gate_has_no_failure_or_system_out():
+def test_passing_gate_has_no_failure_or_system_out() -> None:
     root = ET.fromstring(_doc())
-    clean = next(
-        tc for tc in root.findall("testcase") if tc.attrib["name"] == "gitleaks"
-    )
+    clean = next(tc for tc in root.findall("testcase") if tc.attrib["name"] == "gitleaks")
     assert clean.find("failure") is None
     assert clean.find("system-out") is None
 
@@ -73,4 +70,3 @@ if __name__ == "__main__":
     test_fail_becomes_failure_element()
     test_warn_stays_passing_with_system_out()
     test_passing_gate_has_no_failure_or_system_out()
-    print("ok")

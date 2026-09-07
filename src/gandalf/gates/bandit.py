@@ -51,6 +51,4 @@ class BanditGate:
         high = sum(1 for r in results if r.get("issue_severity") == "HIGH")
         score = max(0.0, 1.0 - (high * 0.2 + (n - high) * 0.05))
         outcome = GateOutcome.FAIL if high > 0 else GateOutcome.WARN
-        return GateResult(
-            self.name, outcome, score, f"bandit: {n} issue(s), {high} HIGH", results
-        )
+        return GateResult(self.name, outcome, score, f"bandit: {n} issue(s), {high} HIGH", results)

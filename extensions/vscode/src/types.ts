@@ -11,9 +11,9 @@
  * those key lists, and it had drifted from the Python ones.
  */
 
-export type Outcome = 'pass' | 'warn' | 'fail';
+export type Outcome = "pass" | "warn" | "fail";
 /** Editor severity — what a squiggle can be. */
-export type Severity = 'error' | 'warning' | 'info';
+export type Severity = "error" | "warning" | "info";
 /**
  * The severity the *tool* reported, on the ladder they all roughly share.
  * `unrated` is not a gap in the data: plenty of gates publish findings with no
@@ -21,7 +21,7 @@ export type Severity = 'error' | 'warning' | 'info';
  * somewhere on the ladder would invent precision. They are filterable as their
  * own bucket, and sort by the gate outcome they inherited.
  */
-export type Level = 'critical' | 'high' | 'medium' | 'low' | 'info' | 'unrated';
+export type Level = "critical" | "high" | "medium" | "low" | "info" | "unrated";
 
 export interface RawFinding {
   [key: string]: unknown;

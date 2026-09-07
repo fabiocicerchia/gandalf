@@ -3,11 +3,11 @@
  * carries the whole explanation: what the tool said, which gate found it, how
  * bad it is, and the rule id (linked to its docs when the tool ships a URL).
  */
-import * as vscode from 'vscode';
+import * as vscode from "vscode";
 
-import { Settings } from './config';
-import { SEVERITY_RANK } from './parse';
-import { Finding, Severity } from './types';
+import { Settings } from "./config";
+import { SEVERITY_RANK } from "./parse";
+import { Finding, Severity } from "./types";
 
 const VSCODE_SEVERITY: Record<Severity, vscode.DiagnosticSeverity> = {
   error: vscode.DiagnosticSeverity.Error,
@@ -19,7 +19,7 @@ export function describe(f: Finding): string {
   const facts = [`gate: ${f.gate}`, `category: ${f.category}`];
   if (f.severityLabel) facts.push(`severity: ${f.severityLabel}`);
   if (f.rule) facts.push(`rule: ${f.rule}`);
-  return `${f.message}\n\n${facts.join(' · ')}`;
+  return `${f.message}\n\n${facts.join(" · ")}`;
 }
 
 function toDiagnostic(f: Finding): vscode.Diagnostic {
@@ -29,7 +29,7 @@ function toDiagnostic(f: Finding): vscode.Diagnostic {
   // having to open the document to measure it.
   const range = new vscode.Range(line, column, line, Number.MAX_SAFE_INTEGER);
   const d = new vscode.Diagnostic(range, describe(f), VSCODE_SEVERITY[f.severity]);
-  d.source = 'gandalf';
+  d.source = "gandalf";
   if (f.rule) {
     d.code = f.url ? { value: f.rule, target: vscode.Uri.parse(f.url) } : f.rule;
   }
@@ -46,7 +46,7 @@ export interface DiagnosticGroup {
 const MAX_PER_FILE = 500;
 
 export class DiagnosticPublisher {
-  private readonly collection = vscode.languages.createDiagnosticCollection('gandalf');
+  private readonly collection = vscode.languages.createDiagnosticCollection("gandalf");
 
   /**
    * Republishes everything at once. A partial publish is not an option: the

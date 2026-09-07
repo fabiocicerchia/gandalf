@@ -9,45 +9,45 @@
  * the timings picker, the history picker and the export dialog. Everything else
  * is one call into the session.
  */
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
-import * as vscode from 'vscode';
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
+import * as vscode from "vscode";
 
-import { buildToolsImage, runDoctor } from './doctor';
-import { Commit, delta, parseLog, parseTrend, sparkline, TrendEntry } from './history';
-import { log } from './log';
-import { gatesByDuration } from './parse';
-import { probe } from './runner';
-import { Session } from './session';
+import { buildToolsImage, runDoctor } from "./doctor";
+import { Commit, delta, parseLog, parseTrend, sparkline, TrendEntry } from "./history";
+import { log } from "./log";
+import { gatesByDuration } from "./parse";
+import { probe } from "./runner";
+import { Session } from "./session";
 
 /** Commits `git log` is asked for when drawing the score history. */
 const HISTORY_COMMITS = 40;
 
 export function commandHandlers(session: Session): Record<string, () => unknown> {
   return {
-    'gandalf.scanWorkspace': () => session.run('workspace'),
-    'gandalf.scanCurrentFile': () => session.run('file'),
-    'gandalf.showReport': () => session.openReport(false),
-    'gandalf.showReportWithLlm': () => session.openReport(true),
-    'gandalf.cancel': () => session.scheduler.cancel(),
-    'gandalf.showLog': () => log().show(true),
-    'gandalf.filterCurrentFile': () => session.findingsView.setScope('file'),
-    'gandalf.filterProject': () => session.findingsView.setScope('project'),
-    'gandalf.filterFindings': () => session.findingsView.pickFilters(),
-    'gandalf.expandAll': () => session.findingsView.expandAll(),
-    'gandalf.showTimings': () => showTimings(session),
-    'gandalf.showHistory': () => showHistory(session),
-    'gandalf.exportReport': () => exportReport(session),
-    'gandalf.checkEnvironment': () => forFolder(session, runDoctor),
-    'gandalf.buildToolsImage': () => forFolder(session, buildToolsImage),
+    "gandalf.scanWorkspace": () => session.run("workspace"),
+    "gandalf.scanCurrentFile": () => session.run("file"),
+    "gandalf.showReport": () => session.openReport(false),
+    "gandalf.showReportWithLlm": () => session.openReport(true),
+    "gandalf.cancel": () => session.scheduler.cancel(),
+    "gandalf.showLog": () => log().show(true),
+    "gandalf.filterCurrentFile": () => session.findingsView.setScope("file"),
+    "gandalf.filterProject": () => session.findingsView.setScope("project"),
+    "gandalf.filterFindings": () => session.findingsView.pickFilters(),
+    "gandalf.expandAll": () => session.findingsView.expandAll(),
+    "gandalf.showTimings": () => showTimings(session),
+    "gandalf.showHistory": () => showHistory(session),
+    "gandalf.exportReport": () => exportReport(session),
+    "gandalf.checkEnvironment": () => forFolder(session, runDoctor),
+    "gandalf.buildToolsImage": () => forFolder(session, buildToolsImage),
   };
 }
 
 /** The commands that need somewhere to run do nothing when there is nowhere. */
 async function forFolder(
   session: Session,
-  action: (folder: vscode.WorkspaceFolder, s: ReturnType<Session['settingsFor']>) => Promise<void>,
+  action: (folder: vscode.WorkspaceFolder, s: ReturnType<Session["settingsFor"]>) => Promise<void>,
 ): Promise<void> {
   const folder = session.primaryFolder();
   if (folder) await action(folder, session.settingsFor(folder));
@@ -64,9 +64,7 @@ async function showTimings(session: Session): Promise<void> {
   const lastRun = folder ? session.store.lastRun(folder) : undefined;
   const timed = gatesByDuration(snapshot?.payload);
   if (!snapshot || timed.length === 0) {
-    void vscode.window.showInformationMessage(
-      'Gandalf: no timings yet — run “Gandalf: Scan Workspace” first.',
-    );
+    void vscode.window.showInformationMessage("Gandalf: no timings yet — run “Gandalf: Scan Workspace” first.");
     return;
   }
   const summed = timed.reduce((n, g) => n + (g.duration ?? 0), 0);
@@ -80,23 +78,21 @@ async function showTimings(session: Session): Promise<void> {
     {
       canPickMany: true,
       title: `Gate timings — ${wall.toFixed(1)}s wall clock, ${summed.toFixed(1)}s summed (gates run concurrently)`,
-      placeHolder: 'Select gates to copy a .gandalf.toml skip list for editor scans',
+      placeHolder: "Select gates to copy a .gandalf.toml skip list for editor scans",
     },
   );
   if (!chosen?.length) return;
-  await vscode.env.clipboard.writeText(
-    `[gandalf]\nskip = [${chosen.map((c) => `"${c.label}"`).join(', ')}]\n`,
-  );
+  await vscode.env.clipboard.writeText(`[gandalf]\nskip = [${chosen.map((c) => `"${c.label}"`).join(", ")}]\n`);
   void vscode.window.showInformationMessage(
     `Gandalf: copied a skip list for ${chosen.length} gate(s). Paste it into a .gandalf.toml and ` +
-      'point `gandalf.configPath` at that file to use it for editor scans only.',
+      "point `gandalf.configPath` at that file to use it for editor scans only.",
   );
 }
 
 /** The scores in `.gandalf-trend.jsonl`, or an empty history when there is none. */
 async function readTrend(root: string): Promise<Map<string, TrendEntry>> {
   try {
-    return parseTrend(await fs.promises.readFile(path.join(root, '.gandalf-trend.jsonl'), 'utf8'));
+    return parseTrend(await fs.promises.readFile(path.join(root, ".gandalf-trend.jsonl"), "utf8"));
   } catch {
     // No log yet — the picker still lists commits, all unscored.
     return new Map();
@@ -104,16 +100,12 @@ async function readTrend(root: string): Promise<Map<string, TrendEntry>> {
 }
 
 /** One quick pick item per commit, scored ones carrying their change. */
-function historyItems(
-  commits: Commit[],
-  trend: Map<string, TrendEntry>,
-  previous: Map<string, number>,
-) {
+function historyItems(commits: Commit[], trend: Map<string, TrendEntry>, previous: Map<string, number>) {
   return commits.map((c) => {
     const entry = trend.get(c.short);
-    const change = entry ? delta(entry.score, previous.get(c.short)) : '';
+    const change = entry ? delta(entry.score, previous.get(c.short)) : "";
     return {
-      label: entry ? `${entry.score}/100${change ? `  ${change}` : ''}` : '— not scanned',
+      label: entry ? `${entry.score}/100${change ? `  ${change}` : ""}` : "— not scanned",
       description: `${c.short}  ${c.subject}`,
       detail: c.date,
       commit: c.short,
@@ -132,10 +124,10 @@ async function showHistory(session: Session): Promise<void> {
   const root = folder.uri.fsPath;
 
   const trend = await readTrend(root);
-  const gitLog = await probe('git', ['log', `-${HISTORY_COMMITS}`, '--format=%h%x1f%s%x1f%cs'], root);
+  const gitLog = await probe("git", ["log", `-${HISTORY_COMMITS}`, "--format=%h%x1f%s%x1f%cs"], root);
   const commits: Commit[] = gitLog.ok ? parseLog(gitLog.output) : [];
   if (commits.length === 0) {
-    void vscode.window.showInformationMessage('Gandalf: no commits to show a history for.');
+    void vscode.window.showInformationMessage("Gandalf: no commits to show a history for.");
     return;
   }
 
@@ -151,10 +143,10 @@ async function showHistory(session: Session): Promise<void> {
     title: scored.length
       ? `Score history — ${line} over ${scored.length} scanned commit(s) of ${commits.length}`
       : `Score history — nothing scanned yet of ${commits.length} commit(s)`,
-    placeHolder: 'Pick a commit to scan it and open its report',
+    placeHolder: "Pick a commit to scan it and open its report",
   });
   if (!chosen) return;
-  const ok = await session.run('commit', {
+  const ok = await session.run("commit", {
     commit: chosen.commit,
     reason: `commit ${chosen.commit}`,
   });
@@ -169,21 +161,21 @@ async function showHistory(session: Session): Promise<void> {
  */
 async function exportReport(session: Session): Promise<void> {
   if (!session.reportView.current || !fs.existsSync(session.reportView.current)) {
-    const ok = await session.run('workspace', { reason: 'export' });
+    const ok = await session.run("workspace", { reason: "export" });
     if (!ok || !session.reportView.current) return;
   }
   const folder = session.primaryFolder();
   const suggested = path.basename(session.reportView.current);
   const target = await vscode.window.showSaveDialog({
     defaultUri: vscode.Uri.file(path.join(folder?.uri.fsPath ?? os.homedir(), suggested)),
-    filters: { 'HTML report': ['html'] },
-    title: 'Export the Gandalf report',
+    filters: { "HTML report": ["html"] },
+    title: "Export the Gandalf report",
   });
   if (!target) return;
   await fs.promises.copyFile(session.reportView.current, target.fsPath);
   const choice = await vscode.window.showInformationMessage(
     `Gandalf: report exported to ${path.basename(target.fsPath)}.`,
-    'Open',
+    "Open",
   );
-  if (choice === 'Open') await vscode.env.openExternal(target);
+  if (choice === "Open") await vscode.env.openExternal(target);
 }

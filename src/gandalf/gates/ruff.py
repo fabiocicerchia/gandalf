@@ -14,6 +14,9 @@ from gandalf.plugins import (
     tool_missing,
 )
 
+# Up to this many issues is a warning; more is a failure.
+WARN_LIMIT = 3
+
 
 class RuffGate:
     name = "ruff"
@@ -44,7 +47,7 @@ class RuffGate:
         if n == 0:
             return GateResult(self.name, GateOutcome.PASS, 1.0, "ruff clean")
         score = max(0.0, 1.0 - min(n, 10) / 10)
-        outcome = GateOutcome.WARN if n <= 3 else GateOutcome.FAIL
+        outcome = GateOutcome.WARN if n <= WARN_LIMIT else GateOutcome.FAIL
         return GateResult(self.name, outcome, score, f"ruff: {n} finding(s)", findings)
 
     async def fix(self, ctx: GateContext) -> tuple[bool, str]:

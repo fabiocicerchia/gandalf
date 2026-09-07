@@ -6,11 +6,11 @@
  * the nested shapes (`location.row`, `start.line`) that only SARIF handled and
  * a last-resort `path:line:` scrape for gates that emit raw tool lines.
  */
-import * as crypto from 'crypto';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as crypto from "crypto";
+import * as fs from "fs";
+import * as path from "path";
 
-import { Finding, Level, Outcome, Payload, RawFinding, RawGate, Severity } from './types';
+import { Finding, Level, Outcome, Payload, RawFinding, RawGate, Severity } from "./types";
 
 /**
  * What gandalf says about a finding once it has reconciled it — the `_gandalf`
@@ -37,17 +37,17 @@ interface Normalised {
  * report has always read — deliberately not the full reconciliation, which is
  * no longer this file's job to carry.
  */
-const LEGACY_PATH_KEYS = ['path', 'filename', 'file', 'file_path'];
-const LEGACY_LINE_KEYS = ['line', 'line_number', 'Line'];
-const LEGACY_RULE_KEYS = ['rule_id', 'check_id', 'RuleID', 'test_id', 'code', 'id', 'rule'];
-const LEGACY_MESSAGE_KEYS = ['message', 'issue_text', 'description', 'Description', 'error', 'finding'];
-const LEGACY_SEVERITY_KEYS = ['severity', 'Severity', 'issue_severity', 'level', 'Level'];
-const URL_KEYS = ['url', 'URL', 'PrimaryURL', 'help_uri'];
+const LEGACY_PATH_KEYS = ["path", "filename", "file", "file_path"];
+const LEGACY_LINE_KEYS = ["line", "line_number", "Line"];
+const LEGACY_RULE_KEYS = ["rule_id", "check_id", "RuleID", "test_id", "code", "id", "rule"];
+const LEGACY_MESSAGE_KEYS = ["message", "issue_text", "description", "Description", "error", "finding"];
+const LEGACY_SEVERITY_KEYS = ["severity", "Severity", "issue_severity", "level", "Level"];
+const URL_KEYS = ["url", "URL", "PrimaryURL", "help_uri"];
 
 const OUTCOME_SEVERITY: Record<Outcome, Severity> = {
-  fail: 'error',
-  warn: 'warning',
-  pass: 'info',
+  fail: "error",
+  warn: "warning",
+  pass: "info",
 };
 
 /**
@@ -64,16 +64,16 @@ const OUTCOME_SEVERITY: Record<Outcome, Severity> = {
  * gate's outcome instead.
  */
 const GANDALF_LEVEL: Record<string, Level> = {
-  critical: 'critical',
-  high: 'high',
-  medium: 'medium',
-  low: 'low',
-  info: 'info',
-  unknown: 'unrated',
+  critical: "critical",
+  high: "high",
+  medium: "medium",
+  low: "low",
+  info: "info",
+  unknown: "unrated",
 };
 
 /** Worst first — the pane's ordering and the filter's ordering. */
-export const LEVELS: Level[] = ['critical', 'high', 'medium', 'low', 'info', 'unrated'];
+export const LEVELS: Level[] = ["critical", "high", "medium", "low", "info", "unrated"];
 export const LEVEL_RANK: Record<Level, number> = {
   critical: 0,
   high: 1,
@@ -83,22 +83,22 @@ export const LEVEL_RANK: Record<Level, number> = {
   unrated: 5,
 };
 export const LEVEL_LABEL: Record<Level, string> = {
-  critical: 'Critical',
-  high: 'High',
-  medium: 'Medium',
-  low: 'Low',
-  info: 'Info',
-  unrated: 'Unrated',
+  critical: "Critical",
+  high: "High",
+  medium: "Medium",
+  low: "Low",
+  info: "Info",
+  unrated: "Unrated",
 };
 
-export const SEVERITIES: Severity[] = ['error', 'warning', 'info'];
+export const SEVERITIES: Severity[] = ["error", "warning", "info"];
 export const SEVERITY_RANK: Record<Severity, number> = { error: 0, warning: 1, info: 2 };
 /** The scorecard's own vocabulary for an outcome. */
-export const VERDICT_WORD: Record<Outcome, string> = { pass: 'GREEN', warn: 'AMBER', fail: 'RED' };
+export const VERDICT_WORD: Record<Outcome, string> = { pass: "GREEN", warn: "AMBER", fail: "RED" };
 export const SEVERITY_LABEL: Record<Severity, string> = {
-  error: 'Errors',
-  warning: 'Warnings',
-  info: 'Info',
+  error: "Errors",
+  warning: "Warnings",
+  info: "Info",
 };
 
 /**
@@ -108,38 +108,38 @@ export const SEVERITY_LABEL: Record<Severity, string> = {
  * severity.
  */
 const IMPLIED_LEVEL: Record<Severity, Level> = {
-  error: 'high',
-  warning: 'medium',
-  info: 'info',
+  error: "high",
+  warning: "medium",
+  info: "info",
 };
 
 /** Level → what it squiggles as. `unrated` has no level to map, so it is absent. */
-const LEVEL_SEVERITY: Record<Exclude<Level, 'unrated'>, Severity> = {
-  critical: 'error',
-  high: 'error',
-  medium: 'warning',
-  low: 'info',
-  info: 'info',
+const LEVEL_SEVERITY: Record<Exclude<Level, "unrated">, Severity> = {
+  critical: "error",
+  high: "error",
+  medium: "warning",
+  low: "info",
+  info: "info",
 };
 
 export function sortLevel(f: Finding): Level {
-  return f.level === 'unrated' ? IMPLIED_LEVEL[f.severity] : f.level;
+  return f.level === "unrated" ? IMPLIED_LEVEL[f.severity] : f.level;
 }
 
 function firstString(f: RawFinding, keys: string[]): string {
   for (const k of keys) {
     const v = f[k];
-    if (typeof v === 'string' && v.trim()) return v.trim();
-    if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+    if (typeof v === "string" && v.trim()) return v.trim();
+    if (typeof v === "number" && Number.isFinite(v)) return String(v);
   }
-  return '';
+  return "";
 }
 
 function firstNumber(f: RawFinding, keys: string[]): number {
   for (const k of keys) {
     const v = f[k];
-    if (typeof v === 'number' && Number.isInteger(v) && v > 0) return v;
-    if (typeof v === 'string' && /^\d+$/.test(v) && Number(v) > 0) return Number(v);
+    if (typeof v === "number" && Number.isInteger(v) && v > 0) return v;
+    if (typeof v === "string" && /^\d+$/.test(v) && Number(v) > 0) return Number(v);
   }
   return 0;
 }
@@ -147,18 +147,18 @@ function firstNumber(f: RawFinding, keys: string[]): number {
 /** The `_gandalf` block, if this build of gandalf emits one. */
 function normalised(f: RawFinding): Normalised | undefined {
   const raw = f._gandalf;
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
   const o = raw as Record<string, unknown>;
-  const str = (k: string) => (typeof o[k] === 'string' ? (o[k] as string) : '');
-  const num = (k: string) => (typeof o[k] === 'number' && o[k] > 0 ? (o[k] as number) : 0);
+  const str = (k: string) => (typeof o[k] === "string" ? (o[k] as string) : "");
+  const num = (k: string) => (typeof o[k] === "number" && o[k] > 0 ? (o[k] as number) : 0);
   return {
-    path: str('path'),
-    line: num('line'),
-    column: num('column'),
-    rule: str('rule'),
-    message: str('message'),
-    severity: str('severity'),
-    url: str('url'),
+    path: str("path"),
+    line: num("line"),
+    column: num("column"),
+    rule: str("rule"),
+    message: str("message"),
+    severity: str("severity"),
+    url: str("url"),
   };
 }
 
@@ -185,26 +185,26 @@ export function readFinding(f: RawFinding): Normalised {
  * `/src` — so an absolute `/src/...` has to be rebased before it means anything.
  */
 export function resolvePath(raw: string, root: string, cache?: Map<string, string>): string {
-  if (!raw) return '';
+  if (!raw) return "";
   const key = `${root}\0${raw}`;
   const hit = cache?.get(key);
   if (hit !== undefined) return hit;
 
-  const cleaned = raw.replace(/\\/g, '/').replace(/^\.\//, '');
+  const cleaned = raw.replace(/\\/g, "/").replace(/^\.\//, "");
   const candidates: string[] = [];
   if (path.isAbsolute(cleaned)) {
     candidates.push(cleaned);
     // The container mounts the worktree at /src, and gandalf's own scopes use
     // a temporary worktree — both leave an absolute prefix we have to shed.
-    const marker = cleaned.indexOf('/src/');
-    if (cleaned.startsWith('/src/')) candidates.push(path.join(root, cleaned.slice(5)));
+    const marker = cleaned.indexOf("/src/");
+    if (cleaned.startsWith("/src/")) candidates.push(path.join(root, cleaned.slice(5)));
     else if (marker > 0) candidates.push(path.join(root, cleaned.slice(marker + 5)));
     if (cleaned.startsWith(root)) candidates.push(cleaned);
   } else {
     candidates.push(path.join(root, cleaned));
   }
 
-  let resolved = '';
+  let resolved = "";
   for (const c of candidates) {
     try {
       if (fs.statSync(c).isFile()) {
@@ -225,7 +225,7 @@ export function resolvePath(raw: string, root: string, cache?: Map<string, strin
  * it just gets no squiggle.
  */
 function place(n: Normalised, root: string, cache: Map<string, string>) {
-  return { file: n.path, resolvedPath: n.path ? resolvePath(n.path, root, cache) : '' };
+  return { file: n.path, resolvedPath: n.path ? resolvePath(n.path, root, cache) : "" };
 }
 
 /**
@@ -234,17 +234,17 @@ function place(n: Normalised, root: string, cache: Map<string, string>) {
  * not sink below a cosmetic advisory just because mypy names no severity.
  */
 function rate(n: Normalised, outcome: Outcome): { severity: Severity; label: string; level: Level } {
-  const level = GANDALF_LEVEL[n.severity] ?? 'unrated';
+  const level = GANDALF_LEVEL[n.severity] ?? "unrated";
   return {
-    severity: level === 'unrated' ? OUTCOME_SEVERITY[outcome] : LEVEL_SEVERITY[level],
+    severity: level === "unrated" ? OUTCOME_SEVERITY[outcome] : LEVEL_SEVERITY[level],
     // A level we place on the ladder is worth showing; one we don't isn't.
-    label: level === 'unrated' ? '' : n.severity.toUpperCase(),
+    label: level === "unrated" ? "" : n.severity.toUpperCase(),
     level,
   };
 }
 
 function fingerprint(parts: (string | number)[]): string {
-  return crypto.createHash('sha1').update(parts.join('\0')).digest('hex').slice(0, 16);
+  return crypto.createHash("sha1").update(parts.join("\0")).digest("hex").slice(0, 16);
 }
 
 /** A gate that wanted to run and couldn't — missing tool, timeout, dead judge. */
@@ -252,7 +252,7 @@ const BLOCKED = /\bunavailable\b|\bdid not run\b|\btimed out\b|not found|not ins
 /** A gate that had nothing to do — no `--target`, no request to judge, … */
 const INAPPLICABLE = /\bskipped\b|\bno target\b|no request|nothing in scope|no database/i;
 
-export type GateStatus = 'reported' | 'blocked' | 'inapplicable';
+export type GateStatus = "reported" | "blocked" | "inapplicable";
 
 /**
  * Did this gate actually assess anything?
@@ -264,10 +264,10 @@ export type GateStatus = 'reported' | 'blocked' | 'inapplicable';
  * no findings — a red gate is always shown, whatever its summary says.
  */
 export function gateStatus(gate: RawGate): GateStatus {
-  if ((gate.findings?.length ?? 0) > 0 || gate.outcome !== 'warn') return 'reported';
-  if (BLOCKED.test(gate.summary)) return 'blocked';
-  if (INAPPLICABLE.test(gate.summary)) return 'inapplicable';
-  return 'reported';
+  if ((gate.findings?.length ?? 0) > 0 || gate.outcome !== "warn") return "reported";
+  if (BLOCKED.test(gate.summary)) return "blocked";
+  if (INAPPLICABLE.test(gate.summary)) return "inapplicable";
+  return "reported";
 }
 
 /**
@@ -284,16 +284,12 @@ export function pathCache(): Map<string, string> {
  * One gate's findings. Public because `--stream` delivers gates one at a time,
  * long before there is a payload to normalize as a whole.
  */
-export function normalizeGate(
-  gate: RawGate,
-  root: string,
-  cache: Map<string, string> = pathCache(),
-): Finding[] {
-  const category = gate.category || 'Other';
+export function normalizeGate(gate: RawGate, root: string, cache: Map<string, string> = pathCache()): Finding[] {
+  const category = gate.category || "Other";
   const findings: Finding[] = [];
 
   for (const raw of gate.findings ?? []) {
-    const f: RawFinding = raw && typeof raw === 'object' ? raw : { finding: String(raw) };
+    const f: RawFinding = raw && typeof raw === "object" ? raw : { finding: String(raw) };
     const n = readFinding(f);
     const { severity, label, level } = rate(n, gate.outcome);
     const { file, resolvedPath } = place(n, root, cache);
@@ -319,22 +315,22 @@ export function normalizeGate(
 
   // A gate that failed without structured findings still has to be visible —
   // its summary is the whole story (a build error, a failing test suite).
-  if (findings.length === 0 && gate.outcome !== 'pass' && gateStatus(gate) === 'reported') {
+  if (findings.length === 0 && gate.outcome !== "pass" && gateStatus(gate) === "reported") {
     findings.push({
-      id: fingerprint([gate.name, 'gate-level', gate.summary]),
+      id: fingerprint([gate.name, "gate-level", gate.summary]),
       gate: gate.name,
       category,
       outcome: gate.outcome,
       severity: OUTCOME_SEVERITY[gate.outcome],
-      severityLabel: '',
-      level: 'unrated',
-      rule: '',
+      severityLabel: "",
+      level: "unrated",
+      rule: "",
       message: gate.summary || gate.name,
-      file: '',
-      resolvedPath: '',
+      file: "",
+      resolvedPath: "",
       line: 0,
       column: 0,
-      url: '',
+      url: "",
     });
   }
   return findings;
@@ -356,18 +352,14 @@ export function compareFindings(a: Finding, b: Finding): number {
     // Tie on effective rank: a level the tool actually stated outranks one
     // inferred from the gate's outcome. Otherwise the gate's name would decide,
     // which is arbitrary.
-    Number(a.level === 'unrated') - Number(b.level === 'unrated') ||
+    Number(a.level === "unrated") - Number(b.level === "unrated") ||
     a.gate.localeCompare(b.gate) ||
     a.resolvedPath.localeCompare(b.resolvedPath) ||
     a.line - b.line
   );
 }
 
-export function normalize(
-  payload: Payload,
-  root: string,
-  cache: Map<string, string> = pathCache(),
-): Finding[] {
+export function normalize(payload: Payload, root: string, cache: Map<string, string> = pathCache()): Finding[] {
   const out: Finding[] = [];
   for (const gate of payload.gates ?? []) out.push(...normalizeGate(gate, root, cache));
   return out.sort(compareFindings);
@@ -384,8 +376,8 @@ export function gatesByStatus(payload: Payload): { blocked: string[]; inapplicab
   const inapplicable: string[] = [];
   for (const gate of payload.gates ?? []) {
     const status = gateStatus(gate);
-    if (status === 'blocked') blocked.push(gate.name);
-    else if (status === 'inapplicable') inapplicable.push(gate.name);
+    if (status === "blocked") blocked.push(gate.name);
+    else if (status === "inapplicable") inapplicable.push(gate.name);
   }
   return { blocked, inapplicable };
 }
@@ -408,6 +400,6 @@ export function slim(payload: Payload): Payload {
  */
 export function gatesByDuration(payload: Payload | undefined): RawGate[] {
   return (payload?.gates ?? [])
-    .filter((g) => typeof g.duration === 'number')
+    .filter((g) => typeof g.duration === "number")
     .sort((a, b) => (b.duration ?? 0) - (a.duration ?? 0));
 }

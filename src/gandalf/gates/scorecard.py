@@ -49,8 +49,7 @@ def _below_max(checks: list) -> list[dict]:
     return [
         {"check": c.get("name"), "score": c.get("score"), "reason": c.get("reason")}
         for c in checks
-        if isinstance(c.get("score"), (int, float))
-        and 0 <= c["score"] < _MAX_CHECK_SCORE
+        if isinstance(c.get("score"), (int, float)) and 0 <= c["score"] < _MAX_CHECK_SCORE
     ]
 
 
@@ -83,9 +82,7 @@ class ScorecardGate:
         aggregate = _aggregate(data)
         # score -1 = scorecard couldn't compute an aggregate (every check inconclusive).
         if aggregate < 0 or not checks:
-            return unavailable(
-                self.name, "scorecard: no conclusive checks (local mode) — skipped"
-            )
+            return unavailable(self.name, "scorecard: no conclusive checks (local mode) — skipped")
 
         findings = _below_max(checks)
         score = max(0.0, min(1.0, aggregate / 10.0))
