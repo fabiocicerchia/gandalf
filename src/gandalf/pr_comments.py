@@ -24,6 +24,7 @@ token and repo the caller just writes the JSON for a later CI step to post.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -35,9 +36,11 @@ import re
 import urllib.error
 import urllib.request
 from datetime import UTC, datetime
+from typing import Any
 
 from . import findings, suggest
 from .base import GateOutcome, GateResult
+from .findings import Finding
 from .report import fmt_finding
 
 # Hidden in the rendered comment; how a re-run finds what it posted last time.
@@ -63,7 +66,7 @@ def _brand() -> tuple[str, str]:
     )
 
 
-def _comment_body(gate: str, f: dict) -> str:
+def _comment_body(gate: str, f: Finding) -> str:
     """Render one finding as an inline review comment.
 
     Every body opens with the marker, which is how a later run recognises its
@@ -103,7 +106,7 @@ def added_lines(diff: str) -> dict[str, set[int]]:
 _TEXT_LOC = re.compile(r"(?:^|\s)([\w./\\-]+\.\w+):(\d+)(?=[:\s]|$)")
 
 
-def _text_location(f: dict) -> tuple[str, int]:
+def _text_location(f: Finding) -> tuple[str, int]:
     """Gates that only carry the location inside their message (mypy, tsc,
     codeql, …) would otherwise never anchor. A bogus parse costs nothing: the
     finding just fails the added-line check and rolls up as before."""
@@ -114,10 +117,10 @@ def _text_location(f: dict) -> tuple[str, int]:
 def _comment(
     path: str,
     line: int,
-    items: list[tuple[str, dict]],
+    items: list[tuple[str, dict[str, Any]]],
     anchorable: set[int] | None,
     workdir: str,
-) -> dict:
+) -> dict[str, Any]:
     """One inline review comment: the findings on that line, plus their fix as a
     one-click ```suggestion block when the tools shipped one.
 
@@ -144,21 +147,19 @@ def build(
     changed_files: list[str] | None = None,
     diff: str = "",
     workdir: str = "",
-) -> tuple[list[dict], list[str]]:
+) -> tuple[list[dict[str, Any]], list[str]]:
     """→ (inline_comments, overflow_lines). Inline comments are anchored to a
     line the diff adds; overflow is human-readable text for the summary."""
     changed = set(changed_files or [])
     added = added_lines(diff)
     # The finding travels with its rendered body: the suggestion block is built
     # from the tool's own fix data, which only the raw finding still carries.
-    inline: dict[tuple[str, int], list[tuple[str, dict]]] = {}
+    inline: dict[tuple[str, int], list[tuple[str, dict[str, Any]]]] = {}
     overflow: list[str] = []
     for r in results:
         if r.outcome == GateOutcome.PASS:
             continue
         for f in r.findings:
-            if not isinstance(f, dict):
-                continue
             # Scanners run in the container against /src; GitHub wants the path
             # repo-relative, same rebase the SARIF writer does.
             path, line = findings.relpath(findings.path(f), workdir), findings.line(f)
@@ -189,7 +190,7 @@ def review_payload(  # noqa: PLR0913
     max_overflow: int = 30,
     diff: str = "",
     workdir: str = "",
-) -> dict:
+) -> dict[str, Any]:
     """Build the whole review: inline comments plus one summary body.
 
     Findings that cannot be anchored to a line in the diff go into the summary
@@ -245,7 +246,7 @@ def _ours(body: str | None) -> bool:
     return _MARKER in body or body.lstrip().startswith(f"**{_brand()[1]}**")
 
 
-def _api(method: str, url: str, token: str, data: dict | None = None, timeout: int = 30) -> tuple[int, str]:
+def _api(method: str, url: str, token: str, data: dict[str, Any] | None = None, timeout: int = 30) -> tuple[int, str]:
     """One GitHub REST call, returning the status and the raw body.
 
     The status is handed back rather than raised on: several callers treat a
@@ -267,14 +268,14 @@ def _api(method: str, url: str, token: str, data: dict | None = None, timeout: i
         return resp.status, resp.read().decode(errors="replace")
 
 
-def _list_all(url: str, token: str, timeout: int) -> list[dict]:
+def _list_all(url: str, token: str, timeout: int) -> list[dict[str, Any]]:
     """Page through a GitHub list endpoint and return everything it gave.
 
     Bounded — see the note below — because an unbounded paginator on a runaway
     thread is how a review job stops finishing.
     """
     # ponytail: stops at 1000 comments; paginate properly if a PR ever gets there.
-    out: list[dict] = []
+    out: list[dict[str, Any]] = []
     for page in range(1, 11):
         _, raw = _api("GET", f"{url}?per_page=100&page={page}", token, timeout=timeout)
         batch = json.loads(raw)
@@ -312,7 +313,7 @@ query($owner:String!,$name:String!,$pr:Int!,$after:String){
 _RESOLVE = "mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{id}}}"
 
 
-def _graphql(query: str, variables: dict, token: str, timeout: int) -> dict:
+def _graphql(query: str, variables: dict[str, Any], token: str, timeout: int) -> dict[str, Any]:
     """One GitHub GraphQL call.
 
     Only for what REST cannot answer — resolving review threads, which has no
@@ -331,11 +332,11 @@ def _graphql(query: str, variables: dict, token: str, timeout: int) -> dict:
     return body["data"]
 
 
-def _our_threads(repo: str, pr: int, token: str, timeout: int) -> list[dict]:
+def _our_threads(repo: str, pr: int, token: str, timeout: int) -> list[dict[str, Any]]:
     """Our review threads as {id, resolved, key} — key matching what build()
     produces, so a thread and a wanted comment compare directly."""
     owner, _, name = repo.partition("/")
-    out: list[dict] = []
+    out: list[dict[str, Any]] = []
     after = None
     for _ in range(10):  # ponytail: 1000 threads is far past any real PR
         page = _graphql(
@@ -360,7 +361,9 @@ def _our_threads(repo: str, pr: int, token: str, timeout: int) -> list[dict]:
     return out
 
 
-def _reconcile(threads: list[dict], comments: list[dict]) -> tuple[list[str], list[dict]]:
+def _reconcile(
+    threads: Sequence[dict[str, Any]], comments: Sequence[dict[str, Any]]
+) -> tuple[list[str], list[dict[str, Any]]]:
     """→ (thread ids to resolve, comments to post). An already-resolved thread
     counts as absent, so a finding that comes back gets a fresh comment rather
     than silently staying hidden."""
@@ -372,7 +375,7 @@ def _reconcile(threads: list[dict], comments: list[dict]) -> tuple[list[str], li
     )
 
 
-def _sync_inline(repo: str, pr: int, comments: list[dict], token: str, timeout: int) -> str:
+def _sync_inline(repo: str, pr: int, comments: list[dict[str, Any]], token: str, timeout: int) -> str:
     """Reconcile inline comments with the PR: identical ones stay put (no reply
     thread lost, no notification), obsolete ones are *resolved* — never deleted,
     so the trail of what was flagged and any human reply survive — and new ones
@@ -412,7 +415,7 @@ def _sync_inline(repo: str, pr: int, comments: list[dict], token: str, timeout: 
     return f"posted {posted} inline comment(s), {resolved} resolved{stuck}{tail}"
 
 
-def post(repo: str, pr: int, payload: dict, token: str, timeout: int = 30) -> tuple[bool, str]:
+def post(repo: str, pr: int, payload: dict[str, Any], token: str, timeout: int = 30) -> tuple[bool, str]:
     """Publish the review, replacing what the last run posted. Returns
     (ok, message). Never raises — a failed post must not fail the gandalf run."""
     if not (repo and token):

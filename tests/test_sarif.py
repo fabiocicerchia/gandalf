@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from gandalf import sarif
 from gandalf.base import GateOutcome, GateResult
@@ -67,7 +68,7 @@ def test_rules_deduped_and_sorted() -> None:
 
 def test_levels_and_locations() -> None:
     results = _doc()["runs"][0]["results"]
-    by_rule = {}
+    by_rule: dict[str, dict[str, Any]] = {}
     for r in results:
         by_rule.setdefault(r["ruleId"], r)
     # severity LOW downgrades bandit's warning to note

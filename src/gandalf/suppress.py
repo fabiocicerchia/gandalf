@@ -23,9 +23,11 @@ import hashlib
 import json
 from fnmatch import fnmatch
 from pathlib import Path
+from typing import Any
 
 from . import findings
 from .base import GateOutcome, GateResult
+from .findings import Finding
 from .plugins import carry_over
 
 DEFAULT_BASELINE = ".gandalf-baseline.json"
@@ -37,7 +39,7 @@ finding_path = findings.path
 finding_rule = findings.rule
 
 
-def fingerprint(gate: str, f: dict) -> str:
+def fingerprint(gate: str, f: Finding) -> str:
     """Stable id for a finding, line-insensitive so it survives edits above it.
     gate + path + rule + a short message hash.
 
@@ -59,7 +61,7 @@ class _Rule:
         parts = ([*spec.split(":", 2), "", "", ""])[:3]
         self.gate, self.rule, self.path = (p.strip() for p in parts)
 
-    def matches(self, gate: str, f: dict) -> bool:
+    def matches(self, gate: str, f: Finding) -> bool:
         if self.gate and self.gate != gate:
             return False
         if self.rule and self.rule != findings.rule(f):
@@ -84,7 +86,7 @@ class Suppressor:
     def active(self) -> bool:
         return bool(self.rules or self.baseline)
 
-    def _muted(self, gate: str, f: dict) -> bool:
+    def _muted(self, gate: str, f: Finding) -> bool:
         if any(r.matches(gate, f) for r in self.rules):
             return True
         return fingerprint(gate, f) in self.baseline
@@ -93,7 +95,8 @@ class Suppressor:
         """Filter a gate's findings and re-score. Never makes a gate worse."""
         if not self.active or not res.findings:
             return res
-        kept, muted = [], 0
+        kept: list[Finding] = []
+        muted = 0
         for f in res.findings:
             if self._muted(res.name, f):
                 muted += 1
@@ -143,11 +146,11 @@ def load_baseline(path: str) -> set[str]:
     return set(data.get("fingerprints", []) or [])
 
 
-def build(cfg_section: dict, baseline_path: str | None) -> Suppressor:
+def build(cfg_section: dict[str, Any], baseline_path: str | None) -> Suppressor:
     """Assemble a Suppressor from the [gandalf.suppress] table + a baseline file."""
     rules = list(cfg_section.get("rules", []) or [])
     path = baseline_path or cfg_section.get("baseline") or ""
-    baseline = load_baseline(path) if path else set()
+    baseline: set[str] = load_baseline(path) if path else set()
     return Suppressor(rules, baseline)
 
 

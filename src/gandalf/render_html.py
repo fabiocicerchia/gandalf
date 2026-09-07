@@ -6,6 +6,7 @@ from __future__ import annotations
 import html
 import re
 from collections import defaultdict
+from typing import Any
 
 from .base import GateOutcome, GateResult
 from .html_assets import CSS, JS
@@ -107,7 +108,7 @@ def _diff_html(diff: str, limit: int = 20000) -> str:
     if not diff.strip():
         return ""
     text = diff[:limit]
-    lines = []
+    lines: list[str] = []
     for raw in text.splitlines():
         esc = html.escape(raw)
         if raw.startswith("+") and not raw.startswith("+++"):
@@ -159,7 +160,7 @@ def _gate_row(r: GateResult) -> str:
     )
 
 
-def _advice_section(advice: dict, key: str, title: str, accent: str) -> str:
+def _advice_section(advice: dict[str, Any], key: str, title: str, accent: str) -> str:
     """One titled LLM section, or the placeholder note when the model said
     nothing for it."""
     body = (advice.get(key) or "").strip()
@@ -188,18 +189,17 @@ def _rem_gate_html(name: str, body: str, outcome: GateOutcome | None) -> str:
     )
 
 
-def _remediation_html(advice: dict, outcome_of: dict, sev_order: dict) -> str:
+def _remediation_html(
+    advice: dict[str, Any], outcome_of: dict[str, GateOutcome], sev_order: dict[GateOutcome, int]
+) -> str:
     """The remediation section: gate blocks labelled "name (RAG)", failures
     first, or "" when there is nothing to fix."""
     eyebrow = '<div class="eyebrow">Remediation — fixes to raise the score</div>'
-    groups = advice.get("remediation_groups") or []
+    groups: list[tuple[str, str]] = advice.get("remediation_groups") or []
     if not groups:
         return _plain_remediation(eyebrow, (advice.get("remediation") or "").strip())
     # One block, gates labelled "name (RAG)"; failures first, then warnings.
-    ordered = sorted(
-        groups,
-        key=lambda g: sev_order.get(outcome_of.get(g[0]) or GateOutcome.PASS, 3),
-    )
+    ordered = sorted(groups, key=lambda g: sev_order.get(outcome_of.get(g[0]) or GateOutcome.PASS, 3))
     pre = (advice.get("remediation_pre") or "").strip()
     parts = [f'<div class="rem-pre">{_md_to_html(pre)}</div>'] if pre else []
     parts += [_rem_gate_html(name, body, outcome_of.get(name)) for name, body in ordered]
@@ -211,9 +211,9 @@ def render_html(  # noqa: PLR0913
     label: str,
     results: list[GateResult],
     verdict: Verdict,
-    advice: dict,
+    advice: dict[str, Any],
     *,
-    meta: dict | None = None,
+    meta: dict[str, Any] | None = None,
     diff: str = "",
 ) -> str:
     """Render the scorecard as one self-contained HTML file.
@@ -227,7 +227,7 @@ def render_html(  # noqa: PLR0913
 
     # Group by category (Security, Dependencies, …), in a fixed order — used for
     # both the per-category score cards and the table's grouped rows.
-    cards = []
+    cards: list[str] = []
 
     # Group results by category
     categorized_results: dict[str, list[GateResult]] = defaultdict(list)
@@ -258,8 +258,8 @@ def render_html(  # noqa: PLR0913
     data_rows = [_gate_row(r) for r in sorted(results, key=lambda r: (cat_index.get(category_of(r), 99), r.name))]
     esc = html.escape(label)
     meta = meta or {}
-    c = meta.get("commit") or {}
-    bits = []
+    c: dict[str, Any] = meta.get("commit") or {}
+    bits: list[str] = []
     if c.get("short"):
         bits.append(f"commit <code>{html.escape(c['short'])}</code> {html.escape(c.get('subject', ''))}")
     if meta.get("generated_at"):

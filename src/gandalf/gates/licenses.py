@@ -4,8 +4,10 @@ licenses (LOW/UNKNOWN severity) are ignored so only real obligations surface."""
 
 from __future__ import annotations
 
+from typing import Any
+
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.gates._toolchain import parsed, scored
+from gandalf.gates._toolchain import obj, objects, parsed, scored
 from gandalf.plugins import (
     missing_result,
     run_tool,
@@ -14,13 +16,13 @@ from gandalf.plugins import (
 )
 
 
-def _flagged(data: dict) -> list[dict]:
+def _flagged(data: object) -> list[dict[str, Any]]:
     """trivy's license findings that carry an obligation. LOW and UNKNOWN are
     the permissive ones and are not worth reporting."""
     return [
         lc
-        for r in data.get("Results", [])
-        for lc in (r.get("Licenses") or [])
+        for r in objects(obj(data).get("Results"))
+        for lc in objects(r.get("Licenses"))
         if lc.get("Severity") not in ("LOW", "UNKNOWN")
     ]
 

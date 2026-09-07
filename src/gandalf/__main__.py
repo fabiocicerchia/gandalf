@@ -18,10 +18,11 @@ import asyncio
 import contextlib
 import os
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from . import cache as gcache
 from . import config as gconfig
@@ -47,12 +48,12 @@ if TYPE_CHECKING:  # import-time cycle: these are only needed for annotations
 
 # These are the fields of the record it writes; a wrapper object would only rename them
 async def _run_gates(  # noqa: PLR0913
-    gates: list[Gate],
+    gates: Sequence[Gate],
     ctx: GateContext,
     *,
     on_done: Callable[[int, int, str], None] | None = None,
     limit: int = 0,
-    timeouts: dict | None = None,
+    timeouts: dict[str, Any] | None = None,
     on_result: Callable[[GateResult], None] | None = None,
 ) -> list[GateResult]:
     """Run gates concurrently, but at most `limit` at once (<=0 = unbounded).
@@ -77,11 +78,15 @@ async def _run_gates(  # noqa: PLR0913
                 from .base import GateResult  # noqa: PLC0415 — local import: importing at module scope closes a cycle
 
                 res = GateResult(g.name, GateOutcome.WARN, 0.5, f"gate errored: {exc}")
-        res._duration = round(time.monotonic() - t0, 3)
-        res._blocking = getattr(g, "blocking", False)
-        res._category = getattr(g, "category", "")  # optional gate override for grouping
+        elapsed = round(time.monotonic() - t0, 3)
+        plugins.mark(
+            res,
+            duration=elapsed,
+            blocking=getattr(g, "blocking", False),
+            category=getattr(g, "category", ""),  # optional gate override for grouping
+        )
         done += 1  # asyncio is single-threaded → no lock needed
-        debug.log(f"gate {g.name}: {res.outcome.value} in {res._duration:.2f}s")
+        debug.log(f"gate {g.name}: {res.outcome.value} in {elapsed:.2f}s")
         if on_done:
             on_done(done, total, g.name)
         if on_result:
@@ -101,7 +106,7 @@ def _baseline_path(explicit: str | None) -> str | None:
     return str(default) if default.is_file() else None
 
 
-def _gate_timeout(name: str, timeouts: dict | None) -> int | None:
+def _gate_timeout(name: str, timeouts: dict[str, Any] | None) -> int | None:
     """Per-gate subprocess budget from [gandalf.timeouts]: a gate-name key wins,
     else `default`, else None (fall back to the global GANDALF_GATE_TIMEOUT)."""
     if not timeouts:
@@ -131,7 +136,7 @@ def _build_advice(
     results: list[GateResult],
     verdict: Verdict,
     prog: Progress,
-) -> dict:
+) -> dict[str, Any]:
     """LLM analysis section, or a skipped-stub when --no-llm."""
     if args.no_llm:
         return {
@@ -143,7 +148,7 @@ def _build_advice(
     prog.stage("LLM analysis")
     # Feed the actual findings (not just the summary) so remediation can be
     # specific — cite the file/line/package/rule instead of "fix the vulns".
-    lines = []
+    lines: list[str] = []
     for r in sorted(results, key=lambda r: r.name):
         lines.append(f"- {r.name}: {r.outcome.value.upper()} — {r.summary}")
         if r.outcome != GateOutcome.PASS and r.findings:
@@ -166,14 +171,15 @@ def _apply_excludes(args: argparse.Namespace, cfg: Config) -> None:
     same process (the editor extension) must not inherit the first one's
     exclusions. Tool resolutions are process state for the same reason.
     """
-    excludes = list(args.exclude or []) + [str(x) for x in (cfg.data.get("exclude") or [])]
+    from_config: list[object] = cfg.data.get("exclude") or []
+    excludes = list(args.exclude or []) + [str(x) for x in from_config]
     plugins.set_extra_ignores(excludes)
     plugins.reset_tool_sources()
     if excludes:
         debug.log(f"excluding {len(excludes)} extra pattern(s): {', '.join(excludes)}")
 
 
-def _select_gates(cfg: Config) -> tuple[list, list, str]:
+def _select_gates(cfg: Config) -> tuple[list[Any], list[Any], str]:
     """(gates to run, gates the config disabled, error message).
 
     A non-empty message means there is nothing to run. Config selection
@@ -202,17 +208,17 @@ def _progress(no_llm: bool, do_fix: bool) -> Progress:
     return Progress((3 if no_llm else 4) + (1 if do_fix else 0))
 
 
-def _active_gates(gates: list, detected: set) -> tuple[list, list[str]]:
+def _active_gates(gates: Sequence[Gate], detected: set[str]) -> tuple[list[Gate], list[str]]:
     """(gates worth running here, names of the ones skipped).
 
     Only gates relevant to the languages in scope, plus the generic (untagged)
     ones — so a Go change doesn't trigger eslint/mypy, etc.
     """
-    active = [g for g in gates if not getattr(g, "langs", None) or (set(g.langs) & detected)]
+    active = [g for g in gates if not plugins.gate_langs(g) or (plugins.gate_langs(g) & detected)]
     return active, [g.name for g in gates if g not in active]
 
 
-def _gate_context(args: argparse.Namespace, cfg: Config, sc: Scope, detected: set, do_fix: bool) -> GateContext:
+def _gate_context(args: argparse.Namespace, cfg: Config, sc: Scope, detected: set[str], do_fix: bool) -> GateContext:
     """The context every gate is handed."""
     return GateContext(
         repo=sc.workdir,
@@ -288,7 +294,7 @@ class Scored:
     """A run after the policy has had its say: the results as they will be
     reported, the composite they add up to, and the pass/fail call."""
 
-    results: list
+    results: list[Any]
     verdict: report.Verdict
     policy: report.Policy
     passed: bool
@@ -313,7 +319,7 @@ def _score(args: argparse.Namespace, cfg: Config, results: list[GateResult]) -> 
     return Scored(results, verdict, policy, passed, reason)
 
 
-def _meta_line(args: argparse.Namespace, sc: Scope, verdict: Verdict, generated_at: str) -> dict:
+def _meta_line(args: argparse.Namespace, sc: Scope, verdict: Verdict, generated_at: str) -> dict[str, Any]:
     """The report header block — and, on the way, this run's trend entry."""
     trend_path = str(Path(scope.repo_root()) / gtrend.DEFAULT_TREND)
     commit_short = sc.commit.get("short", "")

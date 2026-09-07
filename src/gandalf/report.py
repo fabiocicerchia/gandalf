@@ -9,19 +9,24 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, cast
 
 from . import findings
 from .base import GateOutcome, GateResult
 from .plugins import did_not_run
+
+if TYPE_CHECKING:  # scope imports report, so the name is for the checker only
+    from .scope import Scope
 
 
 def fmt_finding(f: object) -> str:
     """One-line, human-readable rendering of a heterogeneous gate finding."""
     if not isinstance(f, dict):
         return str(f)[:500]
-    loc = findings.path(f)
-    line = findings.line(f)
-    msg = findings.message(f)
+    finding = cast("findings.Finding", f)
+    loc = findings.path(finding)
+    line = findings.line(finding)
+    msg = findings.message(finding)
     head = f"{loc}:{line}" if (loc and line) else str(loc)
     text = f"{head} — {msg}" if (head and msg) else (str(msg) or head)
     return (text or json.dumps(f, default=str))[:600]
@@ -153,17 +158,19 @@ class Run:
     in a different order; the shape was already a thing, it just had no name.
     """
 
-    scope: object  # Scope — untyped here to keep report.py free of the cycle
+    # Imported for the checker only: naming the type at runtime would close
+    # a cycle (scope imports report), which is what the `object` here meant.
+    scope: Scope
     results: list[GateResult]
     verdict: Verdict
-    advice: dict
+    advice: dict[str, Any]
     detected: set[str]
     skipped: list[str]
     disabled: list[str]
     fixes: list[tuple[str, bool, str]]
     passed: bool
     reason: str
-    tools: dict
+    tools: dict[str, Any]
 
 
 @dataclass
@@ -177,7 +184,7 @@ class Policy:
     @classmethod
     def from_config(
         cls,
-        section: dict,
+        section: dict[str, Any],
         cli_fail_on: str | None = None,
         cli_min_score: int | None = None,
     ) -> Policy:

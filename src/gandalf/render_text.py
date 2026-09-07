@@ -3,6 +3,8 @@ the score breakdown, and the first-run setup banner."""
 
 from __future__ import annotations
 
+from typing import Any
+
 from . import plugins
 from .base import GateOutcome, GateResult
 from .plugins import did_not_run
@@ -32,8 +34,8 @@ def render_terminal(  # noqa: PLR0912 — one branch per gate outcome; collapsin
     label: str,
     results: list[GateResult],
     verdict: Verdict,
-    advice: dict,
-    meta: dict | None = None,
+    advice: dict[str, Any],
+    meta: dict[str, Any] | None = None,
 ) -> str:
     """Render the scorecard for a terminal.
 
@@ -42,7 +44,7 @@ def render_terminal(  # noqa: PLR0912 — one branch per gate outcome; collapsin
     """
     meta = meta or {}
     lines = [f"\n{_BOLD}🧙  GANDALF{_RESET} {_DIM}— {label}{_RESET}"]
-    c = meta.get("commit") or {}
+    c: dict[str, Any] = meta.get("commit") or {}
     if c.get("short"):
         lines.append(f"{_DIM}commit {c['short']} — {c.get('subject', '')}{_RESET}")
     if meta.get("generated_at"):
@@ -74,7 +76,7 @@ def render_terminal(  # noqa: PLR0912 — one branch per gate outcome; collapsin
                 # Deliberately not a traffic light: this gate reported nothing
                 # about the code, and an amber dot claims it did.
                 emoji, color = SKIP_EMOJI, _DIM
-            block = f" {_DIM}[blocking]{_RESET}" if getattr(r, "_blocking", False) else ""
+            block = f" {_DIM}[blocking]{_RESET}" if plugins.meta(r, "blocking", False) else ""
             lines.append(f"  {emoji} {color}{r.name.ljust(width)}{_RESET}  {r.summary}{block}")
     if n_skipped := sum(1 for r in results if did_not_run(r)):
         lines.append(f"\n{_DIM}{n_skipped} of {len(results)} gate(s) could not run — not counted in the score{_RESET}")
@@ -97,7 +99,7 @@ def _score_table(counted: list[GateResult], verdict: Verdict) -> list[str]:
     lines = [f"  {_DIM}{'gate'.ljust(width)}   score   contributes{_RESET}"]
     for r in sorted(counted, key=lambda r: (r.score, r.name)):
         note = ""
-        raw = getattr(r, "_raw_score", None)
+        raw = plugins.meta(r, "raw_score")
         if raw is not None and round(raw, 3) != round(r.score, 3):
             note = f"  {_DIM}(gate scored {raw:.2f}, severity-weighted){_RESET}"
         emoji = RAG[r.outcome][0]
@@ -188,14 +190,23 @@ def setup_banner(results: list[GateResult], image_built: bool, has_docker: bool)
     return "\n".join(lines)
 
 
-def _remediation_text(advice: dict, outcome_of: dict, sev_order: dict) -> str:
+def _rank(name: str, outcome_of: dict[str, GateOutcome], sev_order: dict[GateOutcome, int]) -> int:
+    """Where a gate's block sorts: failures first, then warnings, then anything
+    whose outcome the caller did not supply."""
+    outcome = outcome_of.get(name)
+    return sev_order.get(outcome, 3) if outcome is not None else 3
+
+
+def _remediation_text(
+    advice: dict[str, Any], outcome_of: dict[str, GateOutcome], sev_order: dict[GateOutcome, int]
+) -> str:
     """Plain-text remediation: gate blocks as 'name (RAG):', failures first. Falls
     back to the raw markdown when the model gave no per-gate structure."""
-    groups = advice.get("remediation_groups") or []
+    groups: list[tuple[str, str]] = advice.get("remediation_groups") or []
     if not groups:
         return (advice.get("remediation") or "").strip()
-    ordered = sorted(groups, key=lambda g: sev_order.get(outcome_of.get(g[0]), 3))
-    blocks = []
+    ordered = sorted(groups, key=lambda g: _rank(g[0], outcome_of, sev_order))
+    blocks: list[str] = []
     if pre := (advice.get("remediation_pre") or "").strip():
         blocks.append(pre)
     for name, body in ordered:

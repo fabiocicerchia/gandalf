@@ -4,22 +4,30 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from gandalf import config
+from gandalf.base import GateContext, GateOutcome, GateResult
 
 
 class _G:
-    def __init__(self, name) -> None:
+    blocking = False
+
+    def __init__(self, name: str) -> None:
         self.name = name
 
+    async def run(self, ctx: GateContext) -> GateResult:
+        return GateResult(self.name, GateOutcome.PASS, 1.0, "ok")
 
-def _write(tmp, text):
+
+def _write(tmp: Path | str, text: str) -> str:
     p = str(Path(tmp) / ".gandalf.toml")
     with Path(p).open("w") as fh:
         fh.write(text)
     return p
 
 
-def test_missing_config_is_empty(tmp_path) -> None:
+def test_missing_config_is_empty(tmp_path: Path) -> None:
     c = config.load(str(tmp_path))
     assert c.only == set()
     assert c.skip == set()
@@ -27,7 +35,7 @@ def test_missing_config_is_empty(tmp_path) -> None:
     assert c.concurrency is None
 
 
-def test_load_and_sections(tmp_path) -> None:
+def test_load_and_sections(tmp_path: Path) -> None:
     _write(
         str(tmp_path),
         "[gandalf]\nskip=['atheris']\nconcurrency=6\n[gandalf.verdict]\nfail_on='warn'\n",
@@ -40,7 +48,7 @@ def test_load_and_sections(tmp_path) -> None:
     assert c.section("nope") == {}
 
 
-def test_broken_config_falls_back(tmp_path) -> None:
+def test_broken_config_falls_back(tmp_path: Path) -> None:
     _write(str(tmp_path), "this is not = valid toml [[[")
     c = config.load(str(tmp_path))  # must not raise
     assert c.only == set()
@@ -61,7 +69,7 @@ def test_select_only_and_skip() -> None:
     assert "ruff" in disabled
 
 
-def test_explicit_and_env_paths(tmp_path, monkeypatch) -> None:
+def test_explicit_and_env_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     p = _write(str(tmp_path), "[gandalf]\nskip=['x']\n")
     assert config.load(None, p).skip == {"x"}
     monkeypatch.setenv("GANDALF_CONFIG", p)

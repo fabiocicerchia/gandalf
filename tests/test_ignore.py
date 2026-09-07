@@ -6,13 +6,14 @@ Run: pytest tests/test_ignore.py
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
 
 import pytest
 
 from gandalf import plugins, scope
 from gandalf.base import GateContext
 from gandalf.gates._toolchain import named
-from gandalf.plugins import _scan_targets, ignore_patterns, is_ignored, scannable_files
+from gandalf.plugins import ignore_patterns, is_ignored, scan_targets, scannable_files
 
 
 @pytest.fixture(autouse=True)
@@ -60,7 +61,7 @@ def _clean_process_state():
         ("", "node_modules", False),
     ],
 )
-def test_is_ignored(path, pattern, expected) -> None:
+def test_is_ignored(path: str, pattern: str, expected: bool) -> None:
     assert is_ignored(path, (pattern,)) is expected
 
 
@@ -74,7 +75,7 @@ def test_is_ignored_takes_any_matching_pattern() -> None:
 # --- where the patterns come from ---------------------------------------------
 
 
-def _repo(tmp_path, files, gandalfignore=None):
+def _repo(tmp_path: Path, files: list[str], gandalfignore: str | None = None) -> Path:
     repo = tmp_path / "repo"
     repo.mkdir()
     for rel in files:
@@ -94,7 +95,7 @@ def _repo(tmp_path, files, gandalfignore=None):
     return repo
 
 
-def test_defaults_and_gandalfignore_and_exclude_all_land_in_one_list(tmp_path) -> None:
+def test_defaults_and_gandalfignore_and_exclude_all_land_in_one_list(tmp_path: Path) -> None:
     repo = _repo(tmp_path, ["src/app.py"], gandalfignore="# comment\ndata/\n\n")
     plugins.set_extra_ignores(["*.min.js", "  "])
 
@@ -106,7 +107,7 @@ def test_defaults_and_gandalfignore_and_exclude_all_land_in_one_list(tmp_path) -
     assert "" not in pats, "blank patterns are dropped"
 
 
-def test_exclusions_narrow_what_every_gate_scans(tmp_path) -> None:
+def test_exclusions_narrow_what_every_gate_scans(tmp_path: Path) -> None:
     """The point of the change: .gandalfignore used to reach only the handful of
     gates that translate it into their own tool's flag."""
     repo = _repo(
@@ -116,7 +117,7 @@ def test_exclusions_narrow_what_every_gate_scans(tmp_path) -> None:
     )
     ctx = GateContext(repo=str(repo), workdir=str(repo), changed_files=[])
 
-    assert sorted(_scan_targets(ctx)) == [
+    assert sorted(scan_targets(ctx)) == [
         ".gandalfignore",
         "src/app.py",
         "vendor/lib.py",
@@ -124,10 +125,10 @@ def test_exclusions_narrow_what_every_gate_scans(tmp_path) -> None:
     ]
 
     plugins.set_extra_ignores(["vendor", "*.min.js"])
-    assert sorted(_scan_targets(ctx)) == [".gandalfignore", "src/app.py"]
+    assert sorted(scan_targets(ctx)) == [".gandalfignore", "src/app.py"]
 
 
-def test_exclusions_apply_to_a_changed_set_too(tmp_path) -> None:
+def test_exclusions_apply_to_a_changed_set_too(tmp_path: Path) -> None:
     repo = _repo(tmp_path, ["src/app.py", "src/generated/api.py"])
     plugins.set_extra_ignores(["src/generated"])
     ctx = GateContext(
@@ -135,10 +136,10 @@ def test_exclusions_apply_to_a_changed_set_too(tmp_path) -> None:
         workdir=str(repo),
         changed_files=["src/app.py", "src/generated/api.py"],
     )
-    assert _scan_targets(ctx) == ["src/app.py"]
+    assert scan_targets(ctx) == ["src/app.py"]
 
 
-def test_scannable_files_is_recomputed_when_the_exclusions_change(tmp_path) -> None:
+def test_scannable_files_is_recomputed_when_the_exclusions_change(tmp_path: Path) -> None:
     repo = _repo(tmp_path, ["src/app.py", "vendor/lib.py"])
     assert "vendor/lib.py" in scannable_files(str(repo))
 
@@ -149,7 +150,9 @@ def test_scannable_files_is_recomputed_when_the_exclusions_change(tmp_path) -> N
     assert "vendor/lib.py" in scannable_files(str(repo))
 
 
-def test_path_scope_refuses_to_widen_when_everything_under_it_is_excluded(tmp_path, monkeypatch) -> None:
+def test_path_scope_refuses_to_widen_when_everything_under_it_is_excluded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """`--path` on an excluded folder must fail, not fall through to the whole
     tree: an empty changed set means "scan everything" downstream."""
     repo = _repo(tmp_path, ["src/app.py", "generated/api.py"])
@@ -168,7 +171,7 @@ def test_path_scope_refuses_to_widen_when_everything_under_it_is_excluded(tmp_pa
         assert sc.changed_files == ["generated/api.py"]
 
 
-def test_languages_reads_the_same_tracked_listing_every_gate_does(tmp_path) -> None:
+def test_languages_reads_the_same_tracked_listing_every_gate_does(tmp_path: Path) -> None:
     """`languages()` used to run its own `git ls-files` and split on whitespace.
 
     Plain `ls-files` quotes any path git considers unusual (core.quotePath is on
@@ -184,7 +187,7 @@ def test_languages_reads_the_same_tracked_listing_every_gate_does(tmp_path) -> N
     assert scope.languages(str(repo), []) == {"python"}
 
 
-def test_named_skips_what_git_ignores(tmp_path) -> None:
+def test_named_skips_what_git_ignores(tmp_path: Path) -> None:
     """The gates that used to rglob the working tree (mdl, sqlfluff, squawk,
     shellcheck, yamllint, codespell, hadolint) walked straight into build output
     and everything else .gitignore hides. `named` asks git instead."""

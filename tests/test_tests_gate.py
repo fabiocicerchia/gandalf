@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from pathlib import Path
+
+import pytest
 
 from gandalf.base import GateContext, GateOutcome
 from gandalf.plugins import discover_gates
@@ -15,31 +18,45 @@ from gandalf.plugins import discover_gates
 GATE = {g.name: g for g in discover_gates()}["tests"]
 
 
+def _no_spec(name: str, *a: object, **k: object) -> None:
+    return None
+
+
+def _not_on_path(binary: str, *a: object, **k: object) -> str | None:
+    return None
+
+
+def _pytest_on_path(binary: str, *a: object, **k: object) -> str:
+    return "/usr/bin/pytest"
+
+
 def _run(workdir: str):
     ctx = GateContext(repo=workdir, workdir=workdir, changed_files=[])
     return asyncio.run(GATE.run(ctx))
 
 
-def test_missing_pytest_is_amber_not_red(tmp_path, monkeypatch) -> None:
+def test_missing_pytest_is_amber_not_red(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """pyproject.toml present, pytest absent from both the interpreter and PATH."""
     (tmp_path / "pyproject.toml").write_text("[project]\nname = 'x'\n")
-    monkeypatch.setattr("importlib.util.find_spec", lambda name, *a, **k: None, raising=True)
-    monkeypatch.setattr("shutil.which", lambda binary, *a, **k: None, raising=True)
+    monkeypatch.setattr("importlib.util.find_spec", _no_spec, raising=True)
+    monkeypatch.setattr("shutil.which", _not_on_path, raising=True)
     r = _run(str(tmp_path))
     assert r.outcome is GateOutcome.WARN, r.summary
     assert "not installed" in r.summary
     assert "skipped" in r.summary
 
 
-def test_falls_back_to_the_pytest_binary_when_the_module_is_absent(tmp_path, monkeypatch) -> None:
+def test_falls_back_to_the_pytest_binary_when_the_module_is_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A pytest on PATH still runs even when gandalf's own interpreter lacks the
     module — the config file's preference must not strand a usable binary."""
     (tmp_path / "pyproject.toml").write_text("[project]\nname = 'x'\n")
-    monkeypatch.setattr("importlib.util.find_spec", lambda name, *a, **k: None, raising=True)
-    monkeypatch.setattr("shutil.which", lambda binary, *a, **k: "/usr/bin/pytest", raising=True)
-    seen: dict = {}
+    monkeypatch.setattr("importlib.util.find_spec", _no_spec, raising=True)
+    monkeypatch.setattr("shutil.which", _pytest_on_path, raising=True)
+    seen: dict[str, tuple[str, ...]] = {}
 
-    async def fake_exec(*argv, **kwargs):
+    async def fake_exec(*argv: str, **kwargs: object) -> object:
         seen["argv"] = argv
         raise AssertionError("stop before spawning")
 

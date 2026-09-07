@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Any
+
 from gandalf import suppress
 from gandalf.base import GateOutcome, GateResult
 
@@ -12,7 +15,7 @@ _F = [
 ]
 
 
-def _res(findings=None):
+def _res(findings: list[dict[str, Any]] | None = None) -> GateResult:
     return GateResult("ruff", GateOutcome.FAIL, 0.4, "ruff: 3", findings or list(_F))
 
 
@@ -44,7 +47,7 @@ def test_partial_is_never_worse() -> None:
     assert "suppressed" in out.summary
 
 
-def test_baseline_roundtrip(tmp_path) -> None:
+def test_baseline_roundtrip(tmp_path: Path) -> None:
     path = str(tmp_path / "bl.json")
     n = suppress.write_baseline(path, [_res()], "now")
     assert n == 3

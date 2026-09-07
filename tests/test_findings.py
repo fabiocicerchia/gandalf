@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from gandalf import findings, suppress
 
 # One finding per shape gandalf actually receives, named by the tool that emits it.
@@ -117,7 +119,7 @@ def test_rule_documentation_url() -> None:
     assert findings.normalise({"finding": "x", "PrimaryURL": "https://d/c"})["url"] == "https://d/c"
 
 
-def test_location_scraped_from_prose_and_trimmed(tmp_path) -> None:
+def test_location_scraped_from_prose_and_trimmed(tmp_path: Path) -> None:
     """mypy/tsc/codeql carry their location only in the message text."""
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "d.py").write_text("x = 1\n")
@@ -127,13 +129,13 @@ def test_location_scraped_from_prose_and_trimmed(tmp_path) -> None:
     assert n["message"].startswith("error:")
 
 
-def test_prose_that_merely_looks_like_a_path_is_not_trusted(tmp_path) -> None:
+def test_prose_that_merely_looks_like_a_path_is_not_trusted(tmp_path: Path) -> None:
     n = findings.normalise({"finding": "see docs/missing.md:12 for details"}, str(tmp_path))
     assert n["path"] == ""
     assert n["line"] == 0
 
 
-def test_sentence_in_a_location_key_becomes_the_message(tmp_path) -> None:
+def test_sentence_in_a_location_key_becomes_the_message(tmp_path: Path) -> None:
     """The format gate puts the whole finding in `file`."""
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "e.py").write_text("x = 1\n")
@@ -150,6 +152,7 @@ def test_relpath_rebases_container_paths() -> None:
 
 def test_annotate_keeps_the_tools_own_keys() -> None:
     out = findings.annotate(BANDIT)
+    assert isinstance(out, dict)
     assert out["test_id"] == "B105"  # untouched
     assert out["_gandalf"]["rule"] == "B105"
     # A non-dict finding has nowhere to put the block.

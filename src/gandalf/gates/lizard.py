@@ -4,7 +4,7 @@ the complexity / length thresholds. Advisory, so capped at WARN."""
 from __future__ import annotations
 
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.plugins import _scan_targets, missing_result, run_tool, timeout_result
+from gandalf.plugins import missing_result, run_tool, scan_targets, timeout_result
 
 
 class LizardGate:
@@ -26,7 +26,7 @@ class LizardGate:
                 "*/node_modules/*",
                 "-x",
                 "*/llama.cpp/*",
-                *_scan_targets(ctx),
+                *scan_targets(ctx),
             ],
             ctx.workdir,
         )

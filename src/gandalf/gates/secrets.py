@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 
 from gandalf.base import GateContext, GateOutcome, GateResult
+from gandalf.gates._toolchain import objects
 from gandalf.plugins import missing_result, run_tool, timeout_result
 
 
@@ -35,7 +36,7 @@ class GitleaksGate:
         if (to := timeout_result(self.name, rc)) is not None:
             return to
         try:
-            findings = json.loads(out or "[]") if out.strip().startswith("[") else []
+            findings = objects(json.loads(out or "[]") if out.strip().startswith("[") else [])
         except json.JSONDecodeError:
             findings = []
         n = len(findings)

@@ -6,10 +6,11 @@ import json
 import re
 
 from gandalf.base import GateContext, GateOutcome, GateResult
+from gandalf.gates._toolchain import objects
 from gandalf.plugins import (
-    _scan_targets,
     missing_result,
     run_tool,
+    scan_targets,
     timeout_result,
     tool_missing,
 )
@@ -33,14 +34,14 @@ class RuffGate:
                 "--no-cache",  # don't drop a (root-owned) .ruff_cache into the scanned repo
                 "--output-format",
                 "json",
-                *_scan_targets(ctx, py_only=True),
+                *scan_targets(ctx, py_only=True),
             ],
             ctx.workdir,
         )
         if (to := timeout_result(self.name, rc)) is not None:
             return to
         try:
-            findings = json.loads(out or "[]")
+            findings = objects(json.loads(out or "[]"))
         except json.JSONDecodeError:
             findings = []
         n = len(findings)
@@ -60,7 +61,7 @@ class RuffGate:
                 "check",
                 "--fix",
                 "--no-cache",
-                *_scan_targets(ctx, py_only=True),
+                *scan_targets(ctx, py_only=True),
             ],
             ctx.workdir,
         )

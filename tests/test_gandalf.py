@@ -5,21 +5,24 @@ Run: pytest gandalf/test_gandalf.py   (or: python gandalf/test_gandalf.py)
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
+from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
-from gandalf import llm, skillgate, skills
-from gandalf.base import GateContext, GateOutcome, GateResult
+from gandalf import llm, plugins, skillgate, skills
+from gandalf.base import Gate, GateContext, GateOutcome, GateResult
 from gandalf.plugins import discover_gates
 from gandalf.report import _CATEGORY, GROUP_ORDER, aggregate
-from gandalf.scope import _classify
+from gandalf.scope import classify
 
 P = GateOutcome.PASS
 W = GateOutcome.WARN
 F = GateOutcome.FAIL
 
 
-def _r(outcome, score):
+def _r(outcome: GateOutcome, score: float) -> GateResult:
     return GateResult("x", outcome, score)
 
 
@@ -170,30 +173,30 @@ def test_skill_outcome_coercion() -> None:
 
 def test_skill_json_parsing() -> None:
     """The judge tolerates fenced JSON and objects buried in prose."""
-    assert skills._parse_json('```json\n{"score": 5}\n```')["score"] == 5
-    assert skills._parse_json('noise {"outcome": "pass"} tail')["outcome"] == "pass"
+    assert skills.parse_json('```json\n{"score": 5}\n```')["score"] == 5
+    assert skills.parse_json('noise {"outcome": "pass"} tail')["outcome"] == "pass"
 
 
 def test_language_detection() -> None:
-    assert _classify(["cmd/main.go", "go.mod"]) == {"go"}
-    assert _classify(["src/main.rs", "Cargo.toml"]) == {"rust"}
-    assert _classify(["src/app.ts", "tsconfig.json"]) == {"ts"}
-    assert _classify(["index.js", "package.json"]) == {"node"}
-    assert _classify(["a.py", "install.sh", "compose.yaml"]) == {
+    assert classify(["cmd/main.go", "go.mod"]) == {"go"}
+    assert classify(["src/main.rs", "Cargo.toml"]) == {"rust"}
+    assert classify(["src/app.ts", "tsconfig.json"]) == {"ts"}
+    assert classify(["index.js", "package.json"]) == {"node"}
+    assert classify(["a.py", "install.sh", "compose.yaml"]) == {
         "python",
         "shell",
         "yaml",
     }
-    assert _classify(["README.md"]) == set()
+    assert classify(["README.md"]) == set()
 
 
-def test_repo_root_reports_git_failure_instead_of_raising(monkeypatch):
+def test_repo_root_reports_git_failure_instead_of_raising(monkeypatch: pytest.MonkeyPatch):
     """Outside a repository, gandalf must say so — not dump a traceback."""
     import subprocess
 
     from gandalf import scope
 
-    def not_a_repo(args, cwd: str = "."):
+    def not_a_repo(args: list[str], cwd: str = ".") -> str:
         raise subprocess.CalledProcessError(128, ["git", *args], stderr="fatal: not a git repository (or any parent)\n")
 
     monkeypatch.setattr(scope, "_git", not_a_repo)
@@ -202,7 +205,7 @@ def test_repo_root_reports_git_failure_instead_of_raising(monkeypatch):
     assert "not a git repository (or any parent)" in str(excinfo.value)
     assert "fatal:" not in str(excinfo.value)
 
-    def no_git(args, cwd: str = "."):
+    def no_git(args: list[str], cwd: str = ".") -> str:
         raise FileNotFoundError(2, "No such file or directory", "git")
 
     monkeypatch.setattr(scope, "_git", no_git)
@@ -211,11 +214,14 @@ def test_repo_root_reports_git_failure_instead_of_raising(monkeypatch):
     assert "git on PATH" in str(excinfo.value)
 
 
-def test_narrow_to_path(monkeypatch):
+def test_narrow_to_path(monkeypatch: pytest.MonkeyPatch):
     from gandalf import scope
     from gandalf.scope import Scope, _narrow_to_path
 
-    monkeypatch.setattr(scope, "_git", lambda args, cwd=".": "src/a.py\0src/b.py\0")
+    def tracked(args: list[str], cwd: str = ".") -> str:
+        return "src/a.py\0src/b.py\0"
+
+    monkeypatch.setattr(scope, "_git", tracked)
     # whole-tree scope: folder's tracked files become the changed set
     sc = _narrow_to_path(Scope("working-tree", "/repo", []), "src")
     assert sc.changed_files == ["src/a.py", "src/b.py"]
@@ -223,8 +229,12 @@ def test_narrow_to_path(monkeypatch):
     # staged scope: intersect the change set with the folder
     sc = _narrow_to_path(Scope("staged", "/repo", ["src/a.py", "other/c.py"]), "src")
     assert sc.changed_files == ["src/a.py"]
+
     # nothing tracked under the path is an error
-    monkeypatch.setattr(scope, "_git", lambda args, cwd=".": "")
+    def nothing_tracked(args: list[str], cwd: str = ".") -> str:
+        return ""
+
+    monkeypatch.setattr(scope, "_git", nothing_tracked)
     try:
         _narrow_to_path(Scope("working-tree", "/repo", []), "nope")
         raise AssertionError("expected SystemExit")
@@ -236,7 +246,7 @@ def test_language_filtering() -> None:
     """A Go-only change runs go gates + generic ones, NOT eslint/mypy/ruff."""
     gates = {g.name: g for g in discover_gates()}
     detected = {"go"}
-    active = {n for n, g in gates.items() if not getattr(g, "langs", None) or (set(g.langs) & detected)}
+    active = {n for n, g in gates.items() if not plugins.gate_langs(g) or (plugins.gate_langs(g) & detected)}
     assert "go_build" in active
     assert "go_test" in active
     assert "eslint" not in active
@@ -252,7 +262,7 @@ def test_rust_language_filtering() -> None:
     """A Rust-only change runs cargo gates, not go/node/python ones."""
     gates = {g.name: g for g in discover_gates()}
     detected = {"rust"}
-    active = {n for n, g in gates.items() if not getattr(g, "langs", None) or (set(g.langs) & detected)}
+    active = {n for n, g in gates.items() if not plugins.gate_langs(g) or (plugins.gate_langs(g) & detected)}
     assert "cargo_build" in active
     assert "clippy" in active
     assert "cargo_test" in active
@@ -280,9 +290,9 @@ def test_llm_skill_gates_discovered() -> None:
 
 def test_skills_are_embedded() -> None:
     """Every slug a gate loads (skill + its dependencies) ships under skills/."""
-    slugs = set()
+    slugs: set[str] = set()
     for g in discover_gates():
-        slugs.update(getattr(g, "skills", ()) or ())
+        slugs.update(str(s) for s in getattr(g, "skills", ()) or ())
     assert {
         "grill-me",
         "grilling",
@@ -319,24 +329,33 @@ def test_normalize_findings_maps_keys() -> None:
     assert len(out) == 2
 
 
-def _ctx(**meta):
-    base = {"diff": "", "title": "", "body": "", "languages": ["python"]}
+def _ctx(**meta: Any) -> GateContext:
+    base: dict[str, Any] = {"diff": "", "title": "", "body": "", "languages": ["python"]}
     base.update(meta)
     return GateContext(repo=".", workdir=".", changed_files=[], meta=base)
 
 
-def _run(gate, ctx):
+def _reply(text: str) -> Callable[..., str]:
+    """A stand-in for `llm.chat` that answers with `text` whatever it is asked."""
+
+    def chat(*a: object, **k: object) -> str:
+        return text
+
+    return chat
+
+
+def _run(gate: Gate, ctx: GateContext) -> GateResult:
     return asyncio.run(gate.run(ctx))
 
 
-def test_skill_gate_scores_and_maps_outcome(monkeypatch) -> None:
+def test_skill_gate_scores_and_maps_outcome(monkeypatch: pytest.MonkeyPatch) -> None:
     """A high score → PASS, a low score → WARN (never FAIL), findings preserved."""
     from gandalf.gates.well_architected import WellArchitectedGate
 
     monkeypatch.setattr(
         llm,
         "chat",
-        lambda *a, **k: '{"score": 95, "summary": "solid", "findings": []}',
+        _reply('{"score": 95, "summary": "solid", "findings": []}'),
     )
     res = _run(WellArchitectedGate(), _ctx(diff="+ added a retry with backoff"))
     assert res.outcome is GateOutcome.PASS
@@ -345,7 +364,7 @@ def test_skill_gate_scores_and_maps_outcome(monkeypatch) -> None:
     monkeypatch.setattr(
         llm,
         "chat",
-        lambda *a, **k: (
+        _reply(
             '{"score": 40, "summary": "gaps", '
             '"findings": [{"severity":"high","title":"No DR","detail":"add backups",'
             '"location":"infra.tf:3"}]}'
@@ -356,11 +375,11 @@ def test_skill_gate_scores_and_maps_outcome(monkeypatch) -> None:
     assert any(f.get("finding") == "No DR" for f in res.findings)
 
 
-def test_skill_gate_warns_when_judge_unavailable(monkeypatch) -> None:
+def test_skill_gate_warns_when_judge_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
     """LLM transport failure degrades to WARN — never a false PASS."""
     from gandalf.gates.codebase_architecture import CodebaseArchitectureGate
 
-    def boom(*a, **k):
+    def boom(*a: object, **k: object) -> str:
         raise RuntimeError("connection refused")
 
     monkeypatch.setattr(llm, "chat", boom)
@@ -368,11 +387,11 @@ def test_skill_gate_warns_when_judge_unavailable(monkeypatch) -> None:
     assert res.outcome is GateOutcome.WARN
 
 
-def test_skill_gate_warns_with_nothing_in_scope(monkeypatch) -> None:
+def test_skill_gate_warns_with_nothing_in_scope(monkeypatch: pytest.MonkeyPatch) -> None:
     """No diff, no files, no request → nothing to judge → WARN, no LLM call."""
     from gandalf.gates.grill_me import GrillMeGate
 
-    def fail(*a, **k):  # must not be reached
+    def fail(*a: object, **k: object) -> str:  # must not be reached
         raise AssertionError("LLM should not be called with empty scope")
 
     monkeypatch.setattr(llm, "chat", fail)
@@ -406,19 +425,25 @@ def test_communicate_kills_the_child_on_timeout() -> None:
     assert proc.returncode is not None, "child survived the timeout"
 
 
-def test_reap_kills_the_container_not_just_the_docker_client(monkeypatch) -> None:
+def test_reap_kills_the_container_not_just_the_docker_client(monkeypatch: pytest.MonkeyPatch) -> None:
     """A timed-out image-backed tool (semgrep, trivy…) must have its container
     stopped: killing `docker run` kills the client and leaves the tool running."""
     from gandalf import toolrun
 
-    monkeypatch.setattr(toolrun, "_via_image", lambda b: b == "semgrep")
-    monkeypatch.setattr(toolrun.shutil, "which", lambda b: None)
+    def only_semgrep(binary: str) -> bool:
+        return binary == "semgrep"
+
+    def nothing_on_path(binary: str) -> str | None:
+        return None
+
+    monkeypatch.setattr(toolrun, "_via_image", only_semgrep)
+    monkeypatch.setattr(toolrun.shutil, "which", nothing_on_path)
     cmd = toolrun._dockerize(["semgrep", "scan"], "/repo", "gandalf-1-0")
     assert cmd[:2] == ["docker", "run"]
     assert "--name" in cmd
     assert cmd[cmd.index("--name") + 1] == "gandalf-1-0"
 
-    killed = []
+    killed: list[list[str]] = []
 
     class FakeProc:
         returncode = -9
@@ -426,27 +451,29 @@ def test_reap_kills_the_container_not_just_the_docker_client(monkeypatch) -> Non
         def kill(self) -> None:
             pass
 
-        async def wait(self):
+        async def wait(self) -> int:
             return -9
 
-        async def communicate(self):
+        async def communicate(self) -> tuple[bytes, bytes]:
             return b"", b""
 
-    async def fake_exec(*argv, **kw):
+    async def fake_exec(*argv: str, **kw: object) -> FakeProc:
         killed.append(list(argv))
         return FakeProc()
 
     monkeypatch.setattr(toolrun.asyncio, "create_subprocess_exec", fake_exec)
-    asyncio.run(toolrun._reap(FakeProc(), cmd, "gandalf-1-0"))
+    # FakeProc implements the three members `_reap` touches; the cast is what
+    # says so, since it is not a real subprocess.
+    asyncio.run(toolrun._reap(cast("asyncio.subprocess.Process", FakeProc()), cmd, "gandalf-1-0"))
     assert killed == [["docker", "kill", "gandalf-1-0"]]
 
     # A host-binary run has no container, so no docker call at all.
     killed.clear()
-    asyncio.run(toolrun._reap(FakeProc(), ["semgrep", "scan"], "gandalf-1-0"))
+    asyncio.run(toolrun._reap(cast("asyncio.subprocess.Process", FakeProc()), ["semgrep", "scan"], "gandalf-1-0"))
     assert killed == []
 
 
-def test_atheris_gate_ignores_its_own_artifact_prefix_flag(monkeypatch, tmp_path) -> None:
+def test_atheris_gate_ignores_its_own_artifact_prefix_flag(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """A clean run must PASS even though the harness is invoked with
     -artifact_prefix=/tmp/atheris-crash-, which libFuzzer echoes back in its
     startup banner — a bare "crash" substring match would always self-match."""
@@ -463,16 +490,26 @@ def test_atheris_gate_ignores_its_own_artifact_prefix_flag(monkeypatch, tmp_path
         "Done 702348 runs in 61 second(s)\n"
     )
     ctx = GateContext(repo=".", workdir=str(tmp_path), changed_files=[], meta={})
+
     # This test is about reading libFuzzer's output, not about whether atheris
     # is installed on the machine running the suite — stub the probe so it does
     # not pass locally and fail in CI.
-    monkeypatch.setattr(dynamic, "_atheris_installed", lambda *a, **k: asyncio.sleep(0, result=True))
-    monkeypatch.setattr(dynamic, "_run", lambda *a, **k: asyncio.sleep(0, result=(0, clean_log, "")))
+    async def installed(*a: object, **k: object) -> bool:
+        return True
+
+    def replies(rc: int, out: str, err: str) -> Callable[..., Awaitable[tuple[int, str, str]]]:
+        async def run(*a: object, **k: object) -> tuple[int, str, str]:
+            return rc, out, err
+
+        return run
+
+    monkeypatch.setattr(dynamic, "_atheris_installed", installed)
+    monkeypatch.setattr(dynamic, "_run", replies(0, clean_log, ""))
     res = _run(dynamic.AtherisGate(), ctx)
     assert res.outcome is GateOutcome.PASS
 
     crash_log = "==12345==ERROR: libFuzzer: deadly signal\n"
-    monkeypatch.setattr(dynamic, "_run", lambda *a, **k: asyncio.sleep(0, result=(77, "", crash_log)))
+    monkeypatch.setattr(dynamic, "_run", replies(77, "", crash_log))
     res = _run(dynamic.AtherisGate(), ctx)
     assert res.outcome is GateOutcome.FAIL
 
@@ -480,7 +517,7 @@ def test_atheris_gate_ignores_its_own_artifact_prefix_flag(monkeypatch, tmp_path
 # --- eslint findings: the gate's own translation of a fixable message ----------
 
 
-def test_eslint_messages_carry_a_normalised_fix(tmp_path) -> None:
+def test_eslint_messages_carry_a_normalised_fix(tmp_path: Path) -> None:
     """eslint reports a fix as character offsets; the gate turns them into the
     line/column vocabulary the report, SARIF and the PR suggestion all read."""
     from gandalf.gates.node import _messages
@@ -526,11 +563,11 @@ def test_eslint_messages_carry_a_normalised_fix(tmp_path) -> None:
     assert plain["rule_id"] == "eslint"
 
 
-def test_eslint_messages_survive_junk(tmp_path) -> None:
+def test_eslint_messages_survive_junk(tmp_path: Path) -> None:
     """eslint's JSON is external input; a malformed entry must not sink a gate."""
     from gandalf.gates.node import _messages
 
-    junk = [
+    junk: list[Any] = [
         "not a result",
         {"filePath": str(tmp_path / "missing.js"), "messages": ["not a message"]},
         {"filePath": str(tmp_path / "missing.js"), "messages": [{"fix": "nonsense"}]},

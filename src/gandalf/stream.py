@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 
 import dataclasses
 import json
+from typing import Any
 
 from . import console, plugins, report
 from . import findings as gfindings
@@ -46,13 +47,13 @@ class GateStream:
                 **dataclasses.asdict(shown),
                 "findings": gfindings.annotate_all(shown.findings, self.workdir),
                 "category": report.category_of(r),
-                "duration": getattr(r, "_duration", None),
-                "blocking": getattr(r, "_blocking", False),
+                "duration": plugins.meta(r, "duration"),
+                "blocking": plugins.meta(r, "blocking", False),
                 "unavailable": plugins.did_not_run(r),
             }
         )
 
     @staticmethod
-    def _write(obj: dict) -> None:
+    def _write(obj: dict[str, Any]) -> None:
         # flush: the point is to be read while the process is still running.
         console.out(json.dumps(obj, default=str), flush=True)

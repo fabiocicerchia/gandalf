@@ -6,9 +6,9 @@ import json
 
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.plugins import (
-    _scan_targets,
     missing_result,
     run_tool,
+    scan_targets,
     timeout_result,
     unavailable,
 )
@@ -26,7 +26,7 @@ class BanditGate:
             [
                 "bandit",
                 "-r",
-                *_scan_targets(ctx, py_only=True),
+                *scan_targets(ctx, py_only=True),
                 "-f",
                 "json",
                 "-q",

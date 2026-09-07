@@ -11,11 +11,12 @@ import re
 import shutil
 import sys
 from pathlib import Path
+from typing import Any
 
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.gates._toolchain import named, parsed, scored
+from gandalf.gates._toolchain import named, obj, objects, parsed, scored
 from gandalf.plugins import (
-    _TIMEOUT_RC,
+    TIMEOUT_RC,
     communicate,
     ignore_patterns,
     missing_result,
@@ -31,12 +32,12 @@ MAX_HIGH = 5
 MAX_FAILED_CHECKS = 5
 
 
-def _flat(results: list[dict], key: str) -> list[dict]:
+def _flat(results: object, key: str) -> list[dict[str, Any]]:
     """One kind of finding, flattened across a scanner's per-target results."""
-    return [item for r in results for item in r.get(key) or []]
+    return [item for r in objects(results) for item in objects(r.get(key))]
 
 
-def _checkov_report(out: str) -> dict | None:
+def _checkov_report(out: str) -> dict[str, Any] | None:
     """checkov's report object. It emits a bare object, or a list of them — one
     per framework — when the tree has more than one; the first is the summary
     every caller here reads. None when the output is not JSON at all."""
@@ -48,18 +49,18 @@ def _checkov_report(out: str) -> dict | None:
     return raw
 
 
-async def _hadolint_findings(dockerfiles: list[str], workdir: str) -> tuple[list[dict], str]:
+async def _hadolint_findings(dockerfiles: list[str], workdir: str) -> tuple[list[dict[str, Any]], str]:
     """Every Dockerfile's hadolint findings, and the file it timed out on ("" if
     none). A file whose output will not parse contributes nothing rather than
     sinking the whole gate."""
-    found: list[dict] = []
+    found: list[dict[str, Any]] = []
     for df in dockerfiles:
         # workdir-relative so the path resolves inside the container mount too.
         rc, out, _ = await run_tool(["hadolint", "--format", "json", df], workdir)
-        if rc == _TIMEOUT_RC:
+        if rc == TIMEOUT_RC:
             return found, df
         if (items := parsed(out, "[]")) is not None:
-            found.extend(items)
+            found.extend(objects(items))
     return found, ""
 
 
@@ -120,7 +121,7 @@ class OsvScannerGate:
         data = parsed(out)
         if data is None:
             return unavailable(self.name, "osv-scanner: unparsable output")
-        vulns = _flat(_flat(data.get("results", []), "packages"), "vulnerabilities")
+        vulns = _flat(_flat(obj(data).get("results"), "packages"), "vulnerabilities")
         n = len(vulns)
         if n == 0:
             return GateResult(self.name, GateOutcome.PASS, 1.0, "osv-scanner: clean")
@@ -159,7 +160,7 @@ class TrivyGate:
         data = parsed(out)
         if data is None:
             return unavailable(self.name, "trivy: unparsable output")
-        results = data.get("Results", [])
+        results = obj(data).get("Results")
         vulns = _flat(results, "Vulnerabilities")
         secrets = _flat(results, "Secrets")
         misconfigs = _flat(results, "Misconfigurations")
@@ -184,7 +185,7 @@ class CheckovGate:
     async def run(self, ctx: GateContext) -> GateResult:
         if (m := missing_result(self.name, "checkov")) is not None:
             return m
-        skip_args = []
+        skip_args: list[str] = []
         for p in ignore_patterns(ctx.workdir):
             skip_args += ["--skip-path", p]
         rc, out, _ = await run_tool(

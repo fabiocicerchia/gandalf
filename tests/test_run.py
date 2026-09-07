@@ -6,6 +6,9 @@ from __future__ import annotations
 import asyncio
 import json
 import subprocess
+from pathlib import Path
+
+import pytest
 
 from gandalf import plugins
 from gandalf.__main__ import _gate_timeout, _resolve_concurrency, _run_gates, main
@@ -15,12 +18,12 @@ from gandalf.fixers import _files_note, _touched, _tree_state, run_fixers
 
 
 class _Slow:
-    def __init__(self, name, tracker) -> None:
+    def __init__(self, name: str, tracker: dict[str, int]) -> None:
         self.name = name
         self.blocking = False
         self._t = tracker
 
-    async def run(self, ctx):
+    async def run(self, ctx: GateContext) -> GateResult:
         self._t["live"] += 1
         self._t["peak"] = max(self._t["peak"], self._t["live"])
         await asyncio.sleep(0.02)
@@ -32,7 +35,7 @@ class _Broken:
     name = "broken"
     blocking = False
 
-    async def run(self, ctx):
+    async def run(self, ctx: GateContext) -> GateResult:
         raise RuntimeError("boom")
 
 
@@ -64,7 +67,7 @@ class _Fixer:
     name = "fixme"
     blocking = False
 
-    async def fix(self, ctx):
+    async def fix(self, ctx: GateContext) -> tuple[bool, str]:
         return (True, "did a thing")
 
 
@@ -72,7 +75,7 @@ class _NoFix:
     name = "nofix"
     blocking = False
 
-    async def run(self, ctx):
+    async def run(self, ctx: GateContext) -> GateResult:
         return GateResult(self.name, GateOutcome.PASS, 1.0, "ok")
 
 
@@ -80,7 +83,7 @@ class _BadFixer:
     name = "badfix"
     blocking = False
 
-    async def fix(self, ctx):
+    async def fix(self, ctx: GateContext) -> tuple[bool, str]:
         raise RuntimeError("nope")
 
 
@@ -97,7 +100,7 @@ def test_run_fixers_isolates_errors() -> None:
     assert "nope" in res[0][2]
 
 
-def test_resolve_concurrency_precedence(monkeypatch) -> None:
+def test_resolve_concurrency_precedence(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("GANDALF_CONCURRENCY", raising=False)
     assert _resolve_concurrency(5, Config()) == 5  # cli wins
     assert _resolve_concurrency(None, Config({"concurrency": 7})) == 7  # then config
@@ -114,14 +117,14 @@ def test_gate_timeout_resolution() -> None:
 
 
 def test_per_gate_timeout_visible_in_run() -> None:
-    seen = {}
+    seen: dict[str, int | None] = {}
 
     class _Probe:
-        def __init__(self, n) -> None:
+        def __init__(self, n: str) -> None:
             self.name = n
             self.blocking = False
 
-        async def run(self, ctx):
+        async def run(self, ctx: GateContext) -> GateResult:
             seen[self.name] = plugins.GATE_TIMEOUT.get()
             return GateResult(self.name, GateOutcome.PASS, 1.0, "ok")
 
@@ -149,7 +152,7 @@ if __name__ == "__main__":
 # the run stays stdlib-fast (the build gate just compiles the Python in scope).
 
 
-def _git(repo, *args) -> None:
+def _git(repo: Path, *args: str) -> None:
     subprocess.run(
         ["git", "-c", "user.email=t@example.com", "-c", "user.name=test", *args],
         cwd=repo,
@@ -157,7 +160,7 @@ def _git(repo, *args) -> None:
     )
 
 
-def _mkrepo(tmp_path):
+def _mkrepo(tmp_path: Path):
     repo = tmp_path / "repo"
     (repo / "src").mkdir(parents=True)
     (repo / "src" / "ok.py").write_text("VALUE = 1\n")
@@ -168,7 +171,9 @@ def _mkrepo(tmp_path):
     return repo
 
 
-def test_out_dir_and_no_trend_keep_the_worktree_clean(tmp_path, monkeypatch, capsys) -> None:
+def test_out_dir_and_no_trend_keep_the_worktree_clean(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     repo = _mkrepo(tmp_path)
     monkeypatch.chdir(repo)
     out = tmp_path / "artifacts" / "nested"  # missing parents must be created
@@ -182,7 +187,7 @@ def test_out_dir_and_no_trend_keep_the_worktree_clean(tmp_path, monkeypatch, cap
     assert str(out) in capsys.readouterr().out
 
 
-def test_reports_default_to_the_repo_and_record_a_trend(tmp_path, monkeypatch) -> None:
+def test_reports_default_to_the_repo_and_record_a_trend(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo = _mkrepo(tmp_path)
     monkeypatch.chdir(repo)
 
@@ -193,7 +198,9 @@ def test_reports_default_to_the_repo_and_record_a_trend(tmp_path, monkeypatch) -
     assert trend["score"] == 100
 
 
-def test_stream_emits_one_ndjson_line_per_gate(tmp_path, monkeypatch, capsys) -> None:
+def test_stream_emits_one_ndjson_line_per_gate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     repo = _mkrepo(tmp_path)
     monkeypatch.chdir(repo)
     out = tmp_path / "artifacts"
@@ -213,7 +220,9 @@ def test_stream_emits_one_ndjson_line_per_gate(tmp_path, monkeypatch, capsys) ->
     assert isinstance(gate["duration"], float)
 
 
-def test_stream_reports_cache_hits_too(tmp_path, monkeypatch, capsys) -> None:
+def test_stream_reports_cache_hits_too(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     """A cached gate never runs, so nothing would report it — but a consumer's
     pane must still fill on a warm cache."""
     repo = _mkrepo(tmp_path)
@@ -230,7 +239,9 @@ def test_stream_reports_cache_hits_too(tmp_path, monkeypatch, capsys) -> None:
     assert events[1]["name"] == "build"
 
 
-def test_stream_applies_baseline_suppression(tmp_path, monkeypatch, capsys) -> None:
+def test_stream_applies_baseline_suppression(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     """A baselined finding must not flash up in a consumer's pane and then
     vanish when the report lands."""
     repo = _mkrepo(tmp_path)
@@ -258,7 +269,9 @@ def test_stream_applies_baseline_suppression(tmp_path, monkeypatch, capsys) -> N
     assert streamed[0]["outcome"] == "pass"
 
 
-def test_exclude_narrows_the_scan_end_to_end(tmp_path, monkeypatch, capsys) -> None:
+def test_exclude_narrows_the_scan_end_to_end(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     repo = _mkrepo(tmp_path)
     (repo / "src" / "generated").mkdir()
     (repo / "src" / "generated" / "broken.py").write_text("def oops(:\n")
@@ -282,7 +295,9 @@ def test_exclude_narrows_the_scan_end_to_end(tmp_path, monkeypatch, capsys) -> N
     assert gate["findings"] == []
 
 
-def test_exclude_can_come_from_the_config_file(tmp_path, monkeypatch, capsys) -> None:
+def test_exclude_can_come_from_the_config_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     repo = _mkrepo(tmp_path)
     (repo / "vendor").mkdir()
     (repo / "vendor" / "broken.py").write_text("def oops(:\n")
@@ -295,7 +310,7 @@ def test_exclude_can_come_from_the_config_file(tmp_path, monkeypatch, capsys) ->
     capsys.readouterr()
 
 
-def test_payload_gates_carry_their_category(tmp_path, monkeypatch) -> None:
+def test_payload_gates_carry_their_category(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo = _mkrepo(tmp_path)
     monkeypatch.chdir(repo)
     out = tmp_path / "artifacts"
@@ -325,11 +340,11 @@ def test_touched_spots_content_changes_not_just_new_files() -> None:
     assert _touched(before, after) == ["a.py", "c.py"]
 
 
-def test_tree_state_outside_a_repo_is_silent(tmp_path) -> None:
+def test_tree_state_outside_a_repo_is_silent(tmp_path: Path) -> None:
     assert _tree_state(str(tmp_path)) == {}
 
 
-def test_fixer_report_comes_from_the_worktree(tmp_path) -> None:
+def test_fixer_report_comes_from_the_worktree(tmp_path: Path) -> None:
     """The fixer under-reports (says it changed nothing); the runner corrects it
     from the diff, which is what `eslint --fix` and `golangci-lint --fix` need."""
     repo = _mkrepo(tmp_path)
@@ -338,7 +353,7 @@ def test_fixer_report_comes_from_the_worktree(tmp_path) -> None:
         name = "rewriter"
         blocking = False
 
-        async def fix(self, ctx):
+        async def fix(self, ctx: GateContext) -> tuple[bool, str]:
             path = repo / "src" / "ok.py"
             path.write_text(path.read_text().replace("VALUE = 1", "VALUE = 2"))
             return (False, "rewriter ran")
@@ -348,14 +363,14 @@ def test_fixer_report_comes_from_the_worktree(tmp_path) -> None:
     assert msg == "rewriter ran — src/ok.py"
 
 
-def test_a_fixer_that_changes_nothing_is_reported_as_such(tmp_path) -> None:
+def test_a_fixer_that_changes_nothing_is_reported_as_such(tmp_path: Path) -> None:
     repo = _mkrepo(tmp_path)
 
     class _Idle:
         name = "idle"
         blocking = False
 
-        async def fix(self, ctx):
+        async def fix(self, ctx: GateContext) -> tuple[bool, str]:
             return (False, "nothing to do")
 
     res = asyncio.run(run_fixers([_Idle()], GateContext(repo=str(repo), workdir=str(repo))))

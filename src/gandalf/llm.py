@@ -15,6 +15,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+from typing import Any
 
 from . import debug
 
@@ -78,7 +79,7 @@ def _retryable(exc: Exception) -> bool:
     return isinstance(exc, (urllib.error.URLError, TimeoutError, OSError))
 
 
-def _request_with_retry(req: urllib.request.Request, timeout: int) -> dict:
+def _request_with_retry(req: urllib.request.Request, timeout: int) -> dict[str, Any]:
     """POST with exponential backoff on transient failures. Raises the last
     exception once retries are exhausted (or immediately for non-retryable ones)."""
     for attempt in range(RETRIES + 1):
@@ -96,7 +97,7 @@ def _request_with_retry(req: urllib.request.Request, timeout: int) -> dict:
     raise RuntimeError("unreachable")  # loop either returns or raises
 
 
-def _context(workdir: str, label: str, diff: str) -> str:
+def repo_context(workdir: str, label: str, diff: str) -> str:
     """Build the repo context sent alongside the findings.
 
     Truncated hard: the summary is worth what the model can attend to, and a
@@ -145,7 +146,7 @@ def _context(workdir: str, label: str, diff: str) -> str:
     return "\n\n".join(parts)
 
 
-def chat(messages: list[dict], *, temperature: float = 0.2, timeout: int = 120) -> str:
+def chat(messages: list[dict[str, Any]], *, temperature: float = 0.2, timeout: int = 120) -> str:
     """Low-level completion. Raises on transport/parse failure — callers decide
     how to degrade (summarize swallows it; the compliance gate reports FAIL)."""
     body = json.dumps(
@@ -181,10 +182,10 @@ def chat(messages: list[dict], *, temperature: float = 0.2, timeout: int = 120) 
 _SECTIONS = ("summary", "changeset", "remediation", "improvement")
 
 
-def _split_sections(text: str) -> dict:
+def _split_sections(text: str) -> dict[str, Any]:
     """Split the model reply on @@MARKER@@ lines into the sections. If the model
     ignored the format, the whole reply becomes the summary."""
-    out = dict.fromkeys(_SECTIONS, "")
+    out: dict[str, Any] = dict.fromkeys(_SECTIONS, "")
     key: str | None = None
     buf: list[str] = []
     for line in text.splitlines():
@@ -207,7 +208,7 @@ def _split_sections(text: str) -> dict:
     return out
 
 
-def analyze(workdir: str, label: str, diff: str, verdict: str, scorecard: str) -> dict:
+def analyze(workdir: str, label: str, diff: str, verdict: str, scorecard: str) -> dict[str, Any]:
     """One LLM call → {summary, changeset, remediation, improvement} as markdown.
     Changeset/remediation/improvement are grounded in the gate results (scorecard)."""
     prompt = (
@@ -240,18 +241,18 @@ def analyze(workdir: str, label: str, diff: str, verdict: str, scorecard: str) -
         "@@IMPROVEMENT@@\n"
         "Ways to raise the bar BEYOND merely passing — stricter configs, missing "
         "tests/coverage, docs, architecture — things not already flagged above.\n\n"
-        f"## Verdict\n{verdict}\n\n## Gate results\n{scorecard}\n\n" + _context(workdir, label, diff)
+        f"## Verdict\n{verdict}\n\n## Gate results\n{scorecard}\n\n" + repo_context(workdir, label, diff)
     )
     try:
         adv = _split_sections(chat([{"role": "user", "content": prompt}]))
     except Exception as exc:
-        adv = {
+        adv: dict[str, Any] = {
             "summary": f"LLM unavailable ({LLM_URL}, model {MODEL}): {exc}",
             "changeset": "",
             "remediation": "",
             "improvement": "",
         }
-    adv["remediation_pre"], adv["remediation_groups"] = _split_gates(adv["remediation"])
+    adv["remediation_pre"], adv["remediation_groups"] = _split_gates(str(adv["remediation"]))
     return adv
 
 

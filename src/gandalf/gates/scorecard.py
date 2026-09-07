@@ -12,8 +12,10 @@ run in local mode; they don't drag the aggregate down.
 
 from __future__ import annotations
 
+from typing import Any
+
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.gates._toolchain import parsed
+from gandalf.gates._toolchain import obj, objects, parsed
 from gandalf.plugins import (
     missing_result,
     run_tool,
@@ -36,7 +38,7 @@ def _unreadable(gate: str, err: str) -> GateResult:
     return unavailable(gate, "scorecard: unparsable output")
 
 
-def _aggregate(data: dict) -> float:
+def _aggregate(data: dict[str, Any]) -> float:
     """Scorecard's 0–10 aggregate, or -1 when every check was inconclusive."""
     try:
         return float(data.get("score", -1))
@@ -44,7 +46,7 @@ def _aggregate(data: dict) -> float:
         return -1.0
 
 
-def _below_max(checks: list) -> list[dict]:
+def _below_max(checks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Each check that ran (score >= 0) below a perfect 10, with its reason."""
     return [
         {"check": c.get("name"), "score": c.get("score"), "reason": c.get("reason")}
@@ -78,8 +80,8 @@ class ScorecardGate:
         if data is None:
             return _unreadable(self.name, err)
 
-        checks = data.get("checks") or []
-        aggregate = _aggregate(data)
+        checks = objects(obj(data).get("checks"))
+        aggregate = _aggregate(obj(data))
         # score -1 = scorecard couldn't compute an aggregate (every check inconclusive).
         if aggregate < 0 or not checks:
             return unavailable(self.name, "scorecard: no conclusive checks (local mode) — skipped")

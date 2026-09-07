@@ -4,8 +4,10 @@ Best on migration files; on non-migration SQL it degrades to WARN gracefully."""
 
 from __future__ import annotations
 
+from typing import Any
+
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.gates._toolchain import named, parsed, scored
+from gandalf.gates._toolchain import named, objects, parsed, scored
 from gandalf.plugins import (
     missing_result,
     run_tool,
@@ -14,12 +16,12 @@ from gandalf.plugins import (
 )
 
 
-def _findings(data: object) -> list[dict]:
+def _findings(data: object) -> list[dict[str, Any]]:
     """squawk's per-violation records, flattened to file / line / message."""
-    out = []
-    for v in data if isinstance(data, list) else []:
-        msgs = v.get("messages") or []
-        detail = msgs[0].get("message", "") if msgs and isinstance(msgs[0], dict) else ""
+    out: list[dict[str, Any]] = []
+    for v in objects(data):
+        msgs = objects(v.get("messages"))
+        detail = msgs[0].get("message", "") if msgs else ""
         rule = v.get("rule_name", "")
         out.append(
             {

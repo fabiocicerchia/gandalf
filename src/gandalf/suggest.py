@@ -22,10 +22,13 @@ from __future__ import annotations
 
 import itertools
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from . import findings as gfindings
+from .findings import Finding
 
 # A suggestion that spans half a screen stops being a one-click fix and starts
 # burying the comment it hangs off. Anything longer is left to the prose.
@@ -61,17 +64,25 @@ def _int(v: object) -> int:
     return 0
 
 
-def _dict(obj: object, key: str) -> dict:
-    v = obj.get(key) if isinstance(obj, dict) else None
-    return v if isinstance(v, dict) else {}
+def _dict(obj: object, key: str) -> Finding:
+    v: object = cast("Finding", obj).get(key) if isinstance(obj, dict) else None
+    return cast("Finding", v) if isinstance(v, dict) else {}
 
 
-def _ruff(f: dict, _lines: list[str]) -> list[Edit]:
+def _objects(obj: object, key: str) -> list[Finding]:
+    """The JSON objects listed under `key`. Anything that is not one is
+    dropped: a tool that reports an edit as a bare string has told us nothing
+    to apply."""
+    v: object = cast("Finding", obj).get(key) if isinstance(obj, dict) else None
+    if not isinstance(v, list):
+        return []
+    return [cast("Finding", i) for i in cast("list[object]", v) if isinstance(i, dict)]
+
+
+def _ruff(f: Finding, _lines: list[str]) -> list[Edit]:
     """ruff: `fix.edits[] = {content, location{row,column}, end_location{…}}`."""
-    out = []
-    for e in _dict(f, "fix").get("edits") or []:
-        if not isinstance(e, dict):
-            continue
+    out: list[Edit] = []
+    for e in _objects(_dict(f, "fix"), "edits"):
         start, end = _dict(e, "location"), _dict(e, "end_location")
         out.append(
             Edit(
@@ -85,12 +96,10 @@ def _ruff(f: dict, _lines: list[str]) -> list[Edit]:
     return out
 
 
-def _shellcheck(f: dict, _lines: list[str]) -> list[Edit]:
+def _shellcheck(f: Finding, _lines: list[str]) -> list[Edit]:
     """shellcheck: `fix.replacements[] = {line,endLine,column,endColumn,replacement}`."""
-    out = []
-    for r in _dict(f, "fix").get("replacements") or []:
-        if not isinstance(r, dict):
-            continue
+    out: list[Edit] = []
+    for r in _objects(_dict(f, "fix"), "replacements"):
         out.append(
             Edit(
                 _int(r.get("line")),
@@ -103,7 +112,7 @@ def _shellcheck(f: dict, _lines: list[str]) -> list[Edit]:
     return out
 
 
-def _semgrep(f: dict, _lines: list[str]) -> list[Edit]:
+def _semgrep(f: Finding, _lines: list[str]) -> list[Edit]:
     """semgrep: autofix text under `extra.fix`, range in `start`/`end`."""
     text = _dict(f, "extra").get("fix")
     start, end = _dict(f, "start"), _dict(f, "end")
@@ -120,15 +129,13 @@ def _semgrep(f: dict, _lines: list[str]) -> list[Edit]:
     ]
 
 
-def _normalised(f: dict, _lines: list[str]) -> list[Edit]:
+def _normalised(f: Finding, _lines: list[str]) -> list[Edit]:
     """`_fix.edits[]` — the shape a gate emits when its tool reports a fix in a
     format only that gate can read (eslint's character offsets, say). Written by
     the gate, in this module's own vocabulary, so nothing downstream has to
     learn a fifth dialect."""
-    out = []
-    for e in _dict(f, "_fix").get("edits") or []:
-        if not isinstance(e, dict):
-            continue
+    out: list[Edit] = []
+    for e in _objects(_dict(f, "_fix"), "edits"):
         out.append(
             Edit(
                 _int(e.get("start_line")),
@@ -147,7 +154,7 @@ def _normalised(f: dict, _lines: list[str]) -> list[Edit]:
 _TYPO = re.compile(r"(?:^|[\s:])(\S+)\s+==>\s+(.+?)\s*$")
 
 
-def _codespell(f: dict, lines: list[str]) -> list[Edit]:
+def _codespell(f: Finding, lines: list[str]) -> list[Edit]:
     """codespell: the correction is in the message, the position is not — so the
     replacement is rebuilt from the source line itself."""
     text = gfindings.message(f) or ""
@@ -186,8 +193,9 @@ def edits(f: object, lines: list[str]) -> list[Edit]:
     """
     if not isinstance(f, dict):
         return []
+    finding = cast("Finding", f)
     for extract in _EXTRACTORS:
-        found = [_clamp(e, lines) for e in extract(f, lines)]
+        found = [_clamp(e, lines) for e in extract(finding, lines)]
         if found:
             return found if all(_sane(e, lines) for e in found) else []
     return []
@@ -264,7 +272,7 @@ def for_anchor(
     workdir: str,
     path: str,
     line: int,
-    items: list,
+    items: Sequence[object],
     anchorable: set[int] | None = None,
 ) -> tuple[int, str] | None:
     """→ `(last_line, replacement)` for one review comment, or None.
@@ -322,7 +330,7 @@ def _from_utf16(source: str, offset: int, astral: bool) -> int | None:
     return len(source) if units == offset else None
 
 
-def utf16_edit(source: str, start: int, end: int, text: str) -> dict | None:
+def utf16_edit(source: str, start: object, end: object, text: object) -> Finding | None:
     """A `_fix` edit built from a pair of UTF-16 code-unit offsets — how eslint,
     and anything else built on a JavaScript AST, reports the range it would
     replace.

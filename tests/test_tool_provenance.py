@@ -6,6 +6,8 @@ there — and the findings differ with it. The run has to say which.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 import pytest
 
 from gandalf import plugins, toolrun
@@ -13,51 +15,70 @@ from gandalf.outputs import tool_report
 from gandalf.summary import _tools_line
 
 
+# The stand-ins for `shutil.which` and the image probe, as named functions
+# rather than lambdas: a lambda cannot carry the types, and these four say what
+# they mean at the call site.
+def _on_path(binary: str) -> str:
+    return "/usr/bin/" + binary
+
+
+def _not_on_path(binary: str) -> str | None:
+    return None
+
+
+def _in_image(binary: str) -> bool:
+    return True
+
+
+def _not_in_image(binary: str) -> bool:
+    return False
+
+
 @pytest.fixture(autouse=True)
-def _clean():
+def _clean() -> Iterator[None]:
     plugins.reset_tool_sources()
     yield
     plugins.reset_tool_sources()
 
 
-def test_host_resolution_is_recorded(monkeypatch) -> None:
-    monkeypatch.setattr(toolrun.shutil, "which", lambda b: "/usr/bin/" + b)
+def test_host_resolution_is_recorded(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(toolrun.shutil, "which", _on_path)
     toolrun._dockerize(["ruff", "check"], "/tmp")
     assert plugins.tool_sources() == {"ruff": "host"}
 
 
-def test_image_resolution_is_recorded(monkeypatch) -> None:
-    monkeypatch.setattr(toolrun.shutil, "which", lambda b: None)
-    monkeypatch.setattr(toolrun, "_via_image", lambda b: True)
+def test_image_resolution_is_recorded(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(toolrun.shutil, "which", _not_on_path)
+    monkeypatch.setattr(toolrun, "_via_image", _in_image)
     cmd = toolrun._dockerize(["trivy", "fs", "."], "/tmp")
     assert cmd[0] == "docker"
     assert plugins.tool_sources() == {"trivy": "image"}
 
 
-def test_an_unresolvable_tool_is_not_claimed_to_have_run(monkeypatch) -> None:
-    monkeypatch.setattr(toolrun.shutil, "which", lambda b: None)
-    monkeypatch.setattr(toolrun, "_via_image", lambda b: False)
+def test_an_unresolvable_tool_is_not_claimed_to_have_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(toolrun.shutil, "which", _not_on_path)
+    monkeypatch.setattr(toolrun, "_via_image", _not_in_image)
     toolrun._dockerize(["nope"], "/tmp")
     assert plugins.tool_sources() == {}
 
 
-def test_first_resolution_wins(monkeypatch) -> None:
-    monkeypatch.setattr(toolrun.shutil, "which", lambda b: "/usr/bin/" + b)
+def test_first_resolution_wins(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(toolrun.shutil, "which", _on_path)
     toolrun._dockerize(["ruff"], "/tmp")
-    monkeypatch.setattr(toolrun.shutil, "which", lambda b: None)
-    monkeypatch.setattr(toolrun, "_via_image", lambda b: True)
+    monkeypatch.setattr(toolrun.shutil, "which", _not_on_path)
+    monkeypatch.setattr(toolrun, "_via_image", _in_image)
     toolrun._dockerize(["ruff"], "/tmp")
     assert plugins.tool_sources()["ruff"] == "host"
 
 
-def test_reset_clears_process_state(monkeypatch) -> None:
-    monkeypatch.setattr(toolrun.shutil, "which", lambda b: "/usr/bin/" + b)
+def test_reset_clears_process_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(toolrun.shutil, "which", _on_path)
     toolrun._dockerize(["ruff"], "/tmp")
     plugins.reset_tool_sources()
     assert plugins.tool_sources() == {}
 
 
-def test_report_names_the_image_only_when_one_was_used(monkeypatch) -> None:
+def test_report_names_the_image_only_when_one_was_used(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(plugins, "tool_sources", lambda: {"ruff": "host"})
     assert "image" not in tool_report("/tmp", False)
     monkeypatch.setattr(plugins, "tool_sources", lambda: {"trivy": "image"})
@@ -67,11 +88,11 @@ def test_report_names_the_image_only_when_one_was_used(monkeypatch) -> None:
     assert block["resolved"]["trivy"] == {"source": "image"}
 
 
-def test_versions_are_opt_in(monkeypatch) -> None:
+def test_versions_are_opt_in(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(plugins, "tool_sources", lambda: {"ruff": "host"})
     assert "version" not in tool_report("/tmp", False)["resolved"]["ruff"]
 
-    async def fake(workdir):
+    async def fake(workdir: str) -> dict[str, str]:
         return {"ruff": "ruff 0.15.8"}
 
     monkeypatch.setattr(plugins, "tool_versions", fake)
@@ -79,7 +100,7 @@ def test_versions_are_opt_in(monkeypatch) -> None:
     assert got == {"source": "host", "version": "ruff 0.15.8"}
 
 
-def test_no_tools_no_block(monkeypatch) -> None:
+def test_no_tools_no_block(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(plugins, "tool_sources", dict)
     assert tool_report("/tmp", True) == {}
     assert _tools_line({}) == ""

@@ -20,40 +20,61 @@ import os
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import Protocol
 
 from . import console, debug
 from .base import Gate
-from .ignores import (  # noqa: F401 — the gate-facing import surface
-    _scan_targets,
-    ignore_patterns,
-    is_ignored,
-    scannable_files,
-    set_extra_ignores,
-    tracked_files,
-)
-from .outcomes import (  # noqa: F401 — the gate-facing import surface
-    carry_over,
-    did_not_run,
-    missing_result,
-    timeout_result,
-    unavailable,
-)
-from .toolrun import (  # noqa: F401 — the gate-facing import surface
-    _TIMEOUT_RC,
-    GATE_TIMEOUT,
-    IMAGE_TOOLS,
-    SUBPROCESS_TIMEOUT_SECONDS,
-    TOOLS_IMAGE,
-    _tools_image_available,
-    communicate,
-    reset_tool_sources,
-    run_tool,
-    tool_missing,
-    tool_sources,
-    tool_version,
-    tool_versions,
-    tools_image_id,
-)
+from .ignores import ignore_patterns as ignore_patterns
+from .ignores import is_ignored as is_ignored
+
+# The gate-facing import surface: `X as X` is how a re-export is spelled, so a
+# checker does not read it as an unused import.
+from .ignores import scan_targets as scan_targets
+from .ignores import scannable_files as scannable_files
+from .ignores import set_extra_ignores as set_extra_ignores
+from .ignores import tracked_files as tracked_files
+from .outcomes import carry_over as carry_over
+from .outcomes import did_not_run as did_not_run
+from .outcomes import mark as mark
+from .outcomes import meta as meta
+from .outcomes import missing_result as missing_result
+from .outcomes import timeout_result as timeout_result
+from .outcomes import unavailable as unavailable
+from .toolrun import GATE_TIMEOUT as GATE_TIMEOUT
+from .toolrun import IMAGE_TOOLS as IMAGE_TOOLS
+from .toolrun import SUBPROCESS_TIMEOUT_SECONDS as SUBPROCESS_TIMEOUT_SECONDS
+from .toolrun import TIMEOUT_RC as TIMEOUT_RC
+from .toolrun import TOOLS_IMAGE as TOOLS_IMAGE
+from .toolrun import communicate as communicate
+from .toolrun import reset_tool_sources as reset_tool_sources
+from .toolrun import run_tool as run_tool
+from .toolrun import tool_missing as tool_missing
+from .toolrun import tool_sources as tool_sources
+from .toolrun import tool_version as tool_version
+from .toolrun import tool_versions as tool_versions
+from .toolrun import tools_image_available as tools_image_available
+from .toolrun import tools_image_id as tools_image_id
+
+
+class NamedGate(Protocol):
+    """A gate seen only by its name.
+
+    The cache keys on it and the fixer pass reports under it; neither runs the
+    gate, so neither should demand the whole `Gate` protocol — a fix-only gate
+    has no `run`, and a test double has no reason to grow one.
+    """
+
+    name: str
+
+
+def gate_langs(gate: Gate) -> set[str]:
+    """The languages a gate declares, or an empty set when it declares none.
+
+    `langs` is optional rather than part of the `Gate` protocol — a gate that
+    applies to any tree simply omits it — so it is read here instead of being
+    required of every gate file.
+    """
+    return {str(lang) for lang in getattr(gate, "langs", None) or ()}
 
 
 def _gate_dirs() -> list[Path]:

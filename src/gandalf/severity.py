@@ -15,7 +15,8 @@ from __future__ import annotations
 
 from . import findings as findings_mod
 from .base import GateResult
-from .plugins import carry_over
+from .findings import Finding
+from .plugins import carry_over, mark
 
 _WEIGHT = {
     "critical": 2.0,
@@ -29,12 +30,12 @@ _WEIGHT = {
 _FLOOR_AT = 5.0
 
 
-def of(f: dict) -> str:
+def of(f: Finding) -> str:
     """Normalized severity of a finding, or '' if it reports none."""
     return findings_mod.severity(f)
 
 
-def score(findings: list) -> float | None:
+def score(findings: list[Finding]) -> float | None:
     """Severity-weighted 0..1 score, or None when no finding carries a severity
     (so the caller keeps the gate's own count-based score)."""
     weights = [_WEIGHT[s] for s in (of(f) for f in findings) if s]
@@ -53,5 +54,4 @@ def reweight(res: GateResult) -> GateResult:
     # Keep what the gate itself scored. Without it --explain-score can only show
     # the weighted number, which is the one the user cannot derive from the gate's
     # own output — so the explanation would be the least explanatory part.
-    out._raw_score = res.score  # type: ignore[attr-defined]
-    return out
+    return mark(out, raw_score=res.score)

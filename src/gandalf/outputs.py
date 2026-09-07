@@ -10,7 +10,7 @@ import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from . import badge, console, junit, plugins, pr_comments, render_html, report, sarif, scope
 from . import findings as gfindings
@@ -32,7 +32,7 @@ def destination(args: argparse.Namespace, sc: Scope) -> tuple[Path, str]:
     return out_dir, f"gandalf-{sc.label.replace('/', '_')}-{ts}"
 
 
-def tool_report(workdir: str, probe_versions: bool) -> dict:
+def tool_report(workdir: str, probe_versions: bool) -> dict[str, Any]:
     """Which scanner ran from where, and optionally at what version.
 
     Recorded because the same gate resolves differently on two machines — host
@@ -45,7 +45,7 @@ def tool_report(workdir: str, probe_versions: bool) -> dict:
     if not sources:
         return {}
     versions = asyncio.run(plugins.tool_versions(workdir)) if probe_versions else {}
-    report_block: dict = {
+    report_block: dict[str, Any] = {
         "resolved": {
             name: {
                 "source": src,
@@ -62,7 +62,7 @@ def tool_report(workdir: str, probe_versions: bool) -> dict:
     return report_block
 
 
-def build_payload(run: Run, generated_at: str, policy: Policy) -> dict:
+def build_payload(run: Run, generated_at: str, policy: Policy) -> dict[str, Any]:
     """The machine-readable run record written to reports/<stem>.json."""
     return {
         "scope": run.scope.label,
@@ -96,12 +96,12 @@ def build_payload(run: Run, generated_at: str, policy: Policy) -> dict:
                 # trivy says `Target`. See gandalf/findings.py.
                 "findings": gfindings.annotate_all(r.findings, run.scope.workdir),
                 "category": report.category_of(r),
-                "blocking": getattr(r, "_blocking", False),
+                "blocking": plugins.meta(r, "blocking", False),
                 # True when the gate produced no signal about the code (tool not
                 # installed, timed out, judge unreachable, nothing in scope). Such
                 # gates are left out of `score` — see report.aggregate.
                 "unavailable": plugins.did_not_run(r),
-                "duration": getattr(r, "_duration", None),
+                "duration": plugins.meta(r, "duration"),
             }
             for r in run.results
         ],
@@ -117,9 +117,9 @@ def write_outputs(  # noqa: PLR0913
     *,
     results: list[GateResult],
     verdict: Verdict,
-    advice: dict,
-    meta_line: dict,
-    payload: dict,
+    advice: dict[str, Any],
+    meta_line: dict[str, Any],
+    payload: dict[str, Any],
 ) -> None:
     """Write JSON (always) + optional HTML / SARIF / PR-comment artifacts."""
     # Always emit a JSON file for CI to parse. Dumped straight to the file

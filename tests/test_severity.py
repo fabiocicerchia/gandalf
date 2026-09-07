@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from gandalf import severity as sv
 from gandalf.base import GateOutcome, GateResult
+from gandalf.plugins import mark, meta
 
 
 def test_of_across_tool_shapes() -> None:
@@ -16,6 +17,8 @@ def test_of_across_tool_shapes() -> None:
 def test_score_orders_by_severity() -> None:
     one_crit = sv.score([{"Severity": "CRITICAL"}])
     five_low = sv.score([{"severity": "LOW"}] * 5)
+    assert one_crit is not None
+    assert five_low is not None
     assert one_crit < five_low  # a single critical hurts more than five lows
     assert sv.score([{"Severity": "CRITICAL"}] * 3) == 0.0  # floors
     assert sv.score([{"code": "E501"}]) is None  # no severities → caller keeps base
@@ -29,11 +32,11 @@ def test_reweight_preserves_outcome_and_untouched_gates() -> None:
         "x",
         [{"Severity": "CRITICAL"}, {"Severity": "LOW"}],
     )
-    r._blocking = True
+    mark(r, blocking=True)
     out = sv.reweight(r)
     assert out.outcome is GateOutcome.WARN  # RAG unchanged
     assert out.score < 0.9
-    assert out._blocking is True  # score weighted, flags kept
+    assert meta(out, "blocking") is True  # score weighted, flags kept
     # a gate with no severities is returned unchanged
     r2 = GateResult("ruff", GateOutcome.FAIL, 0.3, "x", [{"code": "E501"}])
     assert sv.reweight(r2) is r2
