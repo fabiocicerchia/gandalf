@@ -6,8 +6,8 @@
  * otherwise a cancelled scan leaves a trivy orphaned onto the extension host,
  * still pinning a core minutes later.
  */
-import { spawn } from 'child_process';
-import * as vscode from 'vscode';
+import { spawn } from "child_process";
+import * as vscode from "vscode";
 
 const MAX_OUTPUT_CHARS = 4 * 1024 * 1024;
 /** How long a signalled process group gets before it is killed outright. */
@@ -40,9 +40,9 @@ type Child = ReturnType<typeof spawn>;
  */
 function signalGroup(child: Child, sig: NodeJS.Signals): void {
   try {
-    if (process.platform === 'win32') {
+    if (process.platform === "win32") {
       // No process groups: taskkill's /T walks the child tree instead.
-      spawn('taskkill', ['/pid', String(child.pid), '/T', '/F']).unref();
+      spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"]).unref();
       return;
     }
     if (child.pid) process.kill(-child.pid, sig);
@@ -62,8 +62,8 @@ function signalGroup(child: Child, sig: NodeJS.Signals): void {
  * is true immediately and the escalation never fired.
  */
 function killGroup(child: Child, hasExited: () => boolean): void {
-  signalGroup(child, 'SIGTERM');
-  setTimeout(() => hasExited() || signalGroup(child, 'SIGKILL'), SIGKILL_AFTER_MS).unref?.();
+  signalGroup(child, "SIGTERM");
+  setTimeout(() => hasExited() || signalGroup(child, "SIGKILL"), SIGKILL_AFTER_MS).unref?.();
 }
 
 export function exec(command: string, args: string[], opts: ExecOptions): Promise<ExecResult> {
@@ -77,7 +77,7 @@ export function exec(command: string, args: string[], opts: ExecOptions): Promis
       child = spawn(command, args, {
         cwd: opts.cwd,
         env: opts.env,
-        detached: process.platform !== 'win32',
+        detached: process.platform !== "win32",
       });
     } catch (err) {
       reject(err);
@@ -115,29 +115,29 @@ export function exec(command: string, args: string[], opts: ExecOptions): Promis
     // sequence often enough on a big scan, and `buf.toString()` on each half
     // turns one `--stream` gate line into two unparsable ones. It also drops
     // the Buffer.concat of the whole output at the end.
-    child.stdout?.setEncoding('utf8');
-    child.stderr?.setEncoding('utf8');
-    child.stdout?.on('data', (s: string) => {
+    child.stdout?.setEncoding("utf8");
+    child.stderr?.setEncoding("utf8");
+    child.stdout?.on("data", (s: string) => {
       if (opts.collectStdout !== false && outChars < MAX_OUTPUT_CHARS) {
         out.push(s);
         outChars += s.length;
       }
       opts.onStdout?.(s);
     });
-    child.stderr?.on('data', (s: string) => {
+    child.stderr?.on("data", (s: string) => {
       if (errChars < MAX_OUTPUT_CHARS) {
         errOut.push(s);
         errChars += s.length;
       }
       opts.onStderr?.(s);
     });
-    child.on('error', (err) => {
+    child.on("error", (err) => {
       exited = true;
       finish(() => reject(err));
     });
-    child.on('exit', () => (exited = true));
-    child.on('close', (code) =>
-      finish(() => resolve({ code: code ?? -1, stdout: out.join(''), stderr: errOut.join('') })),
+    child.on("exit", () => (exited = true));
+    child.on("close", (code) =>
+      finish(() => resolve({ code: code ?? -1, stdout: out.join(""), stderr: errOut.join("") })),
     );
   });
 }

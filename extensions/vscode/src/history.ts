@@ -29,17 +29,17 @@ export interface Commit {
  */
 export function parseTrend(text: string): Map<string, TrendEntry> {
   const out = new Map<string, TrendEntry>();
-  for (const line of text.split('\n')) {
-    if (!line.trim().startsWith('{')) continue;
+  for (const line of text.split("\n")) {
+    if (!line.trim().startsWith("{")) continue;
     try {
       const raw = JSON.parse(line) as Record<string, unknown>;
-      const commit = typeof raw.commit === 'string' ? raw.commit : '';
-      const score = typeof raw.score === 'number' ? raw.score : NaN;
+      const commit = typeof raw.commit === "string" ? raw.commit : "";
+      const score = typeof raw.score === "number" ? raw.score : NaN;
       if (!commit || Number.isNaN(score)) continue;
       out.set(commit, {
         commit,
         score,
-        at: typeof raw.generated_at === 'string' ? raw.generated_at : '',
+        at: typeof raw.generated_at === "string" ? raw.generated_at : "",
       });
     } catch {
       // A truncated final line is normal for an append-only log.
@@ -51,13 +51,13 @@ export function parseTrend(text: string): Map<string, TrendEntry> {
 /** `git log --format=%h%x1f%s%x1f%cs`, newest first. */
 export function parseLog(stdout: string): Commit[] {
   return stdout
-    .split('\n')
-    .map((line) => line.split('\x1f'))
+    .split("\n")
+    .map((line) => line.split("\x1f"))
     .filter((parts) => parts.length === 3 && parts[0])
     .map(([short, subject, date]) => ({ short, subject, date }));
 }
 
-const TICKS = '▁▂▃▄▅▆▇█';
+const TICKS = "▁▂▃▄▅▆▇█";
 
 /**
  * A score history as one line of text. A chart would mean a webview, and the
@@ -66,18 +66,16 @@ const TICKS = '▁▂▃▄▅▆▇█';
  * repository that sits in the eighties is within those eighties.
  */
 export function sparkline(scores: number[]): string {
-  if (scores.length === 0) return '';
+  if (scores.length === 0) return "";
   const low = Math.min(...scores);
   const high = Math.max(...scores);
   const span = high - low;
-  return scores
-    .map((s) => TICKS[span === 0 ? 0 : Math.round(((s - low) / span) * (TICKS.length - 1))])
-    .join('');
+  return scores.map((s) => TICKS[span === 0 ? 0 : Math.round(((s - low) / span) * (TICKS.length - 1))]).join("");
 }
 
 /** "+5", "-3", or "" for the first scored commit in the series. */
 export function delta(score: number, previous: number | undefined): string {
-  if (previous === undefined) return '';
+  if (previous === undefined) return "";
   const d = score - previous;
-  return d === 0 ? '±0' : d > 0 ? `+${d}` : `${d}`;
+  return d === 0 ? "±0" : d > 0 ? `+${d}` : `${d}`;
 }

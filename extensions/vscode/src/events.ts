@@ -10,16 +10,16 @@
  * they are picked out by their `{"event":` prefix and everything else is left
  * alone for the caller to read as before.
  */
-import { Outcome, RawFinding, RawGate } from './types';
+import { Outcome, RawFinding, RawGate } from "./types";
 
 export interface StartEvent {
-  event: 'start';
+  event: "start";
   scope: string;
   gates: number;
 }
 
 export interface GateEvent extends RawGate {
-  event: 'gate';
+  event: "gate";
   index: number;
   total: number;
 }
@@ -29,53 +29,53 @@ export type StreamEvent = StartEvent | GateEvent;
 const PREFIX = '{"event"';
 
 function isOutcome(v: unknown): v is Outcome {
-  return v === 'pass' || v === 'warn' || v === 'fail';
+  return v === "pass" || v === "warn" || v === "fail";
 }
 
 /** A number the gate reported, or the stand-in for "it did not say". */
 function num(value: unknown, fallback: number): number {
-  return typeof value === 'number' ? value : fallback;
+  return typeof value === "number" ? value : fallback;
 }
 
 function str(value: unknown, fallback: string): string {
-  return typeof value === 'string' ? value : fallback;
+  return typeof value === "string" ? value : fallback;
 }
 
 /** The one-line "here is what I am about to run" gandalf opens a stream with. */
 function toStartEvent(o: Record<string, unknown>): StartEvent | undefined {
-  if (typeof o.gates !== 'number') return undefined;
-  return { event: 'start', scope: String(o.scope ?? ''), gates: o.gates };
+  if (typeof o.gates !== "number") return undefined;
+  return { event: "start", scope: String(o.scope ?? ""), gates: o.gates };
 }
 
 /** One finished gate. A name and an outcome are what make it one. */
 function toGateEvent(o: Record<string, unknown>): GateEvent | undefined {
-  if (typeof o.name !== 'string' || !isOutcome(o.outcome)) return undefined;
+  if (typeof o.name !== "string" || !isOutcome(o.outcome)) return undefined;
   return {
-    event: 'gate',
+    event: "gate",
     index: num(o.index, 0),
     total: num(o.total, 0),
     name: o.name,
     outcome: o.outcome,
     score: num(o.score, 0),
-    summary: str(o.summary, ''),
+    summary: str(o.summary, ""),
     findings: Array.isArray(o.findings) ? (o.findings as RawFinding[]) : [],
-    category: typeof o.category === 'string' ? o.category : undefined,
+    category: typeof o.category === "string" ? o.category : undefined,
     blocking: o.blocking === true,
-    duration: typeof o.duration === 'number' ? o.duration : null,
+    duration: typeof o.duration === "number" ? o.duration : null,
   };
 }
 
 /** Validate rather than trust: a malformed line must not poison the pane. */
 function toEvent(parsed: unknown): StreamEvent | undefined {
-  if (!parsed || typeof parsed !== 'object') return undefined;
+  if (!parsed || typeof parsed !== "object") return undefined;
   const o = parsed as Record<string, unknown>;
-  if (o.event === 'start') return toStartEvent(o);
-  if (o.event === 'gate') return toGateEvent(o);
+  if (o.event === "start") return toStartEvent(o);
+  if (o.event === "gate") return toGateEvent(o);
   return undefined;
 }
 
 export class EventParser {
-  private tail = '';
+  private tail = "";
 
   /**
    * Feed a chunk of stdout. Returns the complete events it contained, and the
@@ -84,8 +84,8 @@ export class EventParser {
    * the whole thing in memory twice for the sake of two path lines at the end.
    */
   feed(chunk: string): { events: StreamEvent[]; text: string } {
-    const lines = (this.tail + chunk).split('\n');
-    this.tail = lines.pop() ?? '';
+    const lines = (this.tail + chunk).split("\n");
+    this.tail = lines.pop() ?? "";
     const events: StreamEvent[] = [];
     const text: string[] = [];
     for (const line of lines) {
@@ -103,13 +103,13 @@ export class EventParser {
         text.push(line);
       }
     }
-    return { events, text: text.length ? text.join('\n') + '\n' : '' };
+    return { events, text: text.length ? text.join("\n") + "\n" : "" };
   }
 
   /** Whatever was left unterminated when the process exited. */
   flush(): string {
     const rest = this.tail;
-    this.tail = '';
+    this.tail = "";
     return rest;
   }
 }

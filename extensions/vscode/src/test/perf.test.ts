@@ -13,24 +13,24 @@
  *
  * Run with `npm test`.
  */
-import * as assert from 'node:assert/strict';
-import * as fs from 'node:fs';
-import * as os from 'node:os';
-import * as path from 'node:path';
-import { after, before, describe, it } from 'node:test';
+import * as assert from "node:assert/strict";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { after, before, describe, it } from "node:test";
 
-import { DiagnosticPublisher } from '../diagnostics';
-import { FindingsView } from '../findingsView';
-import { compareFindings, normalize, normalizeGate, pathCache } from '../parse';
-import { ResultStore } from '../store';
-import { Finding, Payload, RawFinding, RawGate, Snapshot } from '../types';
-import { diagnosticCollections, quickPick, workspace } from './vscode-shim';
+import { DiagnosticPublisher } from "../diagnostics";
+import { FindingsView } from "../findingsView";
+import { compareFindings, normalize, normalizeGate, pathCache } from "../parse";
+import { ResultStore } from "../store";
+import { Finding, Payload, RawFinding, RawGate, Snapshot } from "../types";
+import { diagnosticCollections, quickPick, workspace } from "./vscode-shim";
 
-let root = '';
-const folder = { uri: { fsPath: '', toString: () => '' }, name: 'repo', index: 0 };
+let root = "";
+const folder = { uri: { fsPath: "", toString: () => "" }, name: "repo", index: 0 };
 
 before(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'gandalf-perf-'));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), "gandalf-perf-"));
   folder.uri = { fsPath: root, toString: () => `file://${root}` };
   workspace.workspaceFolders = [folder as never];
 });
@@ -42,7 +42,7 @@ function realFiles(n: number): string[] {
   for (let i = 0; i < n; i += 1) {
     const rel = `src/mod${i}/file${i}.py`;
     fs.mkdirSync(path.join(root, path.dirname(rel)), { recursive: true });
-    fs.writeFileSync(path.join(root, rel), 'x = 1\n');
+    fs.writeFileSync(path.join(root, rel), "x = 1\n");
     made.push(rel);
   }
   return made;
@@ -51,18 +51,18 @@ function realFiles(n: number): string[] {
 function gate(name: string, findings: RawFinding[]): RawGate {
   return {
     name,
-    outcome: 'warn',
+    outcome: "warn",
     score: 0.5,
     summary: `${name}: ${findings.length}`,
     findings,
-    category: 'Code quality',
+    category: "Code quality",
   };
 }
 
 function payloadOf(gates: RawGate[]): Payload {
   return {
-    scope: 'working-tree',
-    verdict: 'warn',
+    scope: "working-tree",
+    verdict: "warn",
     score: 50,
     skipped_gates: [],
     disabled_gates: [],
@@ -76,9 +76,9 @@ function snapshotOf(findings: Finding[], gates: RawGate[]): Snapshot {
     findings,
     blocked: [],
     inapplicable: [],
-    jsonPath: '',
-    htmlPath: '',
-    scope: 'working-tree',
+    jsonPath: "",
+    htmlPath: "",
+    scope: "working-tree",
     at: 0,
   };
 }
@@ -101,9 +101,9 @@ class CountingStore extends ResultStore {
   }
 }
 
-describe('performance invariants', () => {
-  describe('normalizing', () => {
-    it('resolves each distinct path once, not once per finding', () => {
+describe("performance invariants", () => {
+  describe("normalizing", () => {
+    it("resolves each distinct path once, not once per finding", () => {
       const files = realFiles(20);
       // 20 files, 10 findings each: 200 findings over 20 distinct paths.
       const gates = files.map((rel, i) =>
@@ -116,35 +116,35 @@ describe('performance invariants', () => {
       const findings = normalize(payloadOf(gates), root, cache);
 
       assert.equal(findings.length, 200);
-      assert.equal(cache.resolutions, files.length, 'one filesystem resolution per distinct path');
+      assert.equal(cache.resolutions, files.length, "one filesystem resolution per distinct path");
     });
 
-    it('shares the cache across gates, which is how a streamed run normalizes', () => {
+    it("shares the cache across gates, which is how a streamed run normalizes", () => {
       const [rel] = realFiles(1);
       const cache = new CountingCache();
       // Streaming hands gates over one at a time; a fresh cache per gate would
       // re-stat paths an earlier gate already resolved.
-      for (const name of ['ruff', 'mypy', 'semgrep']) {
-        normalizeGate(gate(name, [{ path: rel, line: 1, message: 'x' }]), root, cache);
+      for (const name of ["ruff", "mypy", "semgrep"]) {
+        normalizeGate(gate(name, [{ path: rel, line: 1, message: "x" }]), root, cache);
       }
-      assert.equal(cache.resolutions, 1, 'the second and third gate hit the cache');
+      assert.equal(cache.resolutions, 1, "the second and third gate hit the cache");
     });
 
-    it('places an unresolvable path once too, instead of re-statting it', () => {
+    it("places an unresolvable path once too, instead of re-statting it", () => {
       const cache = new CountingCache();
-      const findings = Array.from({ length: 50 }, () => ({ path: 'gone/missing.py', message: 'x' }));
-      normalizeGate(gate('ghost', findings), root, cache);
-      assert.equal(cache.resolutions, 1, 'a miss is cached as hard as a hit');
+      const findings = Array.from({ length: 50 }, () => ({ path: "gone/missing.py", message: "x" }));
+      normalizeGate(gate("ghost", findings), root, cache);
+      assert.equal(cache.resolutions, 1, "a miss is cached as hard as a hit");
     });
   });
 
-  describe('the findings pane', () => {
+  describe("the findings pane", () => {
     /** Wire a pane up to a store holding `count` findings and paint it once. */
     function paneOver(count: number): { view: FindingsView; store: CountingStore } {
       const files = realFiles(count);
       const g = gate(
-        'ruff',
-        files.map((rel, i) => ({ path: rel, line: i + 1, message: `finding ${i}`, severity: 'high' })),
+        "ruff",
+        files.map((rel, i) => ({ path: rel, line: i + 1, message: `finding ${i}`, severity: "high" })),
       );
       const findings = normalizeGate(g, root, pathCache());
       const store = new CountingStore();
@@ -155,7 +155,7 @@ describe('performance invariants', () => {
       return { view, store };
     }
 
-    it('walks the board once per repaint, not once per thing that reads it', () => {
+    it("walks the board once per repaint, not once per thing that reads it", () => {
       const { view, store } = paneOver(12);
       view.refresh();
       // The chrome and the tree are two readers of one list — three when the
@@ -167,7 +167,7 @@ describe('performance invariants', () => {
       view.dispose();
     });
 
-    it('walks it again after a refresh, so the pane is never stale', () => {
+    it("walks it again after a refresh, so the pane is never stale", () => {
       const { view, store } = paneOver(6);
       view.refresh();
       view.getChildren();
@@ -175,30 +175,30 @@ describe('performance invariants', () => {
 
       view.refresh();
       view.getChildren();
-      assert.ok(store.walks > afterFirst, 'a refresh must re-read, memo or no memo');
+      assert.ok(store.walks > afterFirst, "a refresh must re-read, memo or no memo");
       view.dispose();
     });
 
-    it('counts every level and severity in a single pass', async () => {
+    it("counts every level and severity in a single pass", async () => {
       const { view } = paneOver(4);
       quickPick.answer = undefined; // Cancel the picker; the tallies are the point.
       await view.pickFilters();
 
       const items = quickPick.lastItems as { label: string; description?: string }[];
-      const high = items.find((i) => i.label === 'High');
-      const errors = items.find((i) => i.label === 'Errors');
-      assert.equal(high?.description, '4', 'every finding is HIGH');
-      assert.equal(errors?.description, '4', 'and HIGH squiggles as an error');
+      const high = items.find((i) => i.label === "High");
+      const errors = items.find((i) => i.label === "Errors");
+      assert.equal(high?.description, "4", "every finding is HIGH");
+      assert.equal(errors?.description, "4", "and HIGH squiggles as an error");
       view.dispose();
     });
   });
 
-  describe('diagnostics', () => {
-    it('writes the collection once, however many files have findings', () => {
+  describe("diagnostics", () => {
+    it("writes the collection once, however many files have findings", () => {
       const files = realFiles(30);
       const g = gate(
-        'ruff',
-        files.map((rel) => ({ path: rel, line: 1, message: 'x', severity: 'high' })),
+        "ruff",
+        files.map((rel) => ({ path: rel, line: 1, message: "x", severity: "high" })),
       );
       const findings = normalizeGate(g, root, pathCache());
 
@@ -207,11 +207,11 @@ describe('performance invariants', () => {
       publisher.publish([
         {
           findings,
-          settings: { diagnosticsEnabled: true, minSeverity: 'info' } as never,
+          settings: { diagnosticsEnabled: true, minSeverity: "info" } as never,
         },
       ]);
 
-      assert.equal(collection.entries.size, files.length, 'every file got its diagnostics');
+      assert.equal(collection.entries.size, files.length, "every file got its diagnostics");
       assert.equal(collection.setCalls, 1, `one bulk write, saw ${collection.setCalls}`);
       publisher.dispose();
     });
@@ -225,8 +225,8 @@ describe('performance invariants', () => {
    * ever becomes quadratic. The bound is deliberately absurd so that a slow,
    * loaded or cold CI runner can never trip it on its own.
    */
-  describe('complexity tripwire', () => {
-    it('normalizes, merges and sorts 20k findings well inside a loose bound', { timeout: 15_000 }, () => {
+  describe("complexity tripwire", () => {
+    it("normalizes, merges and sorts 20k findings well inside a loose bound", { timeout: 15_000 }, () => {
       const gates = Array.from({ length: 40 }, (_, g) =>
         gate(
           `gate${g}`,
@@ -234,7 +234,7 @@ describe('performance invariants', () => {
             path: `src/mod${i % 200}/file${i % 200}.py`,
             line: (i % 400) + 1,
             message: `finding ${g}-${i}`,
-            severity: ['critical', 'high', 'medium', 'low', 'info'][i % 5],
+            severity: ["critical", "high", "medium", "low", "info"][i % 5],
           })),
         ),
       );

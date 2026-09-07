@@ -8,8 +8,8 @@
  * CSP, and a bridge that seeds its light/dark toggle from the editor theme and
  * hands external links to the editor.
  */
-import * as fs from 'fs';
-import * as vscode from 'vscode';
+import * as fs from "fs";
+import * as vscode from "vscode";
 
 const BRIDGE = `
 (function(){
@@ -39,12 +39,12 @@ function adapt(html: string, webview: vscode.Webview): string {
     `style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src ${webview.cspSource} data:;">`;
   return html
     .replace('<meta charset="utf-8">', `<meta charset="utf-8">${csp}`)
-    .replace('</body>', `<script>${BRIDGE}</script></body>`);
+    .replace("</body>", `<script>${BRIDGE}</script></body>`);
 }
 
 export class ReportView {
   private panel?: vscode.WebviewPanel;
-  private lastPath = '';
+  private lastPath = "";
   /** A newer report landed while the tab was hidden; it repaints on return. */
   private stale = false;
 
@@ -67,8 +67,8 @@ export class ReportView {
     this.lastPath = htmlPath;
     if (!this.panel) {
       this.panel = vscode.window.createWebviewPanel(
-        'gandalf.report',
-        'Gandalf report',
+        "gandalf.report",
+        "Gandalf report",
         { viewColumn: vscode.ViewColumn.Active, preserveFocus: false },
         { enableScripts: true, enableFindWidget: true, retainContextWhenHidden: true },
       );
@@ -77,7 +77,7 @@ export class ReportView {
         if (this.panel?.visible && this.stale) void this.load(this.lastPath);
       });
       this.panel.webview.onDidReceiveMessage((msg: { type: string; href?: string }) => {
-        if (msg.type === 'open' && msg.href) void vscode.env.openExternal(vscode.Uri.parse(msg.href));
+        if (msg.type === "open" && msg.href) void vscode.env.openExternal(vscode.Uri.parse(msg.href));
       });
     }
     this.panel.title = `Gandalf — ${title}`;
@@ -88,7 +88,7 @@ export class ReportView {
   private async load(htmlPath: string): Promise<void> {
     if (!this.panel || !htmlPath) return;
     this.stale = false;
-    const html = await fs.promises.readFile(htmlPath, 'utf8');
+    const html = await fs.promises.readFile(htmlPath, "utf8");
     this.panel.webview.html = adapt(html, this.panel.webview);
   }
 
