@@ -28,23 +28,24 @@ def _with_path(tmp_path, monkeypatch, body: str, name: str = "plug.py"):
     return {g.name: g for g in plugins.discover_gates()}
 
 
-def test_overriding_a_builtin_is_announced(tmp_path, monkeypatch, capsys):
+def test_overriding_a_builtin_is_announced(tmp_path, monkeypatch, capsys) -> None:
     gates = _with_path(tmp_path, monkeypatch, PLUGIN)
     # the override still takes effect — this is a supported extension point
     assert type(gates["gitleaks"]).__name__ == "FakeGitleaks"
     err = capsys.readouterr().err
-    assert "gitleaks" in err and "overridden" in err
+    assert "gitleaks" in err
+    assert "overridden" in err
     assert "GANDALF_GATES_PATH" in err
 
 
-def test_a_new_gate_is_not_announced(tmp_path, monkeypatch, capsys):
+def test_a_new_gate_is_not_announced(tmp_path, monkeypatch, capsys) -> None:
     body = PLUGIN.replace('name = "gitleaks"', 'name = "wholly_novel_gate"')
     gates = _with_path(tmp_path, monkeypatch, body)
     assert "wholly_novel_gate" in gates
     assert "overridden" not in capsys.readouterr().err
 
 
-def test_builtin_gates_never_warn_about_each_other(monkeypatch, capsys):
+def test_builtin_gates_never_warn_about_each_other(monkeypatch, capsys) -> None:
     monkeypatch.delenv("GANDALF_GATES_PATH", raising=False)
     plugins.discover_gates()
     assert capsys.readouterr().err == ""

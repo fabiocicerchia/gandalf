@@ -31,9 +31,7 @@ class LicensesGate:
     category = "Licensing"
 
     async def run(self, ctx: GateContext) -> GateResult:
-        if (
-            m := missing_result(self.name, "trivy", tool="licenses: trivy")
-        ) is not None:
+        if (m := missing_result(self.name, "trivy", tool="licenses: trivy")) is not None:
             return m
         rc, out, _ = await run_tool(
             [
@@ -61,9 +59,7 @@ class LicensesGate:
             return unavailable(self.name, "licenses: unparsable output")
         lic = _flagged(data)
         if not lic:
-            return GateResult(
-                self.name, GateOutcome.PASS, 1.0, "licenses: no problematic licenses"
-            )
+            return GateResult(self.name, GateOutcome.PASS, 1.0, "licenses: no problematic licenses")
         bad = [lc for lc in lic if lc.get("Severity") in ("CRITICAL", "HIGH")]
         findings = [
             {

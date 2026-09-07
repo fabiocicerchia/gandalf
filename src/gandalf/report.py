@@ -15,7 +15,7 @@ from .base import GateOutcome, GateResult
 from .plugins import did_not_run
 
 
-def fmt_finding(f) -> str:
+def fmt_finding(f: object) -> str:
     """One-line, human-readable rendering of a heterogeneous gate finding."""
     if not isinstance(f, dict):
         return str(f)[:500]
@@ -145,6 +145,27 @@ class Verdict:
     score: int  # 0..100 composite
 
 
+@dataclass(frozen=True, slots=True)
+class Run:
+    """Everything a finished run produced, in one record.
+
+    print_summary and build_payload were each taking the same eleven arguments
+    in a different order; the shape was already a thing, it just had no name.
+    """
+
+    scope: object  # Scope — untyped here to keep report.py free of the cycle
+    results: list[GateResult]
+    verdict: Verdict
+    advice: dict
+    detected: set[str]
+    skipped: list[str]
+    disabled: list[str]
+    fixes: list[tuple[str, bool, str]]
+    passed: bool
+    reason: str
+    tools: dict
+
+
 @dataclass
 class Policy:
     """How the RAG verdict maps to pass/fail (exit code). Defaults reproduce the
@@ -162,9 +183,7 @@ class Policy:
     ) -> Policy:
         raw = (cli_fail_on or section.get("fail_on") or "fail").lower()
         fail_on = GateOutcome.WARN if raw == "warn" else GateOutcome.FAIL
-        score = (
-            cli_min_score if cli_min_score is not None else section.get("min_score", 0)
-        )
+        score = cli_min_score if cli_min_score is not None else section.get("min_score", 0)
         try:
             score = max(0, min(100, int(score)))
         except (TypeError, ValueError):

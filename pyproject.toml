@@ -2,3 +2,58 @@
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+
+# ---------------------------------------------------------------- Ruff (FC-PY-001)
+[tool.ruff]
+line-length = 120           # FC-GEN-045
+# The oldest Python CI tests, not the newest. There is no `requires-python`
+# to infer from (this file is tooling config; gandalf is stdlib-only and
+# installs nothing), so it is pinned by hand to ci.yml's lowest matrix leg.
+# Pinning it higher lets UP rewrite the tree into syntax that leg cannot run.
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+  "E", "W", "F", "I", "N", "UP", "ANN", "ASYNC", "S", "B", "A", "C4", "DTZ",
+  "T20", "PT", "RET", "SIM", "PTH", "ERA", "TD", "FIX", "PLR2004", "TRY", "PL", "RUF",
+]
+ignore = [
+  "ANN401",      # Any in *args/**kwargs — FC-GEN-016's comment rule covers it
+  "TRY003",      # long messages inline; FC-GEN-022 wants them descriptive
+]
+
+# An en dash is deliberate typography in this prose, not a mistyped hyphen.
+allowed-confusables = ["–", "—", "·", "×"]
+
+[tool.ruff.lint.flake8-annotations]
+mypy-init-return = true
+
+[tool.ruff.lint.per-file-ignores]
+# assert is the point; a magic number in a fixture is the fixture; "/tmp" is a
+# stand-in workdir, not a temp file; and a test that shells out to git is
+# testing the thing that shells out to git.
+"tests/**" = [
+  "S101",     # assert is the point
+  "ANN",      # a fixture's type is obvious from the fixture
+  "PLR2004",  # a magic number in a fixture is the fixture
+  "S108",     # "/tmp" here is a stand-in workdir, not a temp file
+  "S603",     # a test for the thing that shells out has to shell out
+  "S607",
+  "PLC0415",  # importing inside a test is how you patch before import
+  "S314",     # the XML is a literal in the test above it, not input
+]
+# One-off scripts: their stdout is the interface, and they drive git and node
+# by name the same way a developer would at a prompt.
+"scripts/**" = [
+  "S101",     # a benchmark's assert is its correctness check
+  "S603",     # drives git and node by name, as a developer would
+  "S607",
+  "PLC0415",  # optional imports behind a flag
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.format]
+quote-style = "double"
+docstring-code-format = true

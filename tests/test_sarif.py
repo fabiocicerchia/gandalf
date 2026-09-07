@@ -50,20 +50,22 @@ def _doc():
     return sarif.to_sarif(_RESULTS, {})
 
 
-def test_shape_and_serializable():
+def test_shape_and_serializable() -> None:
     doc = _doc()
-    assert doc["version"] == "2.1.0" and doc["$schema"].endswith("sarif-2.1.0.json")
+    assert doc["version"] == "2.1.0"
+    assert doc["$schema"].endswith("sarif-2.1.0.json")
     json.dumps(doc)  # must be JSON-serializable
 
 
-def test_rules_deduped_and_sorted():
+def test_rules_deduped_and_sorted() -> None:
     ids = [r["id"] for r in _doc()["runs"][0]["tool"]["driver"]["rules"]]
     assert ids == sorted(ids)
     # go_build is absent for the reason in test_results_without_a_location_are_left_out.
-    assert "ruff/E501" in ids and "ruff/F401" in ids
+    assert "ruff/E501" in ids
+    assert "ruff/F401" in ids
 
 
-def test_levels_and_locations():
+def test_levels_and_locations() -> None:
     results = _doc()["runs"][0]["results"]
     by_rule = {}
     for r in results:
@@ -74,7 +76,8 @@ def test_levels_and_locations():
     e501 = by_rule["ruff/E501"]
     assert e501["level"] == "error"
     loc = e501["locations"][0]["physicalLocation"]
-    assert loc["artifactLocation"]["uri"] == "a.py" and loc["region"]["startLine"] == 12
+    assert loc["artifactLocation"]["uri"] == "a.py"
+    assert loc["region"]["startLine"] == 12
     # A failing gate with no findings does NOT surface here. It has no file to
     # attach an alert to, and Code Scanning rejects the entire upload — every
     # alert in the run — over a single locationless result:
@@ -83,12 +86,12 @@ def test_levels_and_locations():
     assert "go_build" not in by_rule
 
 
-def test_passing_gate_emits_nothing():
+def test_passing_gate_emits_nothing() -> None:
     ids = {r["ruleId"] for r in _doc()["runs"][0]["results"]}
     assert "gitleaks" not in ids
 
 
-def test_results_without_a_location_are_left_out():
+def test_results_without_a_location_are_left_out() -> None:
     # Nothing locationless may reach the file: one such result makes GitHub
     # reject the upload wholesale, which is how a single repo-level finding
     # used to lose every alert in the run.
@@ -100,14 +103,14 @@ def test_results_without_a_location_are_left_out():
     assert "go_build" not in ids  # FAIL, no findings
 
 
-def test_the_count_of_dropped_findings_is_recorded():
+def test_the_count_of_dropped_findings_is_recorded() -> None:
     # Dropped, not disappeared: the number is in the file so "why is this not
     # an alert?" has an answer without reading the source.
     run = _doc()["runs"][0]
     assert run["properties"]["gandalf/findingsWithoutLocation"] >= 1
 
 
-def test_security_severity_on_rules():
+def test_security_severity_on_rules() -> None:
     rules = {r["id"]: r for r in _doc()["runs"][0]["tool"]["driver"]["rules"]}
     # every rule carries a numeric security-severity so GitHub can rank the alert
     for r in rules.values():
@@ -118,24 +121,23 @@ def test_security_severity_on_rules():
     )
 
 
-def test_partial_fingerprints_present_and_stable():
+def test_partial_fingerprints_present_and_stable() -> None:
     results = _doc()["runs"][0]["results"]
     for r in results:
         assert r["partialFingerprints"]["gandalf/v1"]
     # stable across runs (same inputs → same fingerprint)
     again = {
-        r["ruleId"]: r["partialFingerprints"]["gandalf/v1"]
-        for r in sarif.to_sarif(_RESULTS, {})["runs"][0]["results"]
+        r["ruleId"]: r["partialFingerprints"]["gandalf/v1"] for r in sarif.to_sarif(_RESULTS, {})["runs"][0]["results"]
     }
     first = {r["ruleId"]: r["partialFingerprints"]["gandalf/v1"] for r in results}
     assert first == again
 
 
-def test_automation_details_category():
+def test_automation_details_category() -> None:
     assert _doc()["runs"][0]["automationDetails"]["id"] == "gandalf"
 
 
-def test_paths_made_repo_relative():
+def test_paths_made_repo_relative() -> None:
     # Absolute / container-mount paths get rebased to repo-relative via meta.workdir.
     res = GateResult(
         "ruff",
@@ -145,9 +147,7 @@ def test_paths_made_repo_relative():
         [{"filename": "/src/pkg/a.py", "code": "E501", "message": "x", "line": 5}],
     )
     doc = sarif.to_sarif([res], {"workdir": "/src"})
-    uri = doc["runs"][0]["results"][0]["locations"][0]["physicalLocation"][
-        "artifactLocation"
-    ]["uri"]
+    uri = doc["runs"][0]["results"][0]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
     assert uri == "pkg/a.py"
 
 
@@ -162,10 +162,9 @@ if __name__ == "__main__":
     test_partial_fingerprints_present_and_stable()
     test_automation_details_category()
     test_paths_made_repo_relative()
-    print("ok")
 
 
-def test_bandit_findings_are_identified_by_test_id():
+def test_bandit_findings_are_identified_by_test_id() -> None:
     # bandit's `code` is the offending source snippet. Reading it as the rule
     # id produced a multi-line, 400-character id, and Code Scanning rejects the
     # whole upload over one id past 255 characters.
@@ -186,13 +185,11 @@ def test_bandit_findings_are_identified_by_test_id():
             ],
         )
     ]
-    ids = [
-        r["id"] for r in sarif.to_sarif(res, {})["runs"][0]["tool"]["driver"]["rules"]
-    ]
+    ids = [r["id"] for r in sarif.to_sarif(res, {})["runs"][0]["tool"]["driver"]["rules"]]
     assert ids == ["bandit/B607"]
 
 
-def test_over_long_rule_ids_are_truncated_and_stay_distinct():
+def test_over_long_rule_ids_are_truncated_and_stay_distinct() -> None:
     res = [
         GateResult(
             "tool",
@@ -205,8 +202,6 @@ def test_over_long_rule_ids_are_truncated_and_stay_distinct():
             ],
         )
     ]
-    ids = [
-        r["id"] for r in sarif.to_sarif(res, {})["runs"][0]["tool"]["driver"]["rules"]
-    ]
+    ids = [r["id"] for r in sarif.to_sarif(res, {})["runs"][0]["tool"]["driver"]["rules"]]
     assert len(ids) == 2, "two distinct ids must not collapse into one rule"
     assert all(len(i) <= 255 for i in ids)

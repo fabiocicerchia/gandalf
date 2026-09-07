@@ -40,9 +40,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     grp = ap.add_mutually_exclusive_group()
     grp.add_argument("--commit", metavar="SHA", help="evaluate a specific commit")
-    grp.add_argument(
-        "--staged", action="store_true", help="evaluate staged changes only"
-    )
+    grp.add_argument("--staged", action="store_true", help="evaluate staged changes only")
     ap.add_argument(
         "--path",
         metavar="DIR",
@@ -59,8 +57,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument(
         "--no-trend",
         action="store_true",
-        help="don't append this run to .gandalf-trend.jsonl (the score delta is "
-        "still read from it)",
+        help="don't append this run to .gandalf-trend.jsonl (the score delta is still read from it)",
     )
     ap.add_argument(
         "--sarif",
@@ -103,9 +100,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="OWNER/REPO",
         help="repo for --pr (default: $GITHUB_REPOSITORY)",
     )
-    ap.add_argument(
-        "--json", action="store_true", help="also print machine-readable JSON"
-    )
+    ap.add_argument("--json", action="store_true", help="also print machine-readable JSON")
     ap.add_argument(
         "--stream",
         action="store_true",
@@ -133,12 +128,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="permit dynamic scans against a non-localhost --target",
     )
     ap.add_argument("--title", help="request title for the compliance gate")
-    ap.add_argument(
-        "--body", help="request body / acceptance criteria for the compliance gate"
-    )
-    ap.add_argument(
-        "--config", metavar="PATH", help="path to a .gandalf.toml (default: repo root)"
-    )
+    ap.add_argument("--body", help="request body / acceptance criteria for the compliance gate")
+    ap.add_argument("--config", metavar="PATH", help="path to a .gandalf.toml (default: repo root)")
     ap.add_argument(
         "--exclude",
         action="append",
@@ -185,14 +176,12 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument(
         "--explain-score",
         action="store_true",
-        help="show how the composite score was arrived at: every gate that "
-        "counted, its score, and what it contributed",
+        help="show how the composite score was arrived at: every gate that counted, its score, and what it contributed",
     )
     ap.add_argument(
         "--tool-versions",
         action="store_true",
-        help="probe the version of every scanner that ran and record it in the "
-        "report (one extra subprocess per tool)",
+        help="probe the version of every scanner that ran and record it in the report (one extra subprocess per tool)",
     )
     ap.add_argument(
         "--cache",

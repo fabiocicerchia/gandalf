@@ -81,9 +81,7 @@ class RubocopGate(ToolchainGate):
     binary = "rubocop"
 
     async def check(self, ctx: GateContext, root: str) -> GateResult:
-        rc, out, err = await run_tool(
-            ["rubocop", "--format", "json", "--no-color", "--force-exclusion"], root
-        )
+        rc, out, err = await run_tool(["rubocop", "--format", "json", "--no-color", "--force-exclusion"], root)
         if (to := timeout_result(self.name, rc)) is not None:
             return to
         data = parsed(out)
@@ -127,13 +125,9 @@ class BundlerAuditGate(ToolchainGate):
         combined = (out or "") + (err or "")
         advisories = [ln for ln in combined.splitlines() if ln.startswith("Name: ")]
         if rc == 0:
-            return GateResult(
-                self.name, GateOutcome.PASS, 1.0, "bundler-audit: no known advisories"
-            )
+            return GateResult(self.name, GateOutcome.PASS, 1.0, "bundler-audit: no known advisories")
         if not advisories:
-            return unavailable(
-                self.name, f"bundler-audit: did not run — {tail(combined, 2)}"
-            )
+            return unavailable(self.name, f"bundler-audit: did not run — {tail(combined, 2)}")
         n = len(advisories)
         score = max(0.0, 1.0 - min(n, 10) / 10)
         return GateResult(
@@ -166,9 +160,7 @@ class RubyTestGate(ToolchainGate):
                 fail_re=r"^\s*\d+\)\s",
             )
         if not (Path(root) / "Rakefile").is_file():
-            return GateResult(
-                self.name, GateOutcome.PASS, 1.0, "ruby: no spec/ and no Rakefile"
-            )
+            return GateResult(self.name, GateOutcome.PASS, 1.0, "ruby: no spec/ and no Rakefile")
         if tool_missing("rake"):
             return self.missing("rake")
         return await exit_code(

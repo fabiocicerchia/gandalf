@@ -32,6 +32,11 @@ from . import findings as gfindings
 MAX_LINES = 40
 
 
+# Beyond the BMP a character costs two UTF-16 units, which is what the
+# GitHub suggestion API counts.
+BMP_MAX = 0xFFFF
+
+
 @dataclass(frozen=True)
 class Edit:
     """One replacement, in the coordinate system every tool here reports in:
@@ -45,7 +50,7 @@ class Edit:
     text: str
 
 
-def _int(v) -> int:
+def _int(v: object) -> int:
     """A coordinate as an int, or 0 — tools disagree on int vs digit-string."""
     if isinstance(v, bool):
         return 0
@@ -56,7 +61,7 @@ def _int(v) -> int:
     return 0
 
 
-def _dict(obj, key) -> dict:
+def _dict(obj: object, key: str) -> dict:
     v = obj.get(key) if isinstance(obj, dict) else None
     return v if isinstance(v, dict) else {}
 
@@ -162,9 +167,7 @@ def _codespell(f: dict, lines: list[str]) -> list[Edit]:
     src = lines[ln - 1]
     # Word-boundary so a misspelling inside a longer word is left alone, and one
     # occurrence only: codespell reports each hit separately.
-    swapped, n = re.subn(
-        rf"\b{re.escape(typo)}\b", fixed.replace("\\", "\\\\"), src, count=1
-    )
+    swapped, n = re.subn(rf"\b{re.escape(typo)}\b", fixed.replace("\\", "\\\\"), src, count=1)
     if n != 1 or swapped == src:
         return []
     return [Edit(ln, 1, ln, len(src) + 1, swapped)]
@@ -198,10 +201,7 @@ def _sane(e: Edit, lines: list[str]) -> bool:
         return False
     if not (1 <= e.start_line <= len(lines) and 1 <= e.end_line <= len(lines)):
         return False
-    return (
-        e.start_col <= len(lines[e.start_line - 1]) + 1
-        and e.end_col <= len(lines[e.end_line - 1]) + 1
-    )
+    return e.start_col <= len(lines[e.start_line - 1]) + 1 and e.end_col <= len(lines[e.end_line - 1]) + 1
 
 
 def _clamp(e: Edit, lines: list[str]) -> Edit:
@@ -318,7 +318,7 @@ def _from_utf16(source: str, offset: int, astral: bool) -> int | None:
     for i, ch in enumerate(source):
         if units == offset:
             return i
-        units += 2 if ord(ch) > 0xFFFF else 1
+        units += 2 if ord(ch) > BMP_MAX else 1
     return len(source) if units == offset else None
 
 

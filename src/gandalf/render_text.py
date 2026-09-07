@@ -28,7 +28,7 @@ _BANNER = {
 }
 
 
-def render_terminal(
+def render_terminal(  # noqa: PLR0912 — one branch per gate outcome; collapsing them would hide the mapping
     label: str,
     results: list[GateResult],
     verdict: Verdict,
@@ -50,10 +50,7 @@ def render_terminal(
     if results and all(did_not_run(r) for r in results):
         # A score computed from gates that all declined to run is not a score.
         # Saying "AMBER · 0/100" here reads as "your code scored zero".
-        lines.append(
-            f"\n{_BANNER[GateOutcome.WARN]}  NOT RUN · no gate produced "
-            f"a result  {_RESET}"
-        )
+        lines.append(f"\n{_BANNER[GateOutcome.WARN]}  NOT RUN · no gate produced a result  {_RESET}")
     else:
         word = RAG[verdict.outcome][3]
         lines.append(
@@ -64,9 +61,7 @@ def render_terminal(
     # Gates grouped by category, each header coloured by its aggregate RAG + score.
     width = max((len(r.name) for r in results), default=4)
     for group in GROUP_ORDER:
-        members = sorted(
-            (r for r in results if category_of(r) == group), key=lambda r: r.name
-        )
+        members = sorted((r for r in results if category_of(r) == group), key=lambda r: r.name)
         if not members:
             continue
         gc, pct = group_outcome_and_pct(members)
@@ -79,17 +74,10 @@ def render_terminal(
                 # Deliberately not a traffic light: this gate reported nothing
                 # about the code, and an amber dot claims it did.
                 emoji, color = SKIP_EMOJI, _DIM
-            block = (
-                f" {_DIM}[blocking]{_RESET}" if getattr(r, "_blocking", False) else ""
-            )
-            lines.append(
-                f"  {emoji} {color}{r.name.ljust(width)}{_RESET}  {r.summary}{block}"
-            )
+            block = f" {_DIM}[blocking]{_RESET}" if getattr(r, "_blocking", False) else ""
+            lines.append(f"  {emoji} {color}{r.name.ljust(width)}{_RESET}  {r.summary}{block}")
     if n_skipped := sum(1 for r in results if did_not_run(r)):
-        lines.append(
-            f"\n{_DIM}{n_skipped} of {len(results)} gate(s) could not run "
-            f"— not counted in the score{_RESET}"
-        )
+        lines.append(f"\n{_DIM}{n_skipped} of {len(results)} gate(s) could not run — not counted in the score{_RESET}")
     outcome_of = {r.name: r.outcome for r in results}
     sev_order = {GateOutcome.FAIL: 0, GateOutcome.WARN: 1, GateOutcome.PASS: 2}
     for header in ("summary", "changeset", "remediation", "improvement"):
@@ -113,10 +101,7 @@ def _score_table(counted: list[GateResult], verdict: Verdict) -> list[str]:
         if raw is not None and round(raw, 3) != round(r.score, 3):
             note = f"  {_DIM}(gate scored {raw:.2f}, severity-weighted){_RESET}"
         emoji = RAG[r.outcome][0]
-        lines.append(
-            f"  {r.name.ljust(width)}  {r.score:5.2f}   "
-            f"{r.score / len(counted) * 100:9.1f}  {emoji}{note}"
-        )
+        lines.append(f"  {r.name.ljust(width)}  {r.score:5.2f}   {r.score / len(counted) * 100:9.1f}  {emoji}{note}")
     lines.append(
         f"  {_DIM}{'─' * (width + 24)}{_RESET}\n"
         f"  {len(counted)} gate(s) counted · mean "
@@ -139,16 +124,12 @@ def explain_score(results: list[GateResult], verdict: Verdict) -> str:
     skipped = [r for r in results if did_not_run(r)]
     lines = [f"\n{_BOLD}SCORE{_RESET}  {verdict.score}/100"]
     if not counted:
-        lines.append(
-            f"  {_DIM}no gate produced a result — there is nothing to average{_RESET}"
-        )
+        lines.append(f"  {_DIM}no gate produced a result — there is nothing to average{_RESET}")
         return "\n".join(lines)
     lines += _score_table(counted, verdict)
     if skipped:
         names = ", ".join(sorted(r.name for r in skipped))
-        lines.append(
-            f"  {_DIM}{len(skipped)} not counted (could not run): {names}{_RESET}"
-        )
+        lines.append(f"  {_DIM}{len(skipped)} not counted (could not run): {names}{_RESET}")
     return "\n".join(lines)
 
 
@@ -197,7 +178,7 @@ def setup_banner(results: list[GateResult], image_built: bool, has_docker: bool)
             "    make tools",
             "(the image is only ever checked for, never pulled)",
         ]
-    body = [head, ""] + fix
+    body = [head, "", *fix]
     if nothing_ran:
         body += ["", "Nothing was verified, so the score is not a quality signal."]
     rule = "─" * 66
