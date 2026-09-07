@@ -85,4 +85,8 @@ root = "tests"
 reportPrivateUsage = false
 # An autouse fixture is called by pytest, by decoration, and never by name.
 reportUnusedFunction = false
-extraPaths = ["../src"]
+# Relative to the PROJECT root, not to `root` above -- "../src" pointed one
+# level outside the repository, so every `from gandalf import ...` in the
+# tests resolved to nothing and strict mode reported the fallout as ~1300
+# unknown types.
+extraPaths = ["src"]
