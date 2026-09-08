@@ -342,6 +342,11 @@ def main(argv: list[str] | None = None) -> int:
     """
     args = build_parser().parse_args(argv)
 
+    # Before anything prints: under --json the payload owns stdout, so the
+    # scorecard and the report paths go to stderr and what a caller reads back
+    # parses on its own.
+    console.divert_human_output(to_stderr=args.json)
+
     if args.debug:
         debug.enable()
 

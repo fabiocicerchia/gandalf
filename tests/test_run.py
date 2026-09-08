@@ -321,6 +321,35 @@ def test_payload_gates_carry_their_category(tmp_path: Path, monkeypatch: pytest.
     assert [g["category"] for g in payload["gates"]] == ["Build & tests"]
 
 
+def test_json_leaves_only_the_payload_on_stdout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """--json is for piping: a scorecard on stdout makes it unparseable."""
+    repo = _mkrepo(tmp_path)
+    monkeypatch.chdir(repo)
+    out = tmp_path / "artifacts"
+
+    args = ["--no-llm", "--no-trend", "--no-html", "--out-dir", str(out), "--json"]
+    assert main([*args]) == 0
+
+    cap = capsys.readouterr()
+    assert json.loads(cap.out)["verdict"] == "pass"  # stdout parses whole
+    assert "JSON report:" in cap.err  # the human lines moved aside
+
+
+def test_without_json_the_scorecard_stays_on_stdout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The diversion is --json's alone — and must not leak into the next run."""
+    repo = _mkrepo(tmp_path)
+    monkeypatch.chdir(repo)
+    out = tmp_path / "artifacts"
+
+    assert main(["--no-llm", "--no-trend", "--no-html", "--out-dir", str(out)]) == 0
+
+    assert "JSON report:" in capsys.readouterr().out
+
+
 # --- --fix: what a fixer actually changed ---------------------------------------
 # A fixer's own account of its work is whatever its tool prints, and several of
 # them print nothing useful (eslint) or exit non-zero on a successful run. The
