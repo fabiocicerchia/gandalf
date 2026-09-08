@@ -3,8 +3,8 @@
  *
  * gandalf is pure-stdlib Python with no install step, so "where is it" has
  * several legitimate answers: `gandalf.path` (a wrapper or a checkout), a
- * checkout in the open workspace, `gandalf` on PATH, or the clone `install.sh`
- * drops in `~/.local/share/gandalf`. All are tried, in that order, and the
+ * checkout in the open workspace, `gandalf` on PATH, or a clone kept in
+ * `~/.local/share/gandalf`. All are tried, in that order, and the
  * winner is asked what flags it takes before anything is run through it.
  */
 import * as fs from "fs";
@@ -20,7 +20,9 @@ export class GandalfNotFoundError extends Error {}
 
 /** The one-liner from the README — kept here so the notification can run it. */
 export const INSTALL_COMMAND =
-  "curl -fsSL https://raw.githubusercontent.com/fabiocicerchia/gandalf/main/install.sh | bash";
+  "git clone https://github.com/fabiocicerchia/gandalf ~/.local/share/gandalf" +
+  " || git -C ~/.local/share/gandalf pull --ff-only;" +
+  " make -C ~/.local/share/gandalf install";
 
 const HELP_TIMEOUT_MS = 20_000;
 
@@ -149,7 +151,7 @@ function candidates(folder: vscode.WorkspaceFolder, s: Settings): Omit<Launcher,
     out.push({ command: onPath, args: [], env: { ...process.env }, label: `gandalf on PATH: ${onPath}`, checkout: "" });
   }
   const installed = path.join(os.homedir(), ".local", "share", "gandalf");
-  if (isCheckout(installed)) out.push(viaPython(installed, "install.sh clone"));
+  if (isCheckout(installed)) out.push(viaPython(installed, "~/.local/share/gandalf clone"));
   return out;
 }
 

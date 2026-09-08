@@ -122,11 +122,13 @@ make install                       # drops a wrapper in ~/.local/bin (on your PA
 make install BINDIR=/usr/local/bin # …or anywhere else
 ```
 
-Or the one-line installer (clones/updates a checkout under
-`~/.local/share/gandalf` and runs `make install`):
+Or, without a checkout to hand — clone into `~/.local/share/gandalf` and
+install from there (re-run the `git pull` line to update):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fabiocicerchia/gandalf/main/install.sh | bash
+git clone https://github.com/fabiocicerchia/gandalf ~/.local/share/gandalf
+git -C ~/.local/share/gandalf pull --ff-only   # to update an existing clone
+make -C ~/.local/share/gandalf install
 ```
 
 Pure-stdlib, so the "install" is just a one-line wrapper that runs this checkout

@@ -45,7 +45,7 @@ the extension — see
 
 The extension finds gandalf via `gandalf.path` (a wrapper or a checkout — either
 shape is recognised), the open workspace if it is a gandalf checkout, `gandalf`
-on `PATH`, or the `~/.local/share/gandalf` clone that `install.sh` creates — in
+on `PATH`, or a clone kept in `~/.local/share/gandalf` — in
 that order. Run **Gandalf: Check Environment** first: it reports whether
 gandalf, git, docker and the `gandalf-tools` image are present, and offers to
 build the image.
