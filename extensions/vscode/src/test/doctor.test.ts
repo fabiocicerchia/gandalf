@@ -135,8 +135,8 @@ describe("the environment report", () => {
     await runDoctor(folderAt(tmp), settings());
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0].kind, "error");
-    // Nothing piped into a shell — the offer clones and runs `make install`.
-    assert.match(notifications[0].message, /git clone .*gandalf.*make -C .*install/);
+    // One command, and nothing piped into a shell.
+    assert.match(notifications[0].message, /pipx install git\+https:\/\/github\.com\/\S*gandalf/);
     assert.doesNotMatch(notifications[0].message, /\|\s*(ba)?sh\b/);
     assert.deepEqual(notifications[0].actions, ["Install Gandalf", "Copy command", "Open settings"]);
   });

@@ -29,8 +29,9 @@ from gandalf import llm
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.plugins import unavailable
 
-# skills/ lives at the repo root, above the src/gandalf/ package.
-_SKILLS_DIR = Path(__file__).resolve().parent.parent.parent / "skills"
+# The skills ship inside the package, so they are there whether gandalf runs
+# from a checkout or from an installed wheel.
+_SKILLS_DIR = Path(__file__).resolve().parent / "assets"
 
 _DIFF_LIMIT = 12_000
 _FINDINGS_CAP = 12

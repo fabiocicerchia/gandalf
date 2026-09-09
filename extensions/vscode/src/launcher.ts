@@ -19,10 +19,7 @@ import { log } from "./log";
 export class GandalfNotFoundError extends Error {}
 
 /** The one-liner from the README — kept here so the notification can run it. */
-export const INSTALL_COMMAND =
-  "git clone https://github.com/fabiocicerchia/gandalf ~/.local/share/gandalf" +
-  " || git -C ~/.local/share/gandalf pull --ff-only;" +
-  " make -C ~/.local/share/gandalf install";
+export const INSTALL_COMMAND = "pipx install git+https://github.com/fabiocicerchia/gandalf";
 
 const HELP_TIMEOUT_MS = 20_000;
 
