@@ -252,6 +252,13 @@ def apply(lines: list[str], to_apply: list[Edit]) -> tuple[int, int, str] | None
     new = buf[first - 1 : last + delta]
     if new == lines[first - 1 : last]:
         return None  # the "fix" changes nothing — nothing to suggest
+    # A line-deleting edit ends at column 1 of the *next* line, so the range
+    # trails a line the fix never touches. Shed it: a PR that adds one unused
+    # import only ever adds that one line, and a suggestion reaching onto the
+    # untouched line below is one GitHub will not anchor.
+    while last > first and new and new[-1] == lines[last - 1]:
+        new.pop()
+        last -= 1
     return first, last, "\n".join(new)
 
 

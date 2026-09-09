@@ -33,7 +33,29 @@ def test_ruff_edits_become_the_new_line(tmp_path: Path) -> None:
             ]
         },
     }
-    assert suggest.for_anchor(root, "a.py", 1, [f]) == (2, "import sys")
+    # The range stops at line 1: line 2 comes through the edit untouched, and a
+    # suggestion that reached it would need line 2 to be in the diff as well.
+    assert suggest.for_anchor(root, "a.py", 1, [f]) == (1, "")
+
+
+def test_a_deleted_line_does_not_drag_in_the_line_below(tmp_path: Path) -> None:
+    root = _repo(tmp_path)
+    f = {
+        "filename": "a.py",
+        "code": "F401",
+        "location": {"row": 1, "column": 1},
+        "fix": {
+            "edits": [
+                {
+                    "content": "",
+                    "location": {"row": 1, "column": 1},
+                    "end_location": {"row": 2, "column": 1},
+                }
+            ]
+        },
+    }
+    # Only line 1 is added by the PR — the single-line suggestion still anchors.
+    assert suggest.for_anchor(root, "a.py", 1, [f], {1}) == (1, "")
 
 
 def test_two_findings_on_one_line_make_one_suggestion(tmp_path: Path) -> None:
@@ -197,20 +219,21 @@ def test_a_fix_below_the_comment_is_refused(tmp_path: Path) -> None:
 
 def test_multi_line_suggestion_must_stay_inside_the_diff(tmp_path: Path) -> None:
     root = _repo(tmp_path)
+    # An I001-shaped fix: both lines come back rewritten, so the block spans two.
     f = {
         "fix": {
             "edits": [
                 {
                     "location": {"row": 1, "column": 1},
-                    "end_location": {"row": 2, "column": 1},
-                    "content": "",
+                    "end_location": {"row": 2, "column": 11},
+                    "content": "import sys\nimport os",
                 }
             ]
         }
     }
     assert suggest.for_anchor(root, "a.py", 1, [f], anchorable={1, 2}) == (
         2,
-        "import sys",
+        "import sys\nimport os",
     )
     assert suggest.for_anchor(root, "a.py", 1, [f], anchorable={1}) is None
 
