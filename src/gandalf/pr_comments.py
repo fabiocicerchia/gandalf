@@ -66,15 +66,21 @@ def _brand() -> tuple[str, str]:
     )
 
 
-def _comment_body(gate: str, f: Finding) -> str:
+def _comment_body(gate: str, f: Finding, text: str) -> str:
     """Render one finding as an inline review comment.
 
     Every body opens with the marker, which is how a later run recognises its
     own comments and updates them instead of posting the same finding twice.
+
+    `text` is the *normalised* message, without the `path:line` prefix
+    `fmt_finding` puts in front: GitHub already shows the location above the
+    comment, the tool's own path is the container mount (`/src/…`) when gandalf
+    runs from the Action, and a body that spells out the line number is a body
+    that changes every time a later push shifts it — which is how one finding
+    ends up as three threads.
     """
-    rule = findings.rule(f)
-    tag = f"`{gate}`" + (f" · `{rule}`" if rule else "")
-    return f"{_MARKER}\n**{_brand()[1]}** {tag}\n\n{fmt_finding(f)}"
+    tag = f"`{gate}`" + (f" · `{rule}`" if (rule := findings.rule(f)) else "")
+    return f"{_MARKER}\n**{_brand()[1]}** {tag}\n\n{text}"
 
 
 _HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
@@ -100,18 +106,6 @@ def added_lines(diff: str) -> dict[str, set[int]]:
             new = raw[4:].strip()
             path = "" if new == "/dev/null" else new.removeprefix("b/")
     return out
-
-
-# `src/x.py:12:` at a word boundary — the shape compilers and linters print.
-_TEXT_LOC = re.compile(r"(?:^|\s)([\w./\\-]+\.\w+):(\d+)(?=[:\s]|$)")
-
-
-def _text_location(f: Finding) -> tuple[str, int]:
-    """Gates that only carry the location inside their message (mypy, tsc,
-    codeql, …) would otherwise never anchor. A bogus parse costs nothing: the
-    finding just fails the added-line check and rolls up as before."""
-    hit = _TEXT_LOC.search(fmt_finding(f))
-    return (hit[1], int(hit[2])) if hit else ("", 0)
 
 
 def _comment(
@@ -160,14 +154,13 @@ def build(
         if r.outcome == GateOutcome.PASS:
             continue
         for f in r.findings:
-            # Scanners run in the container against /src; GitHub wants the path
-            # repo-relative, same rebase the SARIF writer does.
-            path, line = findings.relpath(findings.path(f), workdir), findings.line(f)
-            if not path or not line:
-                text_path, text_line = _text_location(f)
-                if text_path and text_line:
-                    path, line = findings.relpath(text_path, workdir), text_line
-            body = _comment_body(r.name, f)
+            # Scanners run in the container against /src; `normalise` rebases the
+            # path repo-relative (the same rebase the SARIF writer does) and
+            # recovers it from the message for the gates that carry it only there
+            # (mypy, tsc, codeql), taking it back off the message as it goes.
+            norm = findings.normalise(f, workdir)
+            path, line = norm["path"], norm["line"]
+            body = _comment_body(r.name, f, norm["message"] or fmt_finding(f))
             if added:
                 anchorable = line in added.get(path, ())
             else:
@@ -176,7 +169,7 @@ def build(
                 inline.setdefault((path, line), []).append((body, f))
             else:
                 where = f"{path}:{line}" if path and line else (path or r.name)
-                overflow.append(f"- {_RAG_WORD[r.outcome]} `{r.name}` {where} — {fmt_finding(f)}")
+                overflow.append(f"- {_RAG_WORD[r.outcome]} `{r.name}` {where} — {norm['message'] or fmt_finding(f)}")
     comments = [_comment(p, ln, items, added.get(p), workdir) for (p, ln), items in sorted(inline.items())]
     return comments, overflow
 
@@ -361,6 +354,15 @@ def _our_threads(repo: str, pr: int, token: str, timeout: int) -> list[dict[str,
     return out
 
 
+def _why(exc: Exception) -> str:
+    """What GitHub actually said. An HTTPError's `str()` is only the status line;
+    the reason ("Resource not accessible by integration", a GraphQL error, a
+    permission the workflow never granted) is in the body."""
+    if isinstance(exc, urllib.error.HTTPError):
+        return f"HTTP {exc.code}: {exc.read().decode(errors='replace')[:150]}"
+    return str(exc)[:150]
+
+
 def _reconcile(
     threads: Sequence[dict[str, Any]], comments: Sequence[dict[str, Any]]
 ) -> tuple[list[str], list[dict[str, Any]]]:
@@ -382,15 +384,17 @@ def _sync_inline(repo: str, pr: int, comments: list[dict[str, Any]], token: str,
     are posted."""
     api = f"https://api.github.com/repos/{repo}"
     stale, new = _reconcile(_our_threads(repo, pr, token, timeout), comments)
-    resolved, resolve_failed = 0, 0
+    resolved, refused = 0, list[str]()
     for thread_id in stale:
         try:
             _graphql(_RESOLVE, {"id": thread_id}, token, timeout)
             resolved += 1
-        except (urllib.error.HTTPError, urllib.error.URLError, OSError, RuntimeError):
+        except (urllib.error.HTTPError, urllib.error.URLError, OSError, RuntimeError) as exc:
             # Cosmetic: a thread left open is noise, not a reason to fail a run.
-            resolve_failed += 1
-    stuck = f", {resolve_failed} could not be resolved" if resolve_failed else ""
+            # The reason travels with the count, though — a silent "could not be
+            # resolved" is a run that cannot be debugged from its own log.
+            refused.append(_why(exc))
+    stuck = f", {len(refused)} could not be resolved ({refused[0]})" if refused else ""
     if not new:
         return f"{len(comments)} inline comment(s) already current, {resolved} resolved{stuck}"
     _, raw = _api("GET", f"{api}/pulls/{pr}", token, timeout=timeout)
@@ -427,10 +431,8 @@ def post(repo: str, pr: int, payload: dict[str, Any], token: str, timeout: int =
             True,
             f"{note}; {_sync_inline(repo, pr, payload['comments'], token, timeout)}",
         )
-    except urllib.error.HTTPError as exc:
-        return (
-            False,
-            f"GitHub {exc.code}: {exc.read().decode(errors='replace')[:200]}",
-        )
-    except (urllib.error.URLError, OSError) as exc:
-        return (False, f"post failed: {exc}")
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError, RuntimeError) as exc:
+        # RuntimeError included: a GraphQL error comes back inside a 200, and
+        # listing the review threads is the one call that raises it. Letting that
+        # escape would fail the run over a cosmetic step.
+        return (False, f"post failed: {_why(exc)}")

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import io
 import os
+import urllib.error
 from pathlib import Path
 from typing import Any
 
@@ -115,6 +117,38 @@ def test_container_paths_are_rebased_repo_relative() -> None:
     ]
     comments, _ = pr_comments.build(results, ["a.py"], _DIFF, workdir="/src")
     assert [(c["path"], c["line"]) for c in comments] == [("a.py", 12)]
+    # ...and the mount prefix does not survive into the prose either
+    assert "/src" not in comments[0]["body"]
+
+
+def _mypy(row: int) -> list[GateResult]:
+    """mypy carries the location only inside its message."""
+    return [
+        GateResult(
+            "mypy",
+            GateOutcome.FAIL,
+            0.3,
+            "mypy",
+            [{"message": f"a.py:{row}: error: bad thing  [attr-defined]"}],
+        )
+    ]
+
+
+def test_the_comment_does_not_repeat_the_location() -> None:
+    comments, _ = pr_comments.build(_mypy(12), ["a.py"], _DIFF)
+    body = comments[0]["body"]
+    assert (comments[0]["path"], comments[0]["line"]) == ("a.py", 12)
+    assert "a.py:12" not in body  # GitHub already prints it above the comment
+    assert "bad thing" in body
+
+
+def test_a_shifted_line_keeps_the_same_body() -> None:
+    """A body that spells out the line number changes every time a push moves
+    it, and `_reconcile` keys on the body — which is how one finding used to end
+    up as three separate threads."""
+    first, _ = pr_comments.build(_mypy(12), ["a.py"], "")
+    later, _ = pr_comments.build(_mypy(13), ["a.py"], "")
+    assert first[0]["body"] == later[0]["body"]
 
 
 def test_overflow_is_collapsed() -> None:
@@ -155,6 +189,22 @@ def test_reconcile_resolves_obsolete_and_keeps_current() -> None:
     assert stale == ["T2"]
     # T3 is resolved, so it counts as absent — the finding gets a fresh comment
     assert [c["line"] for c in new] == [20]
+
+
+def test_a_refusal_carries_githubs_own_reason() -> None:
+    """`str()` on an HTTPError is the status line; the reason is in the body, and
+    a run that only logs "could not be resolved" cannot be debugged from its log."""
+    exc = urllib.error.HTTPError(
+        "https://api.github.com/graphql",
+        403,
+        "Forbidden",
+        {},  # pyright: ignore[reportArgumentType]
+        io.BytesIO(b'{"message":"Resource not accessible by integration"}'),
+    )
+    why = pr_comments._why(exc)  # once — reading an HTTPError drains its body
+    assert "403" in why
+    assert "not accessible by integration" in why
+    assert pr_comments._why(RuntimeError("boom")) == "boom"
 
 
 def test_post_without_token_is_safe() -> None:
