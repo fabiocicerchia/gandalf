@@ -35,7 +35,12 @@ inputs:
       build from this Action's tools.Dockerfile instead.
     default: ghcr.io/fabiocicerchia/gandalf-tools:latest
   github-token:
-    description: Token used to pull the image and post the review.
+    description: >-
+      Token used to pull the image and post the review. The default
+      github.token posts and updates comments fine, but GitHub answers
+      FORBIDDEN when it tries to resolve a thread whose finding is gone, so
+      obsolete threads stay open — set app-id/app-private-key below, or pass a
+      PAT here, if you want them collapsed.
     default: ${{ github.token }}
   app-id:
     description: >-

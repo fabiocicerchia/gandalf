@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import email.message
 import io
+import json
 import os
 import urllib.error
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 from gandalf import pr_comments, report
 from gandalf.base import GateOutcome, GateResult
@@ -206,6 +209,30 @@ def test_a_refusal_carries_githubs_own_reason() -> None:
     assert "403" in why
     assert "not accessible by integration" in why
     assert pr_comments._why(RuntimeError("boom")) == "boom"
+
+
+def test_a_graphql_error_raises_the_sentence_not_the_machinery(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GraphQL answers 200 and puts the failure in the body. Dumping the whole
+    error object pushed the one useful field past the log's truncation — this is
+    verbatim what GitHub sends when github-actions[bot] tries to resolve."""
+    errors = {
+        "errors": [
+            {
+                "type": "FORBIDDEN",
+                "path": ["resolveReviewThread"],
+                "extensions": {"saml_failure": False},
+                "locations": [{"line": 1, "column": 19}],
+                "message": "Resource not accessible by integration",
+            }
+        ]
+    }
+
+    def _answer(*_a: object, **_k: object) -> tuple[int, str]:
+        return (200, json.dumps(errors))
+
+    monkeypatch.setattr(pr_comments, "_api", _answer)
+    with pytest.raises(RuntimeError, match=r"^Resource not accessible by integration$"):
+        pr_comments._graphql("query", {}, "token", 5)
 
 
 def test_post_without_token_is_safe() -> None:

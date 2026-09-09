@@ -320,8 +320,10 @@ def _graphql(query: str, variables: dict[str, Any], token: str, timeout: int) ->
         timeout,
     )
     body = json.loads(raw)
-    if body.get("errors"):  # GraphQL reports failures in a 200
-        raise RuntimeError(str(body["errors"])[:200])
+    if errors := body.get("errors"):  # GraphQL reports failures in a 200
+        # The `message` is the sentence a human needs; the rest of the error
+        # object is machinery that would push it past any sane truncation.
+        raise RuntimeError("; ".join(str(e.get("message", e)) for e in errors))
     return body["data"]
 
 
@@ -384,17 +386,20 @@ def _sync_inline(repo: str, pr: int, comments: list[dict[str, Any]], token: str,
     are posted."""
     api = f"https://api.github.com/repos/{repo}"
     stale, new = _reconcile(_our_threads(repo, pr, token, timeout), comments)
-    resolved, refused = 0, list[str]()
+    resolved, refused = 0, ""
     for thread_id in stale:
         try:
             _graphql(_RESOLVE, {"id": thread_id}, token, timeout)
             resolved += 1
         except (urllib.error.HTTPError, urllib.error.URLError, OSError, RuntimeError) as exc:
             # Cosmetic: a thread left open is noise, not a reason to fail a run.
-            # The reason travels with the count, though — a silent "could not be
-            # resolved" is a run that cannot be debugged from its own log.
-            refused.append(_why(exc))
-    stuck = f", {len(refused)} could not be resolved ({refused[0]})" if refused else ""
+            # And a refusal is about the token, not the thread — GITHUB_TOKEN is
+            # FORBIDDEN from resolveReviewThread whatever it is pointed at — so
+            # the rest of the batch would fail identically. Keep the reason, stop
+            # spending a call per thread to be told the same thing again.
+            refused = _why(exc)
+            break
+    stuck = f", {len(stale) - resolved} left open ({refused})" if refused else ""
     if not new:
         return f"{len(comments)} inline comment(s) already current, {resolved} resolved{stuck}"
     _, raw = _api("GET", f"{api}/pulls/{pr}", token, timeout=timeout)
