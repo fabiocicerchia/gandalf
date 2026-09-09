@@ -164,5 +164,7 @@ def write_outputs(  # noqa: PLR0913
             console.out(f"PR #{args.pr}: {msg}")
 
     if args.json:
+        # Straight to stdout, which under --json carries nothing else: the lines
+        # above went to stderr (see console.divert_human_output).
         json.dump(payload, sys.stdout, indent=2, default=str)
-        console.out()
+        console.data()

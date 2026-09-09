@@ -100,7 +100,11 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="OWNER/REPO",
         help="repo for --pr (default: $GITHUB_REPOSITORY)",
     )
-    ap.add_argument("--json", action="store_true", help="also print machine-readable JSON")
+    ap.add_argument(
+        "--json",
+        action="store_true",
+        help="print the JSON payload on stdout, everything else on stderr",
+    )
     ap.add_argument(
         "--stream",
         action="store_true",

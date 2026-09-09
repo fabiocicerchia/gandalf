@@ -56,4 +56,4 @@ class GateStream:
     @staticmethod
     def _write(obj: dict[str, Any]) -> None:
         # flush: the point is to be read while the process is still running.
-        console.out(json.dumps(obj, default=str), flush=True)
+        console.data(json.dumps(obj, default=str), flush=True)
