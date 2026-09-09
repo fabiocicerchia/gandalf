@@ -22,6 +22,16 @@ on:
         description: Release tag to build.
         required: true
         type: string
+    # Optional so the `release` and `workflow_dispatch` triggers above still
+    # work: under those this workflow reads the repository secrets directly,
+    # and only a workflow_call has to be handed them explicitly.
+    secrets:
+      DOCKERHUB_USERNAME:
+        description: Docker Hub account the image is mirrored to.
+        required: false
+      DOCKERHUB_TOKEN:
+        description: Access token for that Docker Hub account.
+        required: false
   workflow_dispatch:
     inputs:
       tag:
