@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import email.message
 import io
 import os
 import urllib.error
@@ -198,7 +199,7 @@ def test_a_refusal_carries_githubs_own_reason() -> None:
         "https://api.github.com/graphql",
         403,
         "Forbidden",
-        {},  # pyright: ignore[reportArgumentType]
+        email.message.Message(),  # what HTTPError wants for headers, not a dict
         io.BytesIO(b'{"message":"Resource not accessible by integration"}'),
     )
     why = pr_comments._why(exc)  # once — reading an HTTPError drains its body
