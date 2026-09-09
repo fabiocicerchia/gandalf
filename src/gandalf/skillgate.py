@@ -31,10 +31,10 @@ from gandalf.plugins import unavailable
 # over-nested replies surface as JSONDecodeError instead of leaking RecursionError.
 from gandalf.skills import parse_json
 
-# skills/ sits at the repo root, above the src/gandalf/ package; resolve relative
-# to this package so a gate reads the same file a human would `/`-invoke, wherever
-# gandalf runs from (working tree, staged, or a throwaway --commit worktree).
-SKILLS_DIR = Path(__file__).resolve().parent.parent.parent / "skills"
+# The skills ship inside the package, so a gate reads the same file a human
+# would `/`-invoke, wherever gandalf runs from -- working tree, staged, a
+# throwaway --commit worktree, or an installed wheel with no checkout at all.
+SKILLS_DIR = Path(__file__).resolve().parent / "assets"
 
 _DIFF_LIMIT = 20_000
 _FILE_LIMIT = 8_000  # per changed file

@@ -1,3 +1,39 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gandalf"
+description = "A code-review gate that runs the tools you already have, and says what it found."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+# Deliberately none: gandalf drives tools it finds on PATH and otherwise uses
+# only the standard library, so `pipx install` pulls nothing else in.
+dependencies = []
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/fabiocicerchia/gandalf"
+
+[project.scripts]
+gandalf = "gandalf.__main__:main"
+
+[tool.setuptools.dynamic]
+# release-please stamps version.txt; the package reads it from there rather
+# than keeping a second copy in sync.
+version = { file = "version.txt" }
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+# The skills are data the gates read at runtime, so they ship in the wheel.
+gandalf = ["assets/**/*", "gates/**/*"]
+
 # Tooling config only — gandalf is stdlib-only, there is nothing to build/install.
 [tool.pytest.ini_options]
 pythonpath = ["src"]

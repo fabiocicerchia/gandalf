@@ -93,7 +93,7 @@ finds it in whichever way you already have it, in this order:
    (the directory holding `src/gandalf`); either shape is recognised.
 2. The workspace itself, if you have gandalf's repository open.
 3. `gandalf` on your `PATH`.
-4. `~/.local/share/gandalf` — where the one-line `install.sh` puts its clone.
+4. `~/.local/share/gandalf` — the clone the README's install steps put there.
 
 Nothing found? `Gandalf: Check Environment` says so, with the fix.
 

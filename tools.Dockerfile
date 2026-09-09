@@ -50,7 +50,9 @@ RUN curl -sSfL "https://github.com/hadolint/hadolint/releases/download/v${HADOLI
  && curl -sSfL "https://github.com/ossf/scorecard/releases/download/v${SCORECARD_VERSION}/scorecard_${SCORECARD_VERSION}_linux_amd64.tar.gz" \
       | tar -xz -C /usr/local/bin scorecard \
  && curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/75c4dc0f45c5d7ffd05ae26df1e0c666787bdf2a/contrib/install.sh \
-      | sh -s -- -b /usr/local/bin
+      -o /tmp/trivy-install.sh \
+ && sh /tmp/trivy-install.sh -b /usr/local/bin \
+ && rm /tmp/trivy-install.sh
 
 # Run as a non-root user (uid 1000 to match the typical host user, so tools that
 # write into the mounted /src worktree — e.g. `ruff format` under --fix — and the
