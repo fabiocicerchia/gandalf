@@ -96,6 +96,12 @@ jobs:
     uses: ./.github/workflows/publish-tools-image.yml
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}
+    # A called workflow sees no secrets unless they are handed over. Named
+    # rather than `secrets: inherit`, for the same reason as the extension
+    # publish above: it gets the Docker Hub pair and nothing else.
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
   # Phase 2 — open/update the next release PR, now that `publish-release` has
   # published the draft and the tag exists. `always()` because on an ordinary
