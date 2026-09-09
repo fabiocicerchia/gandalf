@@ -324,7 +324,7 @@ def test_payload_gates_carry_their_category(tmp_path: Path, monkeypatch: pytest.
 def test_json_leaves_only_the_payload_on_stdout(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """--json is for piping: a scorecard on stdout makes it unparseable."""
+    """--json is for piping: a scorecard on stdout makes it unparsable."""
     repo = _mkrepo(tmp_path)
     monkeypatch.chdir(repo)
     out = tmp_path / "artifacts"
