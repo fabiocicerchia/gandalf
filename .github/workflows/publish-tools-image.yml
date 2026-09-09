@@ -54,6 +54,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Log in to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       # Called from release.yml the run's ref is main, not the tag, so the
       # version comes from the input rather than from `github.ref`.
       - name: Resolve the release tag
@@ -67,7 +73,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302  # v6.2.0
         with:
-          images: ghcr.io/${{ github.repository_owner }}/gandalf-tools
+          images: |
+            ghcr.io/${{ github.repository_owner }}/gandalf-tools
+            docker.io/${{ github.repository_owner }}/gandalf-tools
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,format=short
