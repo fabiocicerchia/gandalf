@@ -30,6 +30,7 @@ import json
 import time
 from dataclasses import asdict, dataclass, field
 from functools import lru_cache
+from importlib import metadata
 from pathlib import Path
 from typing import Any
 
@@ -71,9 +72,13 @@ def _gandalf_version() -> str:
     """Best effort — an installed wrapper may not ship version.txt, and a missing
     version just means this component contributes nothing to the salt."""
     try:
-        return (Path(__file__).resolve().parents[2] / "version.txt").read_text().strip()
-    except OSError:
-        return ""
+        return metadata.version("gandalf")
+    except metadata.PackageNotFoundError:
+        # Running straight from a checkout, with nothing installed.
+        try:
+            return (Path(__file__).resolve().parents[2] / "version.txt").read_text().strip()
+        except OSError:
+            return ""
 
 
 def toolchain_salt() -> str:

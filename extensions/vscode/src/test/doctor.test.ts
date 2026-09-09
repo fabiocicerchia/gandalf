@@ -129,13 +129,15 @@ describe("the environment report", () => {
   });
 
   it("offers the install command instead of a summary when gandalf is absent entirely", async () => {
-    // No PATH to find it on, and a HOME with no install.sh clone under it.
+    // No PATH to find it on, and a HOME with no gandalf clone under it.
     process.env.PATH = "";
     process.env.HOME = tmp;
     await runDoctor(folderAt(tmp), settings());
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0].kind, "error");
-    assert.match(notifications[0].message, /install\.sh \| bash/);
+    // One command, and nothing piped into a shell.
+    assert.match(notifications[0].message, /pipx install git\+https:\/\/github\.com\/\S*gandalf/);
+    assert.doesNotMatch(notifications[0].message, /\|\s*(ba)?sh\b/);
     assert.deepEqual(notifications[0].actions, ["Install Gandalf", "Copy command", "Open settings"]);
   });
 });

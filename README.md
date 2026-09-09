@@ -118,22 +118,24 @@ More in [`docs/architecture.md`](docs/architecture.md).
 ## Install a `gandalf` command
 
 ```bash
-make install                       # drops a wrapper in ~/.local/bin (on your PATH)
-make install BINDIR=/usr/local/bin # …or anywhere else
+pipx install git+https://github.com/fabiocicerchia/gandalf@v0.12.1
 ```
 
-Or the one-line installer (clones/updates a checkout under
-`~/.local/share/gandalf` and runs `make install`):
+One command, and nothing is piped into a shell: pipx fetches over TLS, builds
+the wheel and installs the `gandalf` entry point. Pin the tag you want — drop
+`@v0.12.1` to track `main`, or `pipx upgrade gandalf` later.
+
+`pip install --user git+https://…` works the same way if you would rather not
+use pipx. There are no third-party dependencies, so either pulls in nothing
+else: gandalf drives the tools it finds on `PATH` and otherwise uses only the
+standard library. The skills the gates read ship inside the package, so an
+installed gandalf needs no checkout.
+
+Working on gandalf itself? Install the checkout instead, so edits take effect
+without reinstalling:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fabiocicerchia/gandalf/main/install.sh | bash
-```
-
-Pure-stdlib, so the "install" is just a one-line wrapper that runs this checkout
-(`python -m gandalf`) against whatever repo you're in. Equivalent one-liner:
-
-```bash
-printf '#!/bin/sh\nexport PYTHONPATH="%s/src:$PYTHONPATH"\nexec python3 -m gandalf "$@"\n' "$PWD" > ~/.local/bin/gandalf && chmod +x ~/.local/bin/gandalf
+pipx install --editable .   # or: make install
 ```
 
 ### `.gandalfignore` — paths no gate should read
