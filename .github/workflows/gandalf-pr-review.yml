@@ -1,20 +1,17 @@
-# gandalf reviewing this repo's pull requests.
-#
-# Runs gandalf's scanners in one prebuilt container and posts every finding as
-# an inline review comment on the file:line it flags, plus (by default) ingests
-# them into GitHub Code Scanning. Nothing is installed on the runner and no
-# secret beyond the built-in GITHUB_TOKEN is needed.
-#
-# Source: fabiocicerchia/gandalf -> examples/github-actions/gandalf-pr-review.yml
-
 name: gandalf-pr-review
+
+# gandalf reviewing its own pull requests (dogfood) via the repo's own composite
+# Action (action.yml, invoked as `uses: ./`). This doubles as the reference for
+# how anyone else wires it up - see examples/github-actions/gandalf-pr-review.yml
+# for the drop-in copy that uses `uses: fabiocicerchia/gandalf@34aaf696d7331d1c821a0fae1827ebaf9d5c7017  # v0.4.0
 
 on:
   pull_request:
 
 permissions:
-  actions: read # private repo: upload-sarif reads this run's metadata
   contents: read
+env:
+  INGEST_CODE_SCANNING: ${{ vars.GANDALF_INGEST_CODE_SCANNING || 'true' }}
 
 concurrency:
   group: gandalf-pr-${{ github.event.pull_request.number }}
@@ -22,12 +19,16 @@ concurrency:
 
 jobs:
   review:
-    # read the code, post the review, and upload code-scanning results.
+    # Least privilege: read the code, post the review, and (when the toggle below is
+    # on) write code-scanning results.
     permissions:
       contents: read
       packages: read # pull the ghcr scanner image
       pull-requests: write
       security-events: write
+
+    # Also ingest findings into GitHub Code Scanning (Security tab + PR annotations)?
+    # Flip via a repo Variable named GANDALF_INGEST_CODE_SCANNING = "false"; default on.
     name: gandalf inline review
     runs-on: ubuntu-latest
     steps:
@@ -35,12 +36,15 @@ jobs:
         with:
           fetch-depth: 0 # need base + head + their merge-base for the PR diff
 
-      - uses: fabiocicerchia/gandalf@08ab6976c4159bd56adcb7714f273d25c0e20c08  # v0.12.1
+      # `uses: ./` runs this repo's action.yml, so gandalf is exercised from the
+      # PR's own source. It pulls ghcr.io/.../gandalf-tools (falling back to a
+      # source build if the pull fails), scans the diff, posts inline comments,
+      # and uploads SARIF when code-scanning is on.
+      - uses: ./
         with:
-          # Code scanning needs GitHub Advanced Security on a private repo.
-          # Without it the ingest fails and takes the whole review down with
-          # it, after the inline comments — the part that needs none of this —
-          # have already been posted. The repo variable still overrides.
-          code-scanning: >-
-            ${{ vars.GANDALF_INGEST_CODE_SCANNING
-                || (github.event.repository.private && 'false' || 'true') }}
+          code-scanning: ${{ env.INGEST_CODE_SCANNING }}
+          # Post as a custom bot instead of github-actions[bot]. Undefined
+          # secrets resolve to empty, so this falls back gracefully until a
+          # "gandalf" GitHub App exists and APP_ID / APP_PRIVATE_KEY are set.
+          app-id: ${{ secrets.GANDALF_APP_ID }}
+          app-private-key: ${{ secrets.GANDALF_APP_PRIVATE_KEY }}
