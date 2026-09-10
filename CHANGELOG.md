@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.3](https://github.com/fabiocicerchia/gandalf/compare/v0.12.2...v0.12.3) (2026-09-10)
+
+
+### Bug Fixes
+
+* **publish:** sign the images this workflow pushes ([#104](https://github.com/fabiocicerchia/gandalf/issues/104)) ([8f33b7b](https://github.com/fabiocicerchia/gandalf/commit/8f33b7b3d0e74641e4f42d3ebe40502c0ec3fae5))
+* **release:** grant id-token on the job that calls the signing workflow ([#105](https://github.com/fabiocicerchia/gandalf/issues/105)) ([f3ba6f6](https://github.com/fabiocicerchia/gandalf/commit/f3ba6f6ea0a87af2328241567381b2eb31c7e15e))
+* **release:** hand the Docker Hub secrets to the called workflow ([#102](https://github.com/fabiocicerchia/gandalf/issues/102)) ([eb3b0f1](https://github.com/fabiocicerchia/gandalf/commit/eb3b0f1e1e9a1a5ab50e2005b6998aa5c81bc6d3))
+
 ## [0.12.2](https://github.com/fabiocicerchia/gandalf/compare/v0.12.1...v0.12.2) (2026-09-09)
 
 
