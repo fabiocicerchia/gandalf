@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.4](https://github.com/fabiocicerchia/gandalf/compare/v0.12.3...v0.12.4) (2026-09-11)
+
+
+### Bug Fixes
+
+* **release:** let the release PR carry a token that isn't GITHUB_TOKEN ([#108](https://github.com/fabiocicerchia/gandalf/issues/108)) ([67abec3](https://github.com/fabiocicerchia/gandalf/commit/67abec323b379cd4684dd646e2c60e2956bc327c))
+
 ## [0.12.3](https://github.com/fabiocicerchia/gandalf/compare/v0.12.2...v0.12.3) (2026-09-10)
 
 
