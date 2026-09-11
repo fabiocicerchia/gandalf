@@ -70,7 +70,8 @@ def print_summary(run: Run, meta_line: dict[str, Any], cfg: Config, *, explain: 
             if run.skipped
             else ""
         )
-        + (f"  ·  disabled {len(run.disabled)} by config: {', '.join(run.disabled)}" if run.disabled else "")
+        # Not "by config" any more: --no-llm disables the judge gates too.
+        + (f"  ·  disabled {len(run.disabled)} gate(s): {', '.join(run.disabled)}" if run.disabled else "")
     )
     if run.fixes:
         # `removeprefix`: a fixer that names its own gate ("ruff: 2 autofixed")

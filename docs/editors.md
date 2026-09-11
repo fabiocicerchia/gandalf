@@ -65,7 +65,12 @@ cannot produce them.
 
 `Gandalf: Show Gate Timings` lists every gate by wall-clock cost so a slow scan
 can name its culprits, and copies a `skip` list for the ones you don't want
-while editing. `Gandalf: Show Score History` reads `.gandalf-trend.jsonl` back —
+while editing. For a scan that is slow *now* — or one that hits
+`gandalf.scan.timeoutSeconds` and so never produces timings at all — turn on
+`gandalf.scan.debug`: gandalf's own elapsed-stamped log (each stage, each gate's
+start and duration, every command it shells out to) goes to the **Gandalf**
+output channel as the run happens. See [Performance](performance.md) for the
+rest of the levers. `Gandalf: Show Score History` reads `.gandalf-trend.jsonl` back —
 the log gandalf has always written and nothing has ever read — and shows the
 score across recent commits, with any commit scannable from the list.
 

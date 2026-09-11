@@ -43,6 +43,7 @@ const settings = (over: Partial<Settings> = {}): Settings => ({
   scanOnStartup: true,
   timeoutSeconds: 600,
   concurrency: 0,
+  debug: false,
   useCache: true,
   llm: false,
   diagnosticsEnabled: true,

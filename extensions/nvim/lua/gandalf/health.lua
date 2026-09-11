@@ -109,8 +109,9 @@ local function check_tools_image(cfg)
   end
 end
 
---- The judge gates call this whatever --no-llm says; everything else runs
---- without it, so an unreachable endpoint is information, not a failure.
+--- The judge gates call this when scan.llm is on (--no-llm skips them
+--- outright); everything else runs without it, so an unreachable endpoint is
+--- information, not a failure.
 local function check_llm(cfg)
   local url = (cfg.env.GANDALF_LLM_URL or vim.env.GANDALF_LLM_URL or DEFAULT_LLM_URL):gsub('/$', '')
   if vim.fn.executable('curl') ~= 1 then

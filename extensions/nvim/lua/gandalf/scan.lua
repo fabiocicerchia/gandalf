@@ -45,14 +45,22 @@ end
 
 --- The environment gandalf is run with, over the inherited one.
 local function scan_env(cfg)
-  return vim.tbl_extend('force', {
+  local env = {
     -- The progress line is TTY-gated; this turns it on for a piped child.
     GANDALF_PROGRESS = '1',
-    -- The judge gates call the LLM whatever --no-llm says, and retry with
+    -- With scan.llm on, the judge gates each call the model and retry with
     -- backoff when it is unreachable. gandalf's default of 3 is right for CI
     -- and costs eleven seconds per scan in an editor; one still absorbs a blip.
+    -- (With scan.llm off, --no-llm skips those gates outright.)
     GANDALF_LLM_RETRIES = vim.env.GANDALF_LLM_RETRIES or '1',
-  }, cfg.env)
+  }
+  if cfg.scan.debug then
+    -- Every stage, gate and command, stamped with the elapsed time. The env
+    -- var rather than --debug, so it needs no --help gating and works against
+    -- a build that predates the flag.
+    env.GANDALF_DEBUG = '1'
+  end
+  return vim.tbl_extend('force', env, cfg.env)
 end
 
 --- Per-gate results as they land, so the list fills during the run.
@@ -76,13 +84,25 @@ local function on_stdout(events, plain, opts)
   end
 end
 
-local function on_stderr(parser, noise)
+local function on_stderr(parser, noise, debug_log)
   return function(err, chunk)
     if err or not chunk then
       return
     end
     local progress, rest = parser.feed(chunk)
     noise[#noise + 1] = rest
+    -- Under scan.debug this is gandalf's trace, and it wants reading while the
+    -- run is still going: a scan that hits timeout_ms never writes a report,
+    -- so its timings are only ever visible here. Scheduled, like every other
+    -- write out of this callback -- it runs in a fast event context.
+    if debug_log and rest:match('%S') then
+      local lines = vim.split(vim.trim(rest), '\n', { trimempty = true })
+      vim.schedule(function()
+        for _, line in ipairs(lines) do
+          state.log('%s', line)
+        end
+      end)
+    end
     if progress then
       vim.schedule(function()
         state.set_progress(progress)
@@ -190,7 +210,7 @@ function M.run(opts, cancel)
     env = scan_env(cfg),
     timeout = cfg.scan.timeout_ms,
     stdout = on_stdout(readers.events, readers.plain, opts),
-    stderr = on_stderr(readers.progress, readers.noise),
+    stderr = on_stderr(readers.progress, readers.noise, cfg.scan.debug),
   }, function(out)
     vim.schedule(function()
       on_exit(out, readers, cfg, root, opts)

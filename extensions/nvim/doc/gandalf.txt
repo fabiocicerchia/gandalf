@@ -84,8 +84,9 @@ Defaults, deep-merged with whatever you pass: >lua
         timeout_ms = 600000,
         concurrency = 0,        -- 0 leaves gandalf's default
         use_cache = true,
-        llm = false,
+        llm = false,            -- off also skips the LLM judge gates
         stream = true,
+        debug = false,          -- gandalf's own trace into |:GandalfLog|
       },
       diagnostics = {
         enabled = true,
@@ -146,7 +147,12 @@ Defaults, deep-merged with whatever you pass: >lua
 :GandalfCancel          Stop the running scan.
 
                                                                  *:GandalfLog*
-:GandalfLog             What was run, and what came back.
+:GandalfLog             What was run, and what came back. With `scan.debug`
+                        on, also gandalf's own elapsed-stamped trace: every
+                        stage, every gate's start and duration, and every
+                        command it shells out to. That is the only account of
+                        a scan that hits `timeout_ms`, since such a run never
+                        writes a report.
 
 ==============================================================================
 6. API                                                            *gandalf-api*

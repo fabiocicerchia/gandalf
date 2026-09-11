@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from gandalf import cache
+from gandalf import cache, plugins
 from gandalf.base import GateOutcome, GateResult
 
 
@@ -114,3 +114,27 @@ def test_entry_without_a_timestamp_is_expired_when_a_max_age_applies() -> None:
     }
     assert cache.get(data, "trivy", "h1", cache.ADVISORY_TTL) is None
     assert cache.get(data, "trivy", "h1", None) is not None
+
+
+def test_durations_are_recorded_and_read_back_regardless_of_hash() -> None:
+    """A stale entry's verdict is worthless; its duration is still the best
+    estimate of what that gate costs here, and it is what orders the next run."""
+    data: dict[str, Any] = {}
+    r = GateResult("trivy", GateOutcome.PASS, 1.0, "no known vulns")
+    cache.put(data, "trivy", "h1", plugins.mark(r, duration=42.5))
+    assert cache.timings(data) == {"trivy": 42.5}
+    # The files changed, so the result is a miss — the timing is not.
+    assert cache.get(data, "trivy", "h2") is None
+    assert cache.timings(data) == {"trivy": 42.5}
+
+
+def test_timings_ignores_entries_that_have_none() -> None:
+    """Caches written before durations were recorded must not become zeroes —
+    a zero would schedule the heaviest gate last."""
+    data: dict[str, Any] = {"trivy": {"hash": "h1", "result": {}}, "junk": "not a dict"}
+    assert cache.timings(data) == {}
+
+
+def test_an_inert_plan_has_no_timings() -> None:
+    """No --cache means nowhere to have kept them; the scheduler uses priors."""
+    assert cache.Plan().timings() == {}

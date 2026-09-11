@@ -78,6 +78,7 @@ def _verdict(gate: str, data: dict[str, Any]) -> GateResult:
 class ComplianceGate:
     name = "compliance"
     blocking = False
+    uses_llm = True  # --no-llm drops the gate, not just the summary
 
     async def run(self, ctx: GateContext) -> GateResult:
         from gandalf import llm  # noqa: PLC0415 — local import: importing at module scope closes a cycle

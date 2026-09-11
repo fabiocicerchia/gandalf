@@ -196,12 +196,37 @@ def put(cache: dict[str, Any], gate_name: str, file_hash: str, result: GateResul
 
     The timestamp is what lets a dependency verdict expire while the lockfile
     that produced it stays byte-identical — see `max_age`.
+
+    The wall-clock is recorded too, and is read back by `timings` regardless of
+    the hash: what a gate cost last time stays true after the code changes, and
+    it is what the scheduler orders the next run by.
     """
-    cache[gate_name] = {
+    entry: dict[str, Any] = {
         "hash": file_hash,
         "ts": time.time(),
         "result": asdict(result),
     }
+    if (duration := plugins.meta(result, "duration")) is not None:
+        entry["duration"] = duration
+    cache[gate_name] = entry
+
+
+def timings(cache: dict[str, Any]) -> dict[str, float]:
+    """gate name → seconds it took the last time it actually ran.
+
+    Deliberately not keyed on the content hash: a stale entry's *verdict* is
+    worthless, but its *duration* is still the best estimate of what that gate
+    costs on this repository and this machine. Entries written before durations
+    were recorded simply aren't in here.
+    """
+    out: dict[str, float] = {}
+    for name, entry in cache.items():
+        if not isinstance(entry, dict):
+            continue
+        d = entry.get("duration")
+        if isinstance(d, (int, float)) and d >= 0:
+            out[name] = float(d)
+    return out
 
 
 @dataclass
@@ -218,6 +243,12 @@ class Plan:
     data: dict[str, Any] = field(default_factory=dict)
     file_hash: str = ""
 
+    def timings(self) -> dict[str, float]:
+        """What each gate cost the last time it ran, for the scheduler. Empty
+        for an inert plan — with no cache file there is nowhere to have kept
+        them, and the scheduler falls back to its priors."""
+        return timings(self.data) if self.path is not None else {}
+
     def pending(self, active: list[Gate]) -> list[Gate]:
         """The gates with no live cache entry — all of them when caching is off."""
         if self.path is None:
@@ -231,9 +262,15 @@ class Plan:
 
         The cached ones come back separately because they never ran, so nothing
         has reported them yet — --stream still has to.
+
+        `active` order rather than completion order, for both branches: gates are
+        submitted heaviest-first (see `schedule`) and finish in whatever order
+        they finish, and a report whose gate list reshuffles run to run is a
+        diff nobody can read.
         """
         if self.path is None:
-            return fresh, []
+            by_name = {r.name: r for r in fresh}
+            return [by_name[g.name] for g in active if g.name in by_name], []
         for r in fresh:
             put(self.data, r.name, self.file_hash, r)
         save(self.path, self.data)

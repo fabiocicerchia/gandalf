@@ -375,7 +375,9 @@ export class FindingsView implements vscode.TreeDataProvider<Node> {
         quiet.push(`${snapshot.payload.skipped_gates.length} irrelevant to the languages in scope`);
       }
       if (snapshot.payload.disabled_gates?.length) {
-        quiet.push(`${snapshot.payload.disabled_gates.length} disabled by config`);
+        // Not only `skip` in .gandalf.toml any more: with the LLM off, gandalf
+        // disables the judge gates rather than running them for an amber.
+        quiet.push(`${snapshot.payload.disabled_gates.length} disabled`);
       }
       if (quiet.length) lines.push(`Gates not counted: ${quiet.join(", ")}.`);
     }

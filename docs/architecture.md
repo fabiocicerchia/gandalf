@@ -26,6 +26,12 @@ runs them under bounded concurrency, then aggregates and renders the report.
 - **`gates/`** — one file per gate (bandit, ruff, semgrep, codeql, licenses, …),
   over the shared readers in `gates/_toolchain.py`.
 - **`base.py`** — `Gate`, `GateContext`, `GateResult`, `GateOutcome`.
+- **`schedule.py`** — the order gates are submitted in: heaviest first, from
+  what each cost last time (`cache.py` records it) or a built-in prior, so a
+  bounded run doesn't end waiting on a scanner that started last.
+- **`progress.py` / `debug.py`** — the single-line stderr progress bar and the
+  elapsed-stamped `--debug` log, which share stderr rather than taking turns:
+  the bar clears and redraws around each log line.
 - **`report.py`** — the RAG vocabulary, the composite score and the policy.
 - **`render_text.py` / `render_html.py` / `html_assets.py` / `sarif.py`** —
   the drawing, kept apart from the scoring.
@@ -42,7 +48,7 @@ runs them under bounded concurrency, then aggregates and renders the report.
 ## Data flow
 
 ```
-scope → discover_gates → run (bounded concurrency) → aggregate → render (RAG / SARIF / HTML)
+scope → discover_gates → schedule (heaviest first) → run (bounded concurrency) → aggregate → render (RAG / SARIF / HTML)
 ```
 
 ## Decisions

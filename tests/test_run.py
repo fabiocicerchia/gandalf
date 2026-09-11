@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from gandalf import plugins
-from gandalf.__main__ import _gate_timeout, _resolve_concurrency, _run_gates, main
+from gandalf.__main__ import _drop_llm_gates, _gate_timeout, _resolve_concurrency, _run_gates, main
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.config import Config
 from gandalf.fixers import _files_note, _touched, _tree_state, run_fixers
@@ -404,3 +404,29 @@ def test_a_fixer_that_changes_nothing_is_reported_as_such(tmp_path: Path) -> Non
 
     res = asyncio.run(run_fixers([_Idle()], GateContext(repo=str(repo), workdir=str(repo))))
     assert res == [("idle", False, "nothing to do")]
+
+
+class _Judge:
+    name = "grill_me"
+    blocking = False
+    uses_llm = True
+
+    async def run(self, ctx: GateContext) -> GateResult:
+        raise AssertionError("an LLM gate must not run under --no-llm")
+
+
+def test_no_llm_drops_the_llm_backed_gates() -> None:
+    """--no-llm means no LLM, not "no LLM summary". Each judge gate is a full
+    round trip, and a connect timeout plus its retries when nothing is
+    listening — minutes per scan, for an amber that says nothing about the
+    code. The README always documented it this way."""
+    kept, dropped = _drop_llm_gates([_Judge(), _NoFix()])
+    assert [g.name for g in kept] == ["nofix"]
+    assert dropped == ["grill_me"]
+
+
+def test_a_gate_without_the_marker_is_kept() -> None:
+    """`uses_llm` is opt-in, so a third-party gate is never dropped by guess."""
+    kept, dropped = _drop_llm_gates([_NoFix()])
+    assert len(kept) == 1
+    assert dropped == []
