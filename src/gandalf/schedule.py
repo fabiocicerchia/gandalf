@@ -67,6 +67,8 @@ _PRIOR = {
     "go_build": 90.0,
     "go_test": 90.0,
     "node_test": 90.0,
+    "php_test": 90.0,
+    "ruby_test": 90.0,
     "clippy": 120.0,
     "golangci_lint": 90.0,
     "tsc": 60.0,

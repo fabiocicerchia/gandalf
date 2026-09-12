@@ -46,6 +46,11 @@ if TYPE_CHECKING:  # import-time cycle: these are only needed for annotations
     from .scope import Scope
 
 
+# Below this, a gate's wait for its turn is scheduling noise rather than anything
+# a reader of the log needs to see.
+_QUEUE_WAIT_WORTH_LOGGING = 0.05
+
+
 # These are the fields of the record it writes; a wrapper object would only rename them
 async def _run_gates(  # noqa: PLR0913
     gates: Sequence[Gate],
@@ -69,16 +74,26 @@ async def _run_gates(  # noqa: PLR0913
         nonlocal done
         plugins.GATE_TIMEOUT.set(_gate_timeout(g.name, timeouts))
         cm = sem if sem is not None else contextlib.nullcontext()
-        debug.log(f"gate {g.name}: start")
-        t0 = time.monotonic()
+        queued = time.monotonic()
         async with cm:
+            # Both the stamp and the clock start here, not at submission. A gate
+            # waiting its turn is not a gate that is slow, and recording the wait
+            # as part of its duration would be self-reinforcing: `schedule` reads
+            # these back, so one run behind a queue is enough to promote a
+            # trivial gate above the scanner it was waiting on, forever. It is
+            # also what makes "a `start` with no completion is the gate you are
+            # waiting on" true — otherwise every gate announces a start at once.
+            wait = time.monotonic() - queued
+            waited = f" (queued {wait:.2f}s)" if wait >= _QUEUE_WAIT_WORTH_LOGGING else ""
+            debug.log(f"gate {g.name}: start{waited}")
+            t0 = time.monotonic()
             try:
                 res = await g.run(ctx)
             except Exception as exc:
                 from .base import GateResult  # noqa: PLC0415 — local import: importing at module scope closes a cycle
 
                 res = GateResult(g.name, GateOutcome.WARN, 0.5, f"gate errored: {exc}")
-        elapsed = round(time.monotonic() - t0, 3)
+            elapsed = round(time.monotonic() - t0, 3)
         plugins.mark(
             res,
             duration=elapsed,

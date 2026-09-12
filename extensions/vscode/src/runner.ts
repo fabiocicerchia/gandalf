@@ -102,7 +102,12 @@ export async function runGandalf(req: RunRequest, s: Settings, token: vscode.Can
       // Kept either way, to quote if the run produces no report; shown as it
       // arrives under debug, which is the point of asking for it — a scan that
       // hits the timeout never reaches the code below that reports timings.
-      if (noise && s.debug) log().debug(noise.trimEnd());
+      // `info`, not `debug`: a LogOutputChannel defaults to the editor's log
+      // level, so `debug` entries are dropped unless the user *also* raises the
+      // channel's level by hand — and they already asked for this by setting
+      // `gandalf.scan.debug`. The incidental `log().debug` chatter elsewhere is
+      // the kind that should stay hidden.
+      if (noise && s.debug) log().info(noise.trimEnd());
       diagnostics += noise;
       if (diagnostics.length > MAX_DIAGNOSTIC_CHARS) diagnostics = diagnostics.slice(-MAX_DIAGNOSTIC_CHARS);
       if (state) req.onProgress?.(state);

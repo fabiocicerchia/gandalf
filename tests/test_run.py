@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from gandalf import plugins
+from gandalf import plugins, schedule
 from gandalf.__main__ import _drop_llm_gates, _gate_timeout, _resolve_concurrency, _run_gates, main
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.config import Config
@@ -430,3 +430,29 @@ def test_a_gate_without_the_marker_is_kept() -> None:
     kept, dropped = _drop_llm_gates([_NoFix()])
     assert len(kept) == 1
     assert dropped == []
+
+
+class _Timed:
+    """Sleeps for `secs` once it is actually allowed to start."""
+
+    blocking = False
+
+    def __init__(self, name: str, secs: float) -> None:
+        self.name = name
+        self.secs = secs
+
+    async def run(self, ctx: GateContext) -> GateResult:
+        await asyncio.sleep(self.secs)
+        return GateResult(self.name, GateOutcome.PASS, 1.0, "ok")
+
+
+def test_the_recorded_duration_excludes_the_wait_for_a_slot() -> None:
+    """The scheduler reads these back, so a queue wait counted as duration is
+    self-reinforcing: one run behind a slow gate would promote a trivial gate
+    above it, and then keep it there. Measured from the moment it starts."""
+    gates = [_Timed("slow", 0.30), _Timed("quick", 0.01)]
+    results = asyncio.run(_run_gates(gates, _CTX, limit=1))
+    took = {r.name: plugins.meta(r, "duration") for r in results}
+    assert took["quick"] < 0.15, f"quick recorded its queue wait: {took}"
+    # ...so the next run still puts the genuinely slow gate first.
+    assert [g.name for g in schedule.order(gates, took)] == ["slow", "quick"]

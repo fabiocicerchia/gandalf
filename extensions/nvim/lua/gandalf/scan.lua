@@ -84,13 +84,31 @@ local function on_stdout(events, plain, opts)
   end
 end
 
+--- Cap on the stderr kept for a failure report. It is a diagnostic aid, not a
+--- document, and `scan.debug` turns that stream into a line per gate and a line
+--- per command for the whole run.
+local MAX_DIAGNOSTIC_CHARS = 256 * 1024
+
+--- Append to a chunk list, dropping from the front past the cap. The tail is
+--- the half worth keeping: an error is written as a run gives up, so it is the
+--- last thing on the stream, never the first. The running total rides on the
+--- table under a string key, which `table.concat` does not see.
+local function append_bounded(chunks, chunk)
+  chunks[#chunks + 1] = chunk
+  chunks.size = (chunks.size or 0) + #chunk
+  while chunks.size > MAX_DIAGNOSTIC_CHARS and #chunks > 1 do
+    chunks.size = chunks.size - #chunks[1]
+    table.remove(chunks, 1)
+  end
+end
+
 local function on_stderr(parser, noise, debug_log)
   return function(err, chunk)
     if err or not chunk then
       return
     end
     local progress, rest = parser.feed(chunk)
-    noise[#noise + 1] = rest
+    append_bounded(noise, rest)
     -- Under scan.debug this is gandalf's trace, and it wants reading while the
     -- run is still going: a scan that hits timeout_ms never writes a report,
     -- so its timings are only ever visible here. Scheduled, like every other
@@ -137,6 +155,14 @@ local function accept(path, cfg, root, opts)
   end
 end
 
+--- The last line with anything on it. The *end* of stderr, not the start: a
+--- process writes its error as it gives up, and under `scan.debug` the first
+--- line is gandalf announcing which config it loaded.
+local function last_line(text)
+  local lines = vim.split(vim.trim(text or ''), '\n', { trimempty = true })
+  return lines[#lines] or 'no output'
+end
+
 --- The process exited. Either it named a report, or the run is a failure.
 local function on_exit(out, readers, cfg, root, opts)
   local text = table.concat(readers.plain) .. readers.events.flush()
@@ -148,10 +174,7 @@ local function on_exit(out, readers, cfg, root, opts)
   -- Exit 1 is a red verdict, which is normal. No report at all is not.
   local detail = diagnostics ~= '' and diagnostics or (out.stderr or '')
   fail(
-    ('gandalf produced no report (exit %s): %s'):format(
-      tostring(out.code),
-      vim.split(detail, '\n')[1] or 'no output'
-    ),
+    ('gandalf produced no report (exit %s): %s'):format(tostring(out.code), last_line(detail)),
     opts
   )
 end

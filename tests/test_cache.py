@@ -138,3 +138,42 @@ def test_timings_ignores_entries_that_have_none() -> None:
 def test_an_inert_plan_has_no_timings() -> None:
     """No --cache means nowhere to have kept them; the scheduler uses priors."""
     assert cache.Plan().timings() == {}
+
+
+class _Named:
+    """A gate whose result carries a different name than the gate does — legal
+    for a plugin, and the case that used to disappear."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+
+def test_merging_without_a_cache_keeps_a_result_the_gate_list_cannot_claim() -> None:
+    """Ordering the report by the gate list is presentation; it must not also
+    decide which results exist."""
+    active = [_Named("ruff"), _Named("wrapper")]
+    fresh = [
+        GateResult("wrapper-inner", GateOutcome.PASS, 1.0, "renamed itself"),
+        GateResult("ruff", GateOutcome.PASS, 1.0, "clean"),
+    ]
+    merged, cached = cache.Plan().merge(fresh, active, active)
+    assert cached == []
+    # Gate order for what lines up, then whatever was left — but nothing lost.
+    assert [r.name for r in merged] == ["ruff", "wrapper-inner"]
+
+
+def test_merging_survives_a_cache_entry_that_expired_mid_run(tmp_path: Path) -> None:
+    """An advisory entry can pass `pending` and then expire before `merge` reads
+    it back. That gate has no result at all; indexing the gate list by name used
+    to raise rather than leave it out."""
+    path = str(tmp_path / "c.json")
+    data: dict[str, Any] = {}
+    cache.put(data, "trivy", "h1", GateResult("trivy", GateOutcome.PASS, 1.0, "no known vulns"))
+    data["trivy"]["ts"] -= cache.ADVISORY_TTL + 1  # expired since `pending` said "hit"
+    plan = cache.Plan(path, data, "h1")
+
+    active = [_Named("ruff"), _Named("trivy")]
+    fresh = [GateResult("ruff", GateOutcome.PASS, 1.0, "clean")]
+    merged, cached = plan.merge(fresh, active, [active[0]])
+    assert cached == []
+    assert [r.name for r in merged] == ["ruff"]

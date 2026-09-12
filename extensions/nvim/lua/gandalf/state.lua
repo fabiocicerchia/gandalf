@@ -9,8 +9,11 @@ local core = require('gandalf.core')
 
 local M = {}
 
---- Lines kept in the in-memory log before the oldest is dropped.
-local LOG_LINES_KEPT = 500
+--- Lines kept in the in-memory log before the oldest is dropped. Sized for a
+--- `scan.debug` run, which writes a couple of lines per gate and one per
+--- command it shells out to: at 500 a single scan evicted the `scan (...)`
+--- command line that says what was actually run, and every earlier scan with it.
+local LOG_LINES_KEPT = 5000
 
 local cfg = nil
 --- The last completed run.

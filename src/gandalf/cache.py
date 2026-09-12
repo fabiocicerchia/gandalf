@@ -229,6 +229,23 @@ def timings(cache: dict[str, Any]) -> dict[str, float]:
     return out
 
 
+def _in_gate_order(results: list[GateResult], active: list[Gate]) -> list[GateResult]:
+    """`results` sorted to follow `active`, losing none of them.
+
+    Ordering a report by the gate list is presentation; it must not also decide
+    which results exist. Two cases where a name doesn't line up, and neither is
+    a reason to drop anything: a gate whose cached entry expired between
+    `pending` and here has no result at all (indexing `active` would raise),
+    and a third-party gate whose `GateResult.name` differs from its own `name`
+    has one that no `active` entry claims (it would vanish). Named results come
+    first, in gate order; anything unclaimed follows, in the order it arrived.
+    """
+    by_name = {r.name: r for r in results}
+    ordered = [by_name[g.name] for g in active if g.name in by_name]
+    claimed = {id(r) for r in ordered}
+    return ordered + [r for r in results if id(r) not in claimed]
+
+
 @dataclass
 class Plan:
     """What this run may skip, and how the skipped results come back.
@@ -269,8 +286,7 @@ class Plan:
         diff nobody can read.
         """
         if self.path is None:
-            by_name = {r.name: r for r in fresh}
-            return [by_name[g.name] for g in active if g.name in by_name], []
+            return _in_gate_order(fresh, active), []
         for r in fresh:
             put(self.data, r.name, self.file_hash, r)
         save(self.path, self.data)
@@ -281,5 +297,4 @@ class Plan:
             for g in active
             if g not in ran and (found := get(self.data, g.name, self.file_hash, max_age(g))) is not None
         ]
-        by_name = {r.name: r for r in fresh + cached}
-        return [by_name[g.name] for g in active], cached
+        return _in_gate_order(fresh + cached, active), cached
