@@ -77,7 +77,7 @@ More in [`docs/architecture.md`](docs/architecture.md).
 
 ## What it does
 
-- **Runs ~60 gates** across security, dependencies, code quality, complexity,
+- **Runs ~130 gates** across security, dependencies, code quality, complexity,
   documentation, build & tests, best practices and architecture. Caveat: most
   wrap a third-party scanner, so what actually runs depends on what is
   installed — see the status note above.
@@ -228,7 +228,7 @@ variables that override it, are in
 ```toml
 [gandalf]
 skip        = ["atheris"]                    # never run these
-concurrency = 8                              # ~60 gates each able to spawn a
+concurrency = 8                              # ~130 gates each able to spawn a
                                              # docker run: bound them
 exclude     = ["src/generated", "*.min.js"]  # paths no gate should read
 
