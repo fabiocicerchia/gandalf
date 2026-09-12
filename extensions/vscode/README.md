@@ -257,30 +257,31 @@ Then, in rough order of payoff:
 - **Run a smaller gate set while editing.** Put the expensive gates in a
   `skip` list in an editor-only config and point `gandalf.configPath` at it —
   CI still runs `.gandalf.toml` in full. See the profiles below.
-- **The LLM retry tail — already handled, but worth knowing.** The skill-backed
-  judge gates (`grill_me`, `well_architected`, `security_assessment`,
-  `quality_gate_review`, `ruthless_refactor`) call a model *regardless of*
-  `gandalf.scan.llm`; that setting only controls the report's summary. With no
-  endpoint reachable they each burn gandalf's retry backoff (1s + 2s + 4s per
-  call) before giving up, and because they are the slowest gates they set the
-  whole scan's tail. Measured on gandalf's own repository:
-
-  | `GANDALF_LLM_RETRIES` | full scan |
-  |---|---|
-  | 3 (gandalf's default, right for CI) | 14.4s |
-  | 2 | 6.4s |
-  | **1 (what editor scans use)** | **3.3s** |
-  | 0 | 3.0s |
-
-  So editor scans pass `GANDALF_LLM_RETRIES=1`: one retry still absorbs a
-  transient failure but costs 0.3s instead of 11s. Export the variable yourself
-  to override it. `Gandalf: Check Environment` reports the endpoint either way.
+- **The judge gates are off unless you ask for them.** The skill-backed gates
+  (`grill_me`, `well_architected`, `security_assessment`, `quality_gate_review`,
+  `ruthless_refactor`, `codebase_architecture`, `compliance`) each spend a full
+  model round trip. With `gandalf.scan.llm` off — the default — background scans
+  pass `--no-llm`, which now skips those gates outright rather than only the
+  report's summary; they are listed as disabled in the report. Turning
+  `gandalf.scan.llm` on brings them back, and then they are the slowest gates in
+  the run and set its tail. Editor scans also pass `GANDALF_LLM_RETRIES=1` so an
+  endpoint that has gone away costs one backoff rather than three (11s → 0.3s per
+  call, measured on gandalf's own repository); export the variable yourself to
+  override it. `Gandalf: Check Environment` reports the endpoint either way.
+- **Turn on `gandalf.scan.debug`** when you want to watch the run rather than
+  guess at it: every stage, every gate's start and duration, and every command
+  gandalf shells out to, stamped with the elapsed time, in the **Gandalf** output
+  channel (`Gandalf: Show Log`). It is the only thing that names the gate a
+  timed-out scan was stuck in — `Gandalf: Show Gate Timings` and the report can
+  only describe gates that finished.
 - **Build the tools image** (`make tools`). Not for speed — for correctness —
   but note that gates whose tool is missing return almost instantly, so a fast
   scan on a bare machine mostly means nothing was checked.
 - **Bound the parallelism** with `gandalf.scan.concurrency` if the scan is
   making the editor sluggish, and give slow gates their own budget with
-  `[gandalf.timeouts]` in `.gandalf.toml`.
+  `[gandalf.timeouts]` in `.gandalf.toml`. Gandalf submits gates heaviest-first,
+  so a low concurrency spends its slots on the gates that need them: at
+  `concurrency: 2` the two heaviest start, and the quick gates fill in behind.
 - **Let the cache work.** A repeat full scan with nothing changed reuses every
   gate result; the cost above is the cold path.
 
@@ -331,11 +332,12 @@ directory (`--out-dir`), not `reports/`, and the trend log is not appended to
 (`--no-trend`) — a scan on every save would swamp a history that is meant to be
 per-commit. Only the newest few reports are kept.
 
-**9. The LLM stays off** for background scans. Summaries cost a round trip to a
-model; ask for one when you want to read it (`Gandalf: Open Report (regenerate
-with LLM summary)`), or set `gandalf.scan.llm`. Either way the judge gates cap
-their retries at one, so an unreachable endpoint costs a second per scan rather
-than eleven.
+**9. The LLM stays off** for background scans — the summary *and* the judge
+gates, since `--no-llm` drops both. Summaries cost a round trip to a model and
+each judge gate costs another; ask for one when you want to read it (`Gandalf:
+Open Report (regenerate with LLM summary)`), or set `gandalf.scan.llm`. With the
+LLM on, the judge gates cap their retries at one, so an unreachable endpoint
+costs a second per scan rather than eleven.
 
 ### What the extension itself costs
 
@@ -371,8 +373,9 @@ The mechanisms, since they constrain how the code may change:
 - **A saved file is read once**, not once to check whether it changed and again
   to record what was scanned.
 
-If you want to see where a scan's time actually goes, that is the gates, and
-`Gandalf: Show Gate Timings` names them.
+If you want to see where a scan's time actually goes, that is the gates:
+`Gandalf: Show Gate Timings` names them after the fact, and
+`gandalf.scan.debug` narrates the run as it happens.
 
 ### Profiles worth copying
 
@@ -418,6 +421,10 @@ worth knowing about are covered above.
 Gate selection (`only` / `skip`) lives in `.gandalf.toml`, not on the command
 line — point `gandalf.configPath` at an editor-specific config to run a
 different gate set while you work.
+
+`gandalf.scan.debug` is the one to reach for when a scan is slow or times out:
+it puts gandalf's own elapsed-stamped log — stages, gate starts and durations,
+every command — into the **Gandalf** output channel.
 
 ## Notes and limits
 

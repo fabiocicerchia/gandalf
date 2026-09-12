@@ -84,8 +84,9 @@ require('gandalf').setup({
     timeout_ms = 600000,
     concurrency = 0,   -- 0 leaves gandalf's default (CPU count)
     use_cache = true,  -- --cache, workspace scans only
-    llm = false,
+    llm = false,       -- off also skips the LLM judge gates, not just the summary
     stream = true,     -- read per-gate results as they land
+    debug = false,     -- gandalf's elapsed-stamped trace into `:GandalfLog`
   },
 
   diagnostics = {
@@ -121,7 +122,7 @@ rather than a nil index inside a callback a minute into a scan.
 | `:GandalfTimings` | Per-gate wall clock; picking one copies a skip list |
 | `:GandalfHistory` | Score over time, from the trend log and `git log` |
 | `:GandalfCancel` | Stop the running scan |
-| `:GandalfLog` | What was run, and what came back |
+| `:GandalfLog` | What was run, and what came back — plus gandalf's own per-stage, per-gate, per-command trace when `scan.debug` is on, which is the only place a scan that hits `timeout_ms` is accounted for |
 
 ## Why a scan is not on every keystroke
 

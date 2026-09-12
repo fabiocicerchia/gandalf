@@ -1,18 +1,65 @@
 # Performance
 
-## What this measures — and what it doesn't
+## Making a slow scan faster
 
 **A real scan is dominated by the gates, not by gandalf.** Thirty-odd gates each
-shell out to a linter, a scanner, or a `docker run`; that is tens of seconds,
-and no amount of tuning in gandalf's own code touches it. If a scan feels slow,
-the lever is the gate set — `gandalf --debug` names the slowest gates, and the
-VS Code extension's **Gandalf: Show Gate Timings** copies a ready-made skip
-list.
+shell out to a linter, a scanner, or a `docker run`; that is tens of seconds to
+minutes, and no amount of tuning in gandalf's own code touches it. The lever is
+the gate set and the order it runs in.
 
-Everything on this page is the *other* cost: the work gandalf and the extension
+### First: find out where the time actually goes
+
+```sh
+gandalf --debug          # or GANDALF_DEBUG=1, which the editor extension sets
+```
+
+Every line carries the elapsed time it was written at, so the log reads as a
+timeline: each stage as it starts, the order the gates were scheduled in, each
+gate's start and its duration, and every external command with its timeout and
+exit code. The run ends with the five slowest gates.
+
+Reach for it especially when a scan *doesn't* finish. The timings in the report
+and the extension's **Gandalf: Show Gate Timings** can only describe gates that
+got to the end; a gate still running when the editor's timeout fires appears in
+neither, and the `--debug` log is the only place it is named — look for a `gate
+<name>: start` with no matching completion.
+
+### Then: the levers, roughly in order of what they save
+
+| Lever | What it does |
+|---|---|
+| `--no-llm` | Drops the LLM summary *and* the judge gates (`grill_me`, `codebase_architecture`, `well_architected`, `compliance`, the `skill_*` gates). Each is a full model round trip; with nothing listening at `GANDALF_LLM_URL` each is a connect timeout plus its retries instead. For an editor or pre-commit run this is usually the largest single saving. |
+| `skip` in `.gandalf.toml` | The honest answer for a gate that costs minutes and tells you something you already know from CI — `codeql`, `ci_act`, a full test-suite gate. In the repository, where it can be reviewed. |
+| `--cache` | A gate whose files did not change is not re-run at all. Advisory gates (`trivy`, `osv`, …) still expire after six hours, because a new CVE is a new answer for identical bytes. |
+| `--exclude` / `.gandalfignore` | Vendored trees and generated code are usually most of what a full-tree scanner reads. |
+| `[gandalf.timeouts]` | Bounds the worst case per gate rather than removing it: `semgrep = 60` degrades that gate to amber at a minute instead of letting it own the run. |
+| `--concurrency N` | Trades wall-clock for a responsive machine. Rarely a speed-up on its own — see below. |
+
+### Why the order gates run in matters
+
+Gates run concurrently but bounded, so there is a queue, and whichever gate
+starts last decides when the run ends. Discovery order is alphabetical by module
+filename, which put `bandit` first and `trivy` near the back: the queue drained
+into a five-minute scanner that nothing could overlap with.
+
+Gates are now submitted **heaviest first** — longest-processing-time-first, the
+standard scheduling answer — so the expensive ones start immediately and the
+quick ones fill in behind them. The estimate is, in order of preference: what
+the gate cost last time (recorded per gate in the `--cache` file, so the second
+run on a repository schedules by measurement), a `cost` attribute a gate
+declares for itself, then a coarse built-in prior. See `gandalf/schedule.py`.
+
+The practical consequence is that lowering `--concurrency` is much less
+punishing than it was: with `--concurrency 2` the two heaviest gates are the two
+that start, rather than two arbitrary linters while trivy waits.
+
+## What the benchmark measures — and what it doesn't
+
+Everything below is the *other* cost: the work gandalf and the extension
 do themselves, between the gates finishing and the report appearing. It matters
 because it is the part that runs on the editor's UI thread, and the part that
-scales with the number of findings rather than with the number of gates.
+scales with the number of findings rather than with the number of gates. It is
+not where a slow scan's minutes are.
 
 ![Bar chart: where a scan's in-process time and memory go, previous
 implementation against current, for eight operations across two panels — time in

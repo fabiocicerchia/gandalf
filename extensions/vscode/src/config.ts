@@ -18,6 +18,7 @@ export interface Settings {
   scanOnStartup: boolean;
   timeoutSeconds: number;
   concurrency: number;
+  debug: boolean;
   useCache: boolean;
   llm: boolean;
   diagnosticsEnabled: boolean;
@@ -40,6 +41,7 @@ export function readSettings(scope?: vscode.Uri): Settings {
     scanOnStartup: get("scan.onStartup", true),
     timeoutSeconds: Math.max(10, get("scan.timeoutSeconds", 600)),
     concurrency: Math.max(0, get("scan.concurrency", 0)),
+    debug: get("scan.debug", false),
     useCache: get("scan.useCache", true),
     llm: get("scan.llm", false),
     diagnosticsEnabled: get("diagnostics.enabled", true),

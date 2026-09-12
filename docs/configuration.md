@@ -71,6 +71,14 @@ exclude     = ["src/generated", "*.min.js"]  # paths no gate should read
 if they all launch at once. Precedence: `--concurrency N` → `GANDALF_CONCURRENCY`
 → config → CPU count.
 
+Because there is a queue, the order gates are submitted in decides when the run
+ends. Gandalf submits them **heaviest first**, estimating from what each gate
+cost the last time it ran (recorded in the `--cache` file) and falling back to a
+built-in prior — so the five-minute scanner starts immediately instead of last,
+and lowering `concurrency` costs much less than it looks like it should. A gate
+can declare its own estimate with a `cost` class attribute, in seconds; see
+[Performance](performance.md).
+
 ### Excluding paths
 
 `exclude` adds to the repo's `.gandalfignore` and the built-in defaults

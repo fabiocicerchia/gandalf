@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any
 
 from . import cache as gcache
 from . import config as gconfig
-from . import console, debug, llm, outputs, plugins, report, scope, severity, suppress
+from . import console, debug, llm, outputs, plugins, report, schedule, scope, severity, suppress
 from . import summary as gsummary
 from . import trend as gtrend
 from .base import GateContext, GateOutcome
@@ -44,6 +44,11 @@ if TYPE_CHECKING:  # import-time cycle: these are only needed for annotations
     from .config import Config
     from .report import Verdict
     from .scope import Scope
+
+
+# Below this, a gate's wait for its turn is scheduling noise rather than anything
+# a reader of the log needs to see.
+_QUEUE_WAIT_WORTH_LOGGING = 0.05
 
 
 # These are the fields of the record it writes; a wrapper object would only rename them
@@ -69,16 +74,26 @@ async def _run_gates(  # noqa: PLR0913
         nonlocal done
         plugins.GATE_TIMEOUT.set(_gate_timeout(g.name, timeouts))
         cm = sem if sem is not None else contextlib.nullcontext()
-        debug.log(f"gate {g.name}: start")
-        t0 = time.monotonic()
+        queued = time.monotonic()
         async with cm:
+            # Both the stamp and the clock start here, not at submission. A gate
+            # waiting its turn is not a gate that is slow, and recording the wait
+            # as part of its duration would be self-reinforcing: `schedule` reads
+            # these back, so one run behind a queue is enough to promote a
+            # trivial gate above the scanner it was waiting on, forever. It is
+            # also what makes "a `start` with no completion is the gate you are
+            # waiting on" true — otherwise every gate announces a start at once.
+            wait = time.monotonic() - queued
+            waited = f" (queued {wait:.2f}s)" if wait >= _QUEUE_WAIT_WORTH_LOGGING else ""
+            debug.log(f"gate {g.name}: start{waited}")
+            t0 = time.monotonic()
             try:
                 res = await g.run(ctx)
             except Exception as exc:
                 from .base import GateResult  # noqa: PLC0415 — local import: importing at module scope closes a cycle
 
                 res = GateResult(g.name, GateOutcome.WARN, 0.5, f"gate errored: {exc}")
-        elapsed = round(time.monotonic() - t0, 3)
+            elapsed = round(time.monotonic() - t0, 3)
         plugins.mark(
             res,
             duration=elapsed,
@@ -179,11 +194,12 @@ def _apply_excludes(args: argparse.Namespace, cfg: Config) -> None:
         debug.log(f"excluding {len(excludes)} extra pattern(s): {', '.join(excludes)}")
 
 
-def _select_gates(cfg: Config) -> tuple[list[Any], list[Any], str]:
-    """(gates to run, gates the config disabled, error message).
+def _select_gates(args: argparse.Namespace, cfg: Config) -> tuple[list[Any], list[Any], str]:
+    """(gates to run, gates that were switched off, error message).
 
     A non-empty message means there is nothing to run. Config selection
-    (only/skip) happens here, before the language filtering in `_active_gates`.
+    (only/skip) and --no-llm happen here, before the language filtering in
+    `_active_gates`.
     """
     gates = discover_gates()
     if not gates:
@@ -191,7 +207,27 @@ def _select_gates(cfg: Config) -> tuple[list[Any], list[Any], str]:
     gates, disabled = cfg.select(gates)
     if not gates:
         return [], [], "all gates disabled by config selection"
+    if args.no_llm:
+        gates, llm_off = _drop_llm_gates(gates)
+        disabled = sorted(disabled + llm_off)
+        if llm_off:
+            debug.log(f"--no-llm: skipping {len(llm_off)} LLM-backed gate(s): {', '.join(llm_off)}")
+        if not gates:
+            return [], [], "every remaining gate is LLM-backed, and --no-llm was given"
     return gates, disabled, ""
+
+
+def _drop_llm_gates(gates: list[Any]) -> tuple[list[Any], list[str]]:
+    """(gates that don't need the LLM, names of the ones dropped).
+
+    --no-llm means no LLM, not "no LLM summary": the judge gates each spend a
+    full round trip, and with nothing listening at GANDALF_LLM_URL they spend a
+    connect timeout and its retries instead — minutes, on every scan, to produce
+    the amber "judge unavailable" that says nothing about the code. `uses_llm` is
+    the marker, so a third-party gate can opt in the same way.
+    """
+    kept = [g for g in gates if not getattr(g, "uses_llm", False)]
+    return kept, sorted(g.name for g in gates if getattr(g, "uses_llm", False))
 
 
 def _fix_mode(args: argparse.Namespace) -> bool:
@@ -354,7 +390,7 @@ def main(argv: list[str] | None = None) -> int:
     debug.log(f"config: {cfg.path or '(defaults)'}")
     _apply_excludes(args, cfg)
 
-    gates, disabled, problem = _select_gates(cfg)
+    gates, disabled, problem = _select_gates(args, cfg)
     if problem:
         console.err(problem)
         return 2
@@ -373,7 +409,10 @@ def main(argv: list[str] | None = None) -> int:
             fixes = asyncio.run(run_fixers(active, ctx))
 
         plan = _cache_plan(args, sc)
-        to_run = plan.pending(active)
+        # Heaviest first: with concurrency bounded, whichever gate starts last
+        # sets when the run ends, and alphabetical discovery order puts trivy
+        # and codeql near the back of the queue.
+        to_run = schedule.order(plan.pending(active), plan.timings())
         limit = _resolve_concurrency(args.concurrency, cfg)
         debug.log(f"running {len(to_run)} gate(s), concurrency={limit or 'unbounded'}")
         prog.stage(f"Running {len(to_run)} gates")

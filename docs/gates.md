@@ -154,6 +154,11 @@ playbook) into an LLM-judged gate. They are **advisory** (PASS/WARN only) and
 degrade to WARN when the model is unreachable or the skill isn't embedded. The
 skill file is the rubric — edit it and the gate follows.
 
+Each costs a full model round trip, so `--no-llm` skips them outright (along
+with `compliance` and the report's summary) rather than running them and
+reporting amber; they are listed as disabled in the report. That is usually the
+largest saving available to an editor or pre-commit run.
+
 | Gate | Skill | Judges |
 |------|-------|--------|
 | `security_assessment` | `security-assessment` | CNCF TAG-Security-style posture of the change. |
@@ -405,8 +410,10 @@ model.
 the run — but a WARN from an unreachable model never does. The skills are read
 from gandalf's own source tree (next to the package), not the worktree under
 review, so `--commit`/`--staged` runs judge against the same rubric. To disable
-these gates for a fast, LLM-free run, point `GANDALF_LLM_URL` at nothing (they
-WARN and drop out of the verdict) — the tool-based gates are unaffected.
+these gates for a fast, LLM-free run, pass `--no-llm` — they are not run at all,
+and the tool-based gates are unaffected. Pointing `GANDALF_LLM_URL` at nothing
+also works but is slower and noisier: each gate still spends a connect timeout
+and its retries before WARNing its way out of the verdict.
 
 ### Skill-backed advisory gates (3)
 

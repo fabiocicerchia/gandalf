@@ -25,6 +25,7 @@ _TASK = (
 class PrCodeSummaryGate:
     name = "pr_code_summary"
     blocking = False
+    uses_llm = True  # --no-llm drops the gate, not just the summary
     category = "Best practices"
 
     async def run(self, ctx: GateContext) -> GateResult:

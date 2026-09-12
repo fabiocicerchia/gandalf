@@ -57,6 +57,14 @@ describe('validation', function()
     assert.is_truthy(fails({ diagnostics = { min_level = 'catastrophic' } }):match('min_level'))
   end)
 
+  it('rejects a non-boolean scan.debug, which would silently never log', function()
+    assert.is_truthy(fails({ scan = { debug = 'yes' } }):match('debug'))
+  end)
+
+  it('leaves gandalf untraced by default', function()
+    assert.is_false(config.resolve({ cmd = { 'gandalf' } }).scan.debug)
+  end)
+
   it('accepts a source checkout, which is the awkward shape', function()
     assert.has_no.errors(function()
       config.resolve({

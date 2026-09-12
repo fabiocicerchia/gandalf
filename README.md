@@ -48,7 +48,7 @@ One pass over a scope, every gate against the same file set:
   discover ───────────────► every .py in gates/ exporting a Gate, plus anything
       │                      on GANDALF_GATES_PATH
       │
-      ▼  concurrently, bounded by --concurrency
+      ▼  concurrently, heaviest gate first, bounded by --concurrency
   ┌─ gate ─────────────────────────────────────────────────┐
   │  cache hit on the scope's content hash?  → reuse       │
   │  tool on PATH?               → run it                  │
@@ -288,7 +288,16 @@ where it can be reviewed.
 **`skill judge unavailable (<urlopen error [Errno 111] Connection refused>)`**
 The LLM-backed gates and the summary talk to an OpenAI-compatible endpoint at
 `GANDALF_LLM_URL`. With nothing listening they degrade to amber and the run
-continues; `--no-llm` skips them outright.
+continues; `--no-llm` skips them outright, which is also the biggest saving
+available to an editor or pre-commit run — each one costs a connect timeout and
+its retries before it can report that amber.
+
+**A scan that takes minutes, or never finishes.**
+`gandalf --debug` (or `GANDALF_DEBUG=1`) narrates the run on stderr with every
+line stamped with the elapsed time: each stage, the order gates were scheduled
+in, each gate's start and duration, and every external command. A gate with a
+`start` and no completion is the one you are waiting on.
+[Performance](docs/performance.md) has the rest of the levers.
 
 **`No module named gandalf`**
 The package lives under `src/`, so it needs `PYTHONPATH=src` — or `make

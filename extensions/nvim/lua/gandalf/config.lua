@@ -43,6 +43,10 @@ M.defaults = {
     timeout_ms = 600000,
     --- Max gates at once (--concurrency). 0 leaves gandalf's default.
     concurrency = 0,
+    --- Log gandalf's own elapsed-stamped trace -- every stage, every gate's
+    --- start and duration, every command it shells out to -- into :GandalfLog.
+    --- The way to find out where a slow (or timing-out) scan spends its time.
+    debug = false,
     --- Pass --cache on workspace scans so unchanged gates are reused.
     use_cache = true,
     --- Include the LLM summary in background scans. The report can always be
@@ -132,6 +136,7 @@ function M.validate(cfg)
   vim.validate('scan.use_cache', cfg.scan.use_cache, 'boolean')
   vim.validate('scan.llm', cfg.scan.llm, 'boolean')
   vim.validate('scan.stream', cfg.scan.stream, 'boolean')
+  vim.validate('scan.debug', cfg.scan.debug, 'boolean')
   vim.validate('diagnostics.enabled', cfg.diagnostics.enabled, 'boolean')
   vim.validate('diagnostics.min_level', cfg.diagnostics.min_level, function(v)
     return LEVELS[v] == true

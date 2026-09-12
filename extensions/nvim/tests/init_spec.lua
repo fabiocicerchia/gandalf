@@ -188,6 +188,23 @@ describe('a scan that produced nothing', function()
     assert.is_truthy(log_since():match('gandalf: exploded'))
   end)
 
+  it('quotes the end of stderr, which is where a dying process writes why', function()
+    -- With scan.debug on, stderr opens with gandalf announcing its config and
+    -- then narrates every gate. Quoting the first line reports that banner and
+    -- throws the actual error away.
+    setup({
+      SH,
+      write('chatty.sh', {
+        "echo 'config: (defaults)' >&2",
+        "echo 'gate ruff: start' >&2",
+        "echo 'gandalf: exploded' >&2",
+        'exit 1',
+      }),
+    })
+    assert.is_false(scan())
+    assert.is_truthy(log_since():match('no report %(exit 1%): gandalf: exploded'))
+  end)
+
   it('fails the run when the report it named is not readable JSON', function()
     local broken = write('broken.json', { 'not json' })
     setup({ SH, write('broken.sh', { ("printf '%%s\\n' 'JSON report: %s'"):format(broken) }) })

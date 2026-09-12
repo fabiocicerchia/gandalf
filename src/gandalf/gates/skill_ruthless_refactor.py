@@ -25,6 +25,7 @@ _TASK = (
 class RuthlessRefactorGate:
     name = "ruthless_refactor"
     blocking = False
+    uses_llm = True  # --no-llm drops the gate, not just the summary
     category = "Complexity"
 
     async def run(self, ctx: GateContext) -> GateResult:

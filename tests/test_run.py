@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from gandalf import plugins
-from gandalf.__main__ import _gate_timeout, _resolve_concurrency, _run_gates, main
+from gandalf import plugins, schedule
+from gandalf.__main__ import _drop_llm_gates, _gate_timeout, _resolve_concurrency, _run_gates, main
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.config import Config
 from gandalf.fixers import _files_note, _touched, _tree_state, run_fixers
@@ -404,3 +404,55 @@ def test_a_fixer_that_changes_nothing_is_reported_as_such(tmp_path: Path) -> Non
 
     res = asyncio.run(run_fixers([_Idle()], GateContext(repo=str(repo), workdir=str(repo))))
     assert res == [("idle", False, "nothing to do")]
+
+
+class _Judge:
+    name = "grill_me"
+    blocking = False
+    uses_llm = True
+
+    async def run(self, ctx: GateContext) -> GateResult:
+        raise AssertionError("an LLM gate must not run under --no-llm")
+
+
+def test_no_llm_drops_the_llm_backed_gates() -> None:
+    """--no-llm means no LLM, not "no LLM summary". Each judge gate is a full
+    round trip, and a connect timeout plus its retries when nothing is
+    listening — minutes per scan, for an amber that says nothing about the
+    code. The README always documented it this way."""
+    kept, dropped = _drop_llm_gates([_Judge(), _NoFix()])
+    assert [g.name for g in kept] == ["nofix"]
+    assert dropped == ["grill_me"]
+
+
+def test_a_gate_without_the_marker_is_kept() -> None:
+    """`uses_llm` is opt-in, so a third-party gate is never dropped by guess."""
+    kept, dropped = _drop_llm_gates([_NoFix()])
+    assert len(kept) == 1
+    assert dropped == []
+
+
+class _Timed:
+    """Sleeps for `secs` once it is actually allowed to start."""
+
+    blocking = False
+
+    def __init__(self, name: str, secs: float) -> None:
+        self.name = name
+        self.secs = secs
+
+    async def run(self, ctx: GateContext) -> GateResult:
+        await asyncio.sleep(self.secs)
+        return GateResult(self.name, GateOutcome.PASS, 1.0, "ok")
+
+
+def test_the_recorded_duration_excludes_the_wait_for_a_slot() -> None:
+    """The scheduler reads these back, so a queue wait counted as duration is
+    self-reinforcing: one run behind a slow gate would promote a trivial gate
+    above it, and then keep it there. Measured from the moment it starts."""
+    gates = [_Timed("slow", 0.30), _Timed("quick", 0.01)]
+    results = asyncio.run(_run_gates(gates, _CTX, limit=1))
+    took = {r.name: plugins.meta(r, "duration") for r in results}
+    assert took["quick"] < 0.15, f"quick recorded its queue wait: {took}"
+    # ...so the next run still puts the genuinely slow gate first.
+    assert [g.name for g in schedule.order(gates, took)] == ["slow", "quick"]

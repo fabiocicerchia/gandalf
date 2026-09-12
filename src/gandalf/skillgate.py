@@ -130,6 +130,7 @@ class SkillGate:
 
     name: str = ""  # set by each subclass
     blocking = False
+    uses_llm = True  # --no-llm drops the gate, not just the summary
     skills: tuple[str, ...] = ()
     task = ""
     pass_threshold = 0.75

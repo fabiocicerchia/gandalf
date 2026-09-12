@@ -22,6 +22,7 @@ _TASK = (
 class QualityGateReviewGate:
     name = "quality_gate_review"
     blocking = True
+    uses_llm = True  # --no-llm drops the gate, not just the summary
     category = "Best practices"
 
     async def run(self, ctx: GateContext) -> GateResult:

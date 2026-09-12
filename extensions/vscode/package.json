@@ -287,6 +287,11 @@
           "minimum": 0,
           "markdownDescription": "Max gates running at once (`--concurrency`). `0` leaves gandalf's default (CPU count). Lower it to keep the machine responsive — gates spawn `docker run`."
         },
+        "gandalf.scan.debug": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Log every stage, every gate's start and duration, and every command gandalf runs to the **Gandalf** output channel, stamped with the elapsed time. Turn it on to find out where a slow scan is spending its minutes — including a scan that never finishes, which the timings report at the end cannot tell you about."
+        },
         "gandalf.scan.debounceMs": {
           "type": "number",
           "default": 1500,

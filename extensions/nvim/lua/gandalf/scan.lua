@@ -45,14 +45,22 @@ end
 
 --- The environment gandalf is run with, over the inherited one.
 local function scan_env(cfg)
-  return vim.tbl_extend('force', {
+  local env = {
     -- The progress line is TTY-gated; this turns it on for a piped child.
     GANDALF_PROGRESS = '1',
-    -- The judge gates call the LLM whatever --no-llm says, and retry with
+    -- With scan.llm on, the judge gates each call the model and retry with
     -- backoff when it is unreachable. gandalf's default of 3 is right for CI
     -- and costs eleven seconds per scan in an editor; one still absorbs a blip.
+    -- (With scan.llm off, --no-llm skips those gates outright.)
     GANDALF_LLM_RETRIES = vim.env.GANDALF_LLM_RETRIES or '1',
-  }, cfg.env)
+  }
+  if cfg.scan.debug then
+    -- Every stage, gate and command, stamped with the elapsed time. The env
+    -- var rather than --debug, so it needs no --help gating and works against
+    -- a build that predates the flag.
+    env.GANDALF_DEBUG = '1'
+  end
+  return vim.tbl_extend('force', env, cfg.env)
 end
 
 --- Per-gate results as they land, so the list fills during the run.
@@ -76,13 +84,43 @@ local function on_stdout(events, plain, opts)
   end
 end
 
-local function on_stderr(parser, noise)
+--- Cap on the stderr kept for a failure report. It is a diagnostic aid, not a
+--- document, and `scan.debug` turns that stream into a line per gate and a line
+--- per command for the whole run.
+local MAX_DIAGNOSTIC_CHARS = 256 * 1024
+
+--- Append to a chunk list, dropping from the front past the cap. The tail is
+--- the half worth keeping: an error is written as a run gives up, so it is the
+--- last thing on the stream, never the first. The running total rides on the
+--- table under a string key, which `table.concat` does not see.
+local function append_bounded(chunks, chunk)
+  chunks[#chunks + 1] = chunk
+  chunks.size = (chunks.size or 0) + #chunk
+  while chunks.size > MAX_DIAGNOSTIC_CHARS and #chunks > 1 do
+    chunks.size = chunks.size - #chunks[1]
+    table.remove(chunks, 1)
+  end
+end
+
+local function on_stderr(parser, noise, debug_log)
   return function(err, chunk)
     if err or not chunk then
       return
     end
     local progress, rest = parser.feed(chunk)
-    noise[#noise + 1] = rest
+    append_bounded(noise, rest)
+    -- Under scan.debug this is gandalf's trace, and it wants reading while the
+    -- run is still going: a scan that hits timeout_ms never writes a report,
+    -- so its timings are only ever visible here. Scheduled, like every other
+    -- write out of this callback -- it runs in a fast event context.
+    if debug_log and rest:match('%S') then
+      local lines = vim.split(vim.trim(rest), '\n', { trimempty = true })
+      vim.schedule(function()
+        for _, line in ipairs(lines) do
+          state.log('%s', line)
+        end
+      end)
+    end
     if progress then
       vim.schedule(function()
         state.set_progress(progress)
@@ -117,6 +155,14 @@ local function accept(path, cfg, root, opts)
   end
 end
 
+--- The last line with anything on it. The *end* of stderr, not the start: a
+--- process writes its error as it gives up, and under `scan.debug` the first
+--- line is gandalf announcing which config it loaded.
+local function last_line(text)
+  local lines = vim.split(vim.trim(text or ''), '\n', { trimempty = true })
+  return lines[#lines] or 'no output'
+end
+
 --- The process exited. Either it named a report, or the run is a failure.
 local function on_exit(out, readers, cfg, root, opts)
   local text = table.concat(readers.plain) .. readers.events.flush()
@@ -128,10 +174,7 @@ local function on_exit(out, readers, cfg, root, opts)
   -- Exit 1 is a red verdict, which is normal. No report at all is not.
   local detail = diagnostics ~= '' and diagnostics or (out.stderr or '')
   fail(
-    ('gandalf produced no report (exit %s): %s'):format(
-      tostring(out.code),
-      vim.split(detail, '\n')[1] or 'no output'
-    ),
+    ('gandalf produced no report (exit %s): %s'):format(tostring(out.code), last_line(detail)),
     opts
   )
 end
@@ -190,7 +233,7 @@ function M.run(opts, cancel)
     env = scan_env(cfg),
     timeout = cfg.scan.timeout_ms,
     stdout = on_stdout(readers.events, readers.plain, opts),
-    stderr = on_stderr(readers.progress, readers.noise),
+    stderr = on_stderr(readers.progress, readers.noise, cfg.scan.debug),
   }, function(out)
     vim.schedule(function()
       on_exit(out, readers, cfg, root, opts)

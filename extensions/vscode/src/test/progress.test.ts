@@ -106,6 +106,33 @@ describe("progress parsing", () => {
     assert.match(parser.flush(), /no git-tracked files/);
   });
 
+  it("keeps reading progress with debug lines interleaved", () => {
+    // Under GANDALF_DEBUG the bar clears its line, the debug line is written
+    // whole, and the bar redraws — so every segment stays delimited and the
+    // debug text comes back as noise for the output channel, never as a stage.
+    const debug = (text: string) => `\r${E}[K${E}[2m[gandalf +  1.20s] ${text}${E}[0m\n`;
+    const parser = new ProgressParser();
+    const seen: string[] = [];
+    const noise: string[] = [];
+    const stream =
+      stage(2, 3, "Running 5 gates") +
+      debug("gate trivy: start") +
+      gates(1, 5, "ruff") +
+      debug("run (timeout=120s): trivy fs --format json /src") +
+      gates(2, 5, "trivy") +
+      "\n";
+    for (const ch of stream) {
+      const out = parser.feed(ch);
+      if (out.progress) seen.push(`${out.progress.stage}|${out.progress.gatesDone}/${out.progress.gatesTotal}`);
+      if (out.noise) noise.push(out.noise.trim());
+    }
+    assert.deepEqual(seen, ["Running 5 gates|0/0", "Running 5 gates|1/5", "Running 5 gates|2/5"]);
+    assert.deepEqual(noise, [
+      "[gandalf +  1.20s] gate trivy: start",
+      "[gandalf +  1.20s] run (timeout=120s): trivy fs --format json /src",
+    ]);
+  });
+
   it("does not flush a progress line as noise", () => {
     const parser = new ProgressParser();
     parser.feed(gates(5, 5, "mypy"));

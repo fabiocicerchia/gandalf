@@ -44,6 +44,12 @@ export interface RunResult {
 
 /** The scorecard and the report paths are a few KB; this is only a backstop. */
 const MAX_PLAIN_CHARS = 256 * 1024;
+/**
+ * Same backstop for stderr. It used to be unbounded, which was survivable while
+ * the only thing on that stream was a traceback — under `gandalf.scan.debug` it
+ * is a line per gate and a line per command, for the whole run.
+ */
+const MAX_DIAGNOSTIC_CHARS = 256 * 1024;
 const PROBE_TIMEOUT_MS = 15_000;
 /** Lines of diagnostics quoted when a run produced no report. */
 const TAIL_LINES = 12;
@@ -83,12 +89,27 @@ export async function runGandalf(req: RunRequest, s: Settings, token: vscode.Can
       // with backoff when it is unreachable. gandalf's default of 3 is right for
       // CI and costs 11s per scan in an editor; one retry still absorbs a blip.
       GANDALF_LLM_RETRIES: process.env.GANDALF_LLM_RETRIES ?? "1",
+      // Every stage, every gate's start and duration, every command gandalf
+      // shells out to — stamped with the elapsed time, into the output channel.
+      // The env var rather than `--debug`, so it needs no `--help` gating and
+      // works against a build that predates the flag.
+      ...(s.debug ? { GANDALF_DEBUG: "1" } : {}),
     },
     timeoutMs: s.timeoutSeconds * 1000,
     token,
     onStderr: (chunk) => {
       const { progress: state, noise } = progress.feed(chunk);
+      // Kept either way, to quote if the run produces no report; shown as it
+      // arrives under debug, which is the point of asking for it — a scan that
+      // hits the timeout never reaches the code below that reports timings.
+      // `info`, not `debug`: a LogOutputChannel defaults to the editor's log
+      // level, so `debug` entries are dropped unless the user *also* raises the
+      // channel's level by hand — and they already asked for this by setting
+      // `gandalf.scan.debug`. The incidental `log().debug` chatter elsewhere is
+      // the kind that should stay hidden.
+      if (noise && s.debug) log().info(noise.trimEnd());
       diagnostics += noise;
+      if (diagnostics.length > MAX_DIAGNOSTIC_CHARS) diagnostics = diagnostics.slice(-MAX_DIAGNOSTIC_CHARS);
       if (state) req.onProgress?.(state);
     },
     collectStdout: false,

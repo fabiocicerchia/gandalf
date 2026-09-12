@@ -112,11 +112,19 @@ def build_parser() -> argparse.ArgumentParser:
         "scorecard), so a consumer can show results during the run instead of "
         "waiting for the final report",
     )
-    ap.add_argument("--no-llm", action="store_true", help="skip the LLM summary")
+    ap.add_argument(
+        "--no-llm",
+        action="store_true",
+        help="skip everything that talks to the LLM: the summary and the "
+        "LLM-backed judge gates (grill_me, well_architected, the skill gates, "
+        "compliance). They are listed as disabled in the report",
+    )
     ap.add_argument(
         "--debug",
         action="store_true",
-        help="verbose stderr log: per-gate timing + every command run",
+        help="verbose stderr log: each stage, each gate's start and duration, "
+        "the order gates were scheduled in, and every external command — all "
+        "stamped with the elapsed time. GANDALF_DEBUG=1 does the same",
     )
     ap.add_argument(
         "--fix",
