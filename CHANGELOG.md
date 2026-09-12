@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0](https://github.com/fabiocicerchia/gandalf/compare/v0.12.4...v0.13.0) (2026-09-12)
+
+
+### Features
+
+* **perf:** schedule the heaviest gates first, and make a slow scan explain itself ([#110](https://github.com/fabiocicerchia/gandalf/issues/110)) ([b218b7d](https://github.com/fabiocicerchia/gandalf/commit/b218b7d1574d91c580045bf2096a131aa0423e2a))
+
 ## [0.12.4](https://github.com/fabiocicerchia/gandalf/compare/v0.12.3...v0.12.4) (2026-09-11)
 
 
