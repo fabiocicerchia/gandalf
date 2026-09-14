@@ -57,11 +57,24 @@ function outputArgs(req: RunRequest, supports: Supports): string[] {
   return args;
 }
 
-/** How to run it: the config, the concurrency, the cache and the stream. */
+/**
+ * What the scan gets back if it spends the whole budget: the report and the
+ * cache write happen after the gates, so gandalf has to stop with time to spare
+ * rather than be killed by `scan.timeoutSeconds` holding nothing.
+ */
+const DEADLINE_MARGIN_SECONDS = 20;
+
+/** How to run it: the config, the concurrency, the deadline, the cache and the stream. */
 function runArgs(req: RunRequest, s: Settings, supports: Supports): string[] {
   const args: string[] = [];
   if (s.configPath) args.push("--config", expand(s.configPath));
   if (s.concurrency > 0) args.push("--concurrency", String(s.concurrency));
+  // gandalf's own budget, inside the extension's hard wall: the gates still
+  // running when it expires are reported as not run and the scan still produces
+  // a scorecard, instead of the run being killed with nothing to show.
+  if (supports("--deadline")) {
+    args.push("--deadline", String(Math.max(DEADLINE_MARGIN_SECONDS, s.timeoutSeconds - DEADLINE_MARGIN_SECONDS)));
+  }
   // The cache is keyed per gate on a hash of the whole scanned file set, so a
   // one-file scan would overwrite the workspace entries with a one-file hash
   // and make the next full scan a complete miss. Only whole-tree scans cache.

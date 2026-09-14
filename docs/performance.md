@@ -18,7 +18,20 @@ timeline: each stage as it starts, the order the gates were scheduled in, each
 gate's start and its duration, and every external command with its timeout and
 exit code. The run ends with the five slowest gates.
 
-Reach for it especially when a scan *doesn't* finish. The timings in the report
+### A scan that runs out of time
+
+A run with no `--deadline` is bounded only by whatever is waiting on it. In the
+editor that is `gandalf.scan.timeoutSeconds`, and a kill at the timeout used to
+end the scan with nothing: no scorecard, and — because the cache was written
+once at the end — nothing banked either, so the next scan re-ran the thirty
+gates that had already finished and was killed in the same place.
+
+Both halves are fixed, and they compose: give the run a `--deadline` and it
+stops itself with time to write the report, and every gate that finished is in
+the cache the moment it finishes, so the scan after it starts from there. The
+extension passes one automatically, derived from its own timeout.
+
+Reach for `--debug` especially when a scan *doesn't* finish. The timings in the report
 and the extension's **Gandalf: Show Gate Timings** can only describe gates that
 got to the end; a gate still running when the editor's timeout fires appears in
 neither, and the `--debug` log is the only place it is named — look for a `gate
@@ -30,10 +43,20 @@ neither, and the `--debug` log is the only place it is named — look for a `gat
 |---|---|
 | `--no-llm` | Drops the LLM summary *and* the judge gates (`grill_me`, `codebase_architecture`, `well_architected`, `compliance`, the `skill_*` gates). Each is a full model round trip; with nothing listening at `GANDALF_LLM_URL` each is a connect timeout plus its retries instead. For an editor or pre-commit run this is usually the largest single saving. |
 | `skip` in `.gandalf.toml` | The honest answer for a gate that costs minutes and tells you something you already know from CI — `codeql`, `ci_act`, a full test-suite gate. In the repository, where it can be reviewed. |
-| `--cache` | A gate whose files did not change is not re-run at all. Advisory gates (`trivy`, `osv`, …) still expire after six hours, because a new CVE is a new answer for identical bytes. |
+| `--cache` | A gate whose files did not change is not re-run at all. Advisory gates (`trivy`, `osv`, …) still expire after six hours, because a new CVE is a new answer for identical bytes. Each result is written as it lands, so a run that is killed still leaves everything that finished — the next scan starts where this one stopped. A gate that *could not* run is never cached; "tool missing" and "timed out" are not answers to keep. |
+| `--deadline N` | Bounds the run as a whole, which a per-gate timeout cannot: one gate may make fifty tool calls, so "120s each" is not 120s. Past the deadline a tool call is not started, so the queue drains in milliseconds and the scan ends with a scorecard — the gates that did not get their turn are marked *did not run* rather than counted. Off by default; the editor extension sets it just under its own kill. |
 | `--exclude` / `.gandalfignore` | Vendored trees and generated code are usually most of what a full-tree scanner reads. |
 | `[gandalf.timeouts]` | Bounds the worst case per gate rather than removing it: `semgrep = 60` degrades that gate to amber at a minute instead of letting it own the run. |
 | `--concurrency N` | Trades wall-clock for a responsive machine. Rarely a speed-up on its own — see below. |
+
+### One scan, not one per gate
+
+`trivy fs` walks the whole repository, and two gates want what one walk
+produces: `trivy` reads the vulnerabilities, secrets and misconfigurations,
+`licenses` reads the licences that same scan already collected. It is made once
+now and awaited by whoever else needs it — one walk instead of two, and no two
+trivy processes contending over the one vulnerability database the tools image
+shares between them.
 
 ### Why the order gates run in matters
 

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.gates._toolchain import named, obj, objects, parsed, scored
+from gandalf.gates._toolchain import named, obj, objects, parsed, scored, trivy_scan
 from gandalf.plugins import (
     TIMEOUT_RC,
     communicate,
@@ -135,26 +135,9 @@ class TrivyGate:
     async def run(self, ctx: GateContext) -> GateResult:
         if (m := missing_result(self.name, "trivy")) is not None:
             return m
-        # Pass every ignore to both --skip-dirs and --skip-files (trivy accepts a
-        # comma list for each) so a pattern works whether it names a dir or a file.
-        skip = ",".join(ignore_patterns(ctx.workdir))
-        rc, out, _ = await run_tool(
-            [
-                "trivy",
-                "fs",
-                "--scanners",
-                "vuln,secret,misconfig,license",
-                "--format",
-                "json",
-                "--quiet",
-                "--skip-dirs",
-                skip,
-                "--skip-files",
-                skip,
-                ".",
-            ],
-            ctx.workdir,
-        )
+        # The run's one `trivy fs` — the licensing gate reads the licences out of
+        # this same scan rather than walking the tree a second time.
+        rc, out = await trivy_scan(ctx)
         if (to := timeout_result(self.name, rc)) is not None:
             return to
         data = parsed(out)

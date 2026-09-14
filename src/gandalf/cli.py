@@ -169,6 +169,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="max gates running at once (<=0 = unbounded; default: CPU count)",
     )
     ap.add_argument(
+        "--deadline",
+        type=int,
+        metavar="SECONDS",
+        help="wall-clock budget for the gate run (<=0 = unbounded, the default). "
+        "Gates still running when it expires are cut short and reported as not "
+        "run, so a scan that runs long still ends with a report instead of being "
+        "killed by whatever is waiting on it",
+    )
+    ap.add_argument(
         "--severity-weight",
         action="store_true",
         help="weight each gate's score by its findings' severity",

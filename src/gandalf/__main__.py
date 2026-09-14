@@ -32,6 +32,7 @@ from . import trend as gtrend
 from .base import GateContext, GateOutcome
 from .cli import build_parser
 from .fixers import run_fixers
+from .gates._toolchain import reset_shared_scans
 from .plugins import discover_gates
 from .progress import Progress
 from .stream import GateStream
@@ -145,6 +146,38 @@ def _resolve_concurrency(cli: int | None, cfg: Config) -> int:
     return os.cpu_count() or 4
 
 
+def _resolve_deadline(cli: int | None, cfg: Config) -> int:
+    """Wall-clock budget for the gate run. Precedence: --deadline →
+    GANDALF_DEADLINE → [gandalf] deadline → none. <=0 anywhere means unbounded,
+    which is the default: CI wants the whole answer and has its own job timeout."""
+    for src in (cli, os.environ.get("GANDALF_DEADLINE"), cfg.deadline):
+        if src is not None and str(src) != "":
+            try:
+                return int(src)
+            except (TypeError, ValueError):
+                continue
+    return 0
+
+
+def _result_sink(plan: gcache.Plan, stream: GateStream | None) -> Callable[[GateResult], None]:
+    """What becomes of a result the moment it lands: banked, then reported to
+    whoever is listening.
+
+    Banked first, and one gate at a time. The run that most needs its results
+    kept is the one that never reaches the end — killed by the editor's timeout,
+    by Ctrl-C — and a cache written once the last gate returns keeps nothing at
+    all from it, so the next scan re-runs the thirty gates that had finished and
+    dies in the same place.
+    """
+
+    def landed(r: GateResult) -> None:
+        plan.record(r)
+        if stream:
+            stream.gate(r)
+
+    return landed
+
+
 def _build_advice(
     args: argparse.Namespace,
     sc: Scope,
@@ -184,12 +217,15 @@ def _apply_excludes(args: argparse.Namespace, cfg: Config) -> None:
 
     Always set, even when empty: this is process state, and a second run in the
     same process (the editor extension) must not inherit the first one's
-    exclusions. Tool resolutions are process state for the same reason.
+    exclusions. Tool resolutions and the shared trivy scan — which is keyed on
+    the worktree, and would otherwise answer with the pre-exclusion tree — are
+    process state for the same reason.
     """
     from_config: list[object] = cfg.data.get("exclude") or []
     excludes = list(args.exclude or []) + [str(x) for x in from_config]
     plugins.set_extra_ignores(excludes)
     plugins.reset_tool_sources()
+    reset_shared_scans()
     if excludes:
         debug.log(f"excluding {len(excludes)} extra pattern(s): {', '.join(excludes)}")
 
@@ -414,7 +450,12 @@ def main(argv: list[str] | None = None) -> int:
         # and codeql near the back of the queue.
         to_run = schedule.order(plan.pending(active), plan.timings())
         limit = _resolve_concurrency(args.concurrency, cfg)
-        debug.log(f"running {len(to_run)} gate(s), concurrency={limit or 'unbounded'}")
+        deadline = _resolve_deadline(args.deadline, cfg)
+        plugins.set_deadline(deadline)
+        debug.log(
+            f"running {len(to_run)} gate(s), concurrency={limit or 'unbounded'}, "
+            f"deadline={f'{deadline}s' if deadline > 0 else 'none'}"
+        )
         prog.stage(f"Running {len(to_run)} gates")
         stream = _stream(args, cfg, len(active), sc)
         fresh = asyncio.run(
@@ -424,7 +465,7 @@ def main(argv: list[str] | None = None) -> int:
                 on_done=prog.bar,
                 limit=limit,
                 timeouts=cfg.section("timeouts"),
-                on_result=stream.gate if stream else None,
+                on_result=_result_sink(plan, stream),
             )
         )
         results, cached = plan.merge(fresh, active, to_run)

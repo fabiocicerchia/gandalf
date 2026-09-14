@@ -171,7 +171,8 @@ usage: gandalf [-h] [--commit SHA | --staged] [--path DIR] [--no-html]
                [--fix] [--target TARGET] [--allow-remote] [--title TITLE]
                [--body BODY] [--config PATH] [--exclude GLOB]
                [--fail-on {fail,warn}] [--min-score N] [--concurrency N]
-               [--severity-weight] [--baseline PATH] [--write-baseline [PATH]]
+               [--deadline SECONDS] [--severity-weight] [--baseline PATH]
+               [--write-baseline [PATH]] [--explain-score] [--tool-versions]
                [--cache [PATH]]
 
 gandalf CLI — evaluate the codebase, run pluggable gates, show RAG traffic lights.
@@ -230,6 +231,7 @@ variables that override it, are in
 skip        = ["atheris"]                    # never run these
 concurrency = 8                              # ~130 gates each able to spawn a
                                              # docker run: bound them
+deadline    = 540                            # and bound the run as a whole
 exclude     = ["src/generated", "*.min.js"]  # paths no gate should read
 
 [gandalf.verdict]

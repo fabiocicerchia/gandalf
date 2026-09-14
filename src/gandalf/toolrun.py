@@ -30,6 +30,35 @@ TIMEOUT_RC = -1
 # configured budget without the gate having to thread it through explicitly.
 GATE_TIMEOUT: contextvars.ContextVar[int | None] = contextvars.ContextVar("gandalf_gate_timeout", default=None)
 
+# Wall-clock budget for the whole run, as a monotonic stamp. None = unbounded,
+# which is the default and what CI wants.
+#
+# A per-gate timeout cannot bound a run: there are ~35 gates, and one gate may
+# make fifty tool calls (hadolint per Dockerfile, a syntax check per file), so
+# "120s each" is not 120s. Something has to bound the total, and the caller that
+# does it today is the editor extension, which kills the process at its own
+# timeout and throws away a scan that had thirty gates finished. Clamping every
+# tool call to what is left of the budget ends the run from the inside instead:
+# the gates that did not get their turn degrade to "did not run" exactly the way
+# a timeout already makes them, and the run still writes a report.
+_DEADLINE: float | None = None
+
+
+def set_deadline(seconds: float | None) -> None:
+    """Start the run budget. None or <=0 clears it (no budget)."""
+    global _DEADLINE  # noqa: PLW0603 — one process, one run, one budget
+    _DEADLINE = time.monotonic() + seconds if seconds and seconds > 0 else None
+
+
+def time_left() -> float:
+    """Seconds left in the run budget — `inf` when there is none."""
+    return float("inf") if _DEADLINE is None else _DEADLINE - time.monotonic()
+
+
+# A tool call with less than this left is not worth starting: the container alone
+# costs about that much, and a one-second scan is not an answer.
+_MIN_TOOL_SECONDS = 1
+
 # Scanner tools run inside this image when not present on the host PATH, so the
 # host stays clean. Build it with `make tools` (gandalf/tools.Dockerfile).
 TOOLS_IMAGE = os.environ.get("GANDALF_TOOLS_IMAGE", "gandalf-tools")
@@ -224,7 +253,7 @@ async def communicate(
     client does not stop the container behind it.
     """
     try:
-        return await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        return await asyncio.wait_for(proc.communicate(), timeout=min(timeout, max(0.0, time_left())))
     except TimeoutError:
         await _reap(proc, cmd or [""], container)
         return None
@@ -238,6 +267,12 @@ async def run_tool(cmd: list[str], cwd: str, timeout: int | None = None) -> tupl
     global default."""
     if timeout is None:
         timeout = GATE_TIMEOUT.get() or SUBPROCESS_TIMEOUT_SECONDS
+    left = time_left()
+    if left < _MIN_TOOL_SECONDS:
+        debug.log(f"run deadline reached, not starting: {cmd[0]}")
+        return TIMEOUT_RC, "", "run deadline reached"
+    if left < timeout:  # never true for an unbounded run, so `inf` is never cast
+        timeout = int(left)
     container = f"gandalf-{os.getpid()}-{next(_CONTAINER_SEQ)}"
     cmd = _dockerize(cmd, cwd, container)
     debug.log(f"run (timeout={timeout}s): {' '.join(cmd)}")
@@ -263,9 +298,22 @@ async def run_tool(cmd: list[str], cwd: str, timeout: int | None = None) -> tupl
     errs = err.decode(errors="replace")
     # A dockerized tool that isn't actually in the image (or a missing image) must
     # NOT be read as a clean run — its empty stdout would parse as "no findings".
-    if rc and _DOCKER_UNAVAILABLE.search(errs):
+    if rc and (_docker_never_started(cmd, rc) or _DOCKER_UNAVAILABLE.search(errs)):
         return TIMEOUT_RC, "", errs
     return rc, out.decode(errors="replace"), errs
+
+
+# docker's own "the container never started", as opposed to any exit code the
+# tool inside it produced. Matched on the code rather than only on the message,
+# because the daemon has a message for every way that can happen — a policy that
+# refuses `--network host`, a storage driver error, a bad mount — and each one
+# leaves the scanner's stdout empty, which every gate parser reads as a clean
+# scan. That is the one direction a quality gate must not fail in.
+_DOCKER_START_FAILED = 125
+
+
+def _docker_never_started(cmd: list[str], rc: int) -> bool:
+    return cmd[0] == "docker" and rc == _DOCKER_START_FAILED
 
 
 _DOCKER_UNAVAILABLE = re.compile(

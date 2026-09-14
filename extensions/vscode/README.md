@@ -283,7 +283,11 @@ Then, in rough order of payoff:
   so a low concurrency spends its slots on the gates that need them: at
   `concurrency: 2` the two heaviest start, and the quick gates fill in behind.
 - **Let the cache work.** A repeat full scan with nothing changed reuses every
-  gate result; the cost above is the cold path.
+  gate result; the cost above is the cold path. A scan that hits
+  `gandalf.scan.timeoutSeconds` still banks every gate that finished, so the
+  next one starts where it stopped rather than repeating it — and gandalf is
+  given a deadline just under that timeout, so it stops itself with time to
+  write a scorecard rather than being killed holding nothing.
 
 ## Keeping it cheap
 

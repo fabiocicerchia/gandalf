@@ -8,6 +8,7 @@ file → built-in default (env still wins, for CI overrides).
     only        = ["ruff", "gitleaks"]   # allowlist: run ONLY these gates
     skip        = ["atheris"]            # denylist: never run these
     concurrency = 8                       # max gates running at once
+    deadline    = 540                     # wall-clock budget for the whole run
 
     [gandalf.verdict]
     fail_on   = "fail"    # "fail" (default) | "warn" — lowest outcome that reddens
@@ -74,7 +75,14 @@ class Config:
 
     @property
     def concurrency(self) -> int | None:
-        v = self.data.get("concurrency")
+        return self._int("concurrency")
+
+    @property
+    def deadline(self) -> int | None:
+        return self._int("deadline")
+
+    def _int(self, key: str) -> int | None:
+        v = self.data.get(key)
         try:
             return int(v) if v is not None else None
         except (TypeError, ValueError):

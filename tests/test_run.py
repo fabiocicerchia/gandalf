@@ -6,12 +6,20 @@ from __future__ import annotations
 import asyncio
 import json
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
 
 from gandalf import plugins, schedule
-from gandalf.__main__ import _drop_llm_gates, _gate_timeout, _resolve_concurrency, _run_gates, main
+from gandalf.__main__ import (
+    _drop_llm_gates,
+    _gate_timeout,
+    _resolve_concurrency,
+    _resolve_deadline,
+    _run_gates,
+    main,
+)
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.config import Config
 from gandalf.fixers import _files_note, _touched, _tree_state, run_fixers
@@ -456,3 +464,54 @@ def test_the_recorded_duration_excludes_the_wait_for_a_slot() -> None:
     assert took["quick"] < 0.15, f"quick recorded its queue wait: {took}"
     # ...so the next run still puts the genuinely slow gate first.
     assert [g.name for g in schedule.order(gates, took)] == ["slow", "quick"]
+
+
+def test_resolve_deadline_precedence(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GANDALF_DEADLINE", raising=False)
+    assert _resolve_deadline(None, Config()) == 0  # unbounded by default — CI wants the whole answer
+    assert _resolve_deadline(90, Config({"deadline": 300})) == 90  # cli wins
+    assert _resolve_deadline(None, Config({"deadline": 300})) == 300  # then config
+    monkeypatch.setenv("GANDALF_DEADLINE", "120")
+    assert _resolve_deadline(None, Config({"deadline": 300})) == 120  # env beats config
+
+
+def test_past_the_deadline_a_tool_is_not_started() -> None:
+    """The run budget is enforced where every gate already degrades gracefully:
+    a tool call that cannot fit returns the timeout code, which `timeout_result`
+    turns into "did not run" — so the queue drains in milliseconds instead of
+    the whole process being killed by whatever was waiting on it."""
+    try:
+        plugins.set_deadline(0.001)
+        time.sleep(0.01)
+        rc, out, err = asyncio.run(plugins.run_tool(["python3", "-c", "print(1)"], "."))
+    finally:
+        plugins.set_deadline(None)
+    assert rc == plugins.TIMEOUT_RC
+    assert out == ""
+    assert "deadline" in err
+
+
+def test_without_a_deadline_a_tool_runs_normally() -> None:
+    plugins.set_deadline(None)
+    rc, out, _ = asyncio.run(plugins.run_tool(["python3", "-c", "print(1)"], "."))
+    assert (rc, out.strip()) == (0, "1")
+
+
+def test_a_container_that_never_started_is_not_a_clean_scan(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """docker exits 125 when the container never ran at all — a refused mount, a
+    policy that blocks `--network host`. The scanner's stdout is then empty,
+    which every gate parser reads as "no findings": the one direction a quality
+    gate must never fail in.
+
+    A stub on PATH rather than the real daemon, so the test says the same thing
+    on a machine that has no docker.
+    """
+    stub = tmp_path / "docker"
+    stub.write_text("#!/bin/sh\necho 'docker: Error response from daemon' >&2\nexit 125\n")
+    stub.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path), prepend=False)
+
+    rc, out, err = asyncio.run(plugins.run_tool(["docker", "run", "gandalf-tools", "trivy"], "."))
+    assert rc == plugins.TIMEOUT_RC
+    assert out == ""
+    assert "daemon" in err

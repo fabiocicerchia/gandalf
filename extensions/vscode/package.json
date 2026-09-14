@@ -318,7 +318,7 @@
           "type": "number",
           "default": 600,
           "minimum": 10,
-          "description": "Kill a gandalf run that exceeds this wall-clock budget."
+          "description": "Wall-clock budget for a gandalf run. The kill is the last resort: gandalf is given a deadline a little under this one, so a scan that runs long stops itself and still reports the gates that finished."
         },
         "gandalf.scan.trigger": {
           "type": "string",

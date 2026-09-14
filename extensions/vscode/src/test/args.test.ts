@@ -14,7 +14,16 @@ import { describe, it } from "node:test";
 import { Settings } from "../config";
 import { buildArgs, Launcher, RunRequest, ScanKind } from "../runner";
 
-const ALL_FLAGS = ["--out-dir", "--no-trend", "--cache", "--concurrency", "--path", "--stream", "--exclude"];
+const ALL_FLAGS = [
+  "--out-dir",
+  "--no-trend",
+  "--cache",
+  "--concurrency",
+  "--deadline",
+  "--path",
+  "--stream",
+  "--exclude",
+];
 
 // Nothing is read or written here, but the paths are still built rather than
 // spelled: a literal `/repo` is a test that only runs on one kind of machine.
@@ -125,6 +134,16 @@ describe("the gandalf command line", () => {
     );
   });
 
+  it("gives gandalf a deadline inside its own timeout, so a long scan still reports", () => {
+    // The kill is the last resort, not the plan: gandalf stops its own gates
+    // with time left to write the report and the cache.
+    const args = buildArgs(request("workspace"), settings({ timeoutSeconds: 600 }), launcher());
+    assert.equal(valueAfter(args, "--deadline"), "580");
+    // ...and never a deadline of zero-or-less, which gandalf reads as unbounded.
+    const tiny = buildArgs(request("workspace"), settings({ timeoutSeconds: 10 }), launcher());
+    assert.ok(Number(valueAfter(tiny, "--deadline")) > 0);
+  });
+
   it("repeats --exclude rather than joining, since a path may contain a comma", () => {
     const args = buildArgs(request("workspace", { excludes: ["node_modules", "a,b"] }), settings(), launcher());
     assert.equal(args.filter((a) => a === "--exclude").length, 2);
@@ -148,7 +167,7 @@ describe("the gandalf command line", () => {
       settings({ concurrency: 4 }),
       old,
     );
-    for (const flag of ["--out-dir", "--no-trend", "--cache", "--stream", "--exclude"]) {
+    for (const flag of ["--out-dir", "--no-trend", "--cache", "--deadline", "--stream", "--exclude"]) {
       assert.ok(!args.includes(flag), `${flag} was passed to a build that has no such flag`);
     }
     // The flags gandalf has always had are still passed, unconditionally.

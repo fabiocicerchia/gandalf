@@ -29,6 +29,7 @@ from typing import Any, cast
 from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.plugins import (
     TIMEOUT_RC,
+    ignore_patterns,
     run_tool,
     scannable_files,
     timeout_result,
@@ -94,6 +95,68 @@ def named(ctx: GateContext, *globs: str) -> list[str]:
 
 def tail(text: str, lines: int = 5) -> str:
     return "\n".join((text or "").strip().splitlines()[-lines:])
+
+
+# --- the run's one trivy scan ---------------------------------------------
+
+# `trivy fs` walks the whole repository, and two gates want what one walk
+# produces: the supply-chain gate reads the vulnerabilities, secrets and
+# misconfigurations out of it, the licensing gate reads the licences. Asking
+# twice was two walks for one set of answers — and, since dockerized tools share
+# a single cache volume, two trivy processes contending over the same
+# vulnerability database while they did it. So the scan is made once, and
+# whoever else needs it awaits that same call.
+_TRIVY_SCANNERS = "vuln,secret,misconfig,license"
+_TRIVY_SCAN: dict[str, asyncio.Future[tuple[int, str]]] = {}
+
+
+def reset_shared_scans() -> None:
+    """Forget the memoised scan.
+
+    Process state, exactly like `reset_tool_sources`: a second run in the same
+    process — the tests, an embedding host — must not be handed the first run's
+    tree.
+    """
+    _TRIVY_SCAN.clear()
+
+
+async def trivy_scan(ctx: GateContext) -> tuple[int, str]:
+    """`(rc, stdout)` of this run's `trivy fs`, running it if nobody has yet.
+
+    Whichever gate arrives first pays for it, under its own timeout; the rest
+    await the same call. That makes the budget the scan runs under depend on
+    which gate got there first, which is worth saying out loud — but it is one
+    scan's worth of budget for one scan, where before it was two gates each
+    spending their own on the same work.
+    """
+    if ctx.workdir not in _TRIVY_SCAN:
+        _TRIVY_SCAN[ctx.workdir] = asyncio.ensure_future(_trivy_fs(ctx.workdir))
+    return await _TRIVY_SCAN[ctx.workdir]
+
+
+async def _trivy_fs(workdir: str) -> tuple[int, str]:
+    """The scan itself. Every ignore goes to both `--skip-dirs` and
+    `--skip-files` (trivy takes a comma list for each) so a pattern works
+    whether it names a directory or a file."""
+    skip = ",".join(ignore_patterns(workdir))
+    rc, out, _ = await run_tool(
+        [
+            "trivy",
+            "fs",
+            "--scanners",
+            _TRIVY_SCANNERS,
+            "--format",
+            "json",
+            "--quiet",
+            "--skip-dirs",
+            skip,
+            "--skip-files",
+            skip,
+            ".",
+        ],
+        workdir,
+    )
+    return rc, out
 
 
 def merged(out: str | None, err: str | None) -> str:

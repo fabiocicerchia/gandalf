@@ -1,16 +1,16 @@
-"""Dependency-license gate — flags forbidden / restricted licenses via trivy's
-license scanner (reuses the trivy binary already in the image). Permissive
-licenses (LOW/UNKNOWN severity) are ignored so only real obligations surface."""
+"""Dependency-license gate — flags forbidden / restricted licenses out of the
+run's `trivy fs` scan, which already asks for licences alongside everything else
+it reads. Permissive licenses (LOW/UNKNOWN severity) are ignored so only real
+obligations surface."""
 
 from __future__ import annotations
 
 from typing import Any
 
 from gandalf.base import GateContext, GateOutcome, GateResult
-from gandalf.gates._toolchain import obj, objects, parsed, scored
+from gandalf.gates._toolchain import obj, objects, parsed, scored, trivy_scan
 from gandalf.plugins import (
     missing_result,
-    run_tool,
     timeout_result,
     unavailable,
 )
@@ -35,25 +35,10 @@ class LicensesGate:
     async def run(self, ctx: GateContext) -> GateResult:
         if (m := missing_result(self.name, "trivy", tool="licenses: trivy")) is not None:
             return m
-        rc, out, _ = await run_tool(
-            [
-                "trivy",
-                "fs",
-                "--scanners",
-                "license",
-                "--format",
-                "json",
-                "--quiet",
-                "--skip-dirs",
-                "reports",
-                "--skip-dirs",
-                "node_modules",
-                "--skip-dirs",
-                "llama.cpp",
-                ".",
-            ],
-            ctx.workdir,
-        )
+        # The scan the supply-chain gate runs, not one of its own: it already
+        # asks trivy for licences, and a second `trivy fs` is a second walk of
+        # the whole repository for answers the first one has.
+        rc, out = await trivy_scan(ctx)
         if (to := timeout_result(self.name, rc)) is not None:
             return to
         data = parsed(out)

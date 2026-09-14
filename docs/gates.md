@@ -54,7 +54,7 @@ Select gates per repo in `.gandalf.toml`: `only = [...]` (allowlist),
 
 | Gate | Checks | Notes |
 |------|--------|-------|
-| `licenses` | Forbidden / restricted dependency licenses (via trivy). | Permissive licenses ignored. |
+| `licenses` | Forbidden / restricted dependency licenses. | Reads the licences out of the `trivy` gate's scan rather than walking the tree again; permissive licenses ignored. |
 
 ## Infrastructure — IaC, containers, CI config
 
@@ -283,7 +283,7 @@ Cross-language SAST / deps / secrets / IaC:
 | `gitleaks` | yes | gitleaks | secrets in the tree |
 | `osv` | no | pip-audit | Python dependency vulns |
 | `osv_scanner` | no | osv-scanner | dependency vulns, **all ecosystems** (go.mod, package-lock, …) |
-| `trivy` | no | trivy | fs vulns + secrets + **misconfig + license** |
+| `trivy` | no | trivy | fs vulns + secrets + **misconfig + license** — the run's one `trivy fs`, which `licenses` reads too |
 | `checkov` | no | checkov | IaC misconfig |
 | `kics` | no | checkmarx/kics (own image) | IaC misconfig (Terraform/k8s/Docker/Ansible/…) |
 | `hadolint` | no | hadolint | Dockerfile lint |

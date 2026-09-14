@@ -36,7 +36,7 @@ from typing import Any
 
 from . import plugins
 from .base import GateOutcome, GateResult
-from .plugins import NamedGate, ignore_patterns, is_ignored, scannable_files
+from .plugins import NamedGate, did_not_run, ignore_patterns, is_ignored, scannable_files
 
 DEFAULT_CACHE = ".gandalf-cache.json"
 
@@ -156,9 +156,17 @@ def load(path: str) -> dict[str, Any]:
 
 
 def save(path: str, data: dict[str, Any]) -> None:
-    """Write the cache back, pretty-printed so a diff on it is readable."""
-    with Path(path).open("w", encoding="utf-8") as fh:
+    """Write the cache back, pretty-printed so a diff on it is readable.
+
+    Written to a sibling and renamed, because it is now written after every gate
+    rather than once at the end: a run killed mid-write would otherwise leave a
+    truncated file, and a corrupt cache costs exactly the full re-run this is
+    here to avoid. `replace` is atomic within a directory.
+    """
+    tmp = Path(f"{path}.tmp")
+    with tmp.open("w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2, default=str)
+    tmp.replace(path)
 
 
 def get(cache: dict[str, Any], gate_name: str, file_hash: str, max_age_s: float | None = None) -> GateResult | None:
@@ -272,6 +280,23 @@ class Plan:
             return active
         return [g for g in active if get(self.data, g.name, self.file_hash, max_age(g)) is None]
 
+    def record(self, result: GateResult) -> None:
+        """Bank one finished gate, there and then.
+
+        Banked as each gate lands rather than all at the end, because the run
+        that most needs a cache is the one that never reaches the end: an editor
+        scan killed at its own timeout saved nothing, so the next scan re-ran the
+        thirty gates that had already finished and was killed in the same place.
+
+        A result that did not actually run is not recorded: "tool missing" and
+        "timed out" are not answers worth keeping for six hours, and caching them
+        would make one bad run stick.
+        """
+        if self.path is None or did_not_run(result):
+            return
+        put(self.data, result.name, self.file_hash, result)
+        save(self.path, self.data)
+
     def merge(
         self, fresh: list[GateResult], active: list[Gate], ran: list[Gate]
     ) -> tuple[list[GateResult], list[GateResult]]:
@@ -288,8 +313,7 @@ class Plan:
         if self.path is None:
             return _in_gate_order(fresh, active), []
         for r in fresh:
-            put(self.data, r.name, self.file_hash, r)
-        save(self.path, self.data)
+            self.record(r)  # a no-op re-save for anything the runner already banked
         # `get` returns None for an entry that expired between the pending
         # check and here; those gates simply have no cached result to merge.
         cached = [

@@ -48,6 +48,8 @@ from .toolrun import TOOLS_IMAGE as TOOLS_IMAGE
 from .toolrun import communicate as communicate
 from .toolrun import reset_tool_sources as reset_tool_sources
 from .toolrun import run_tool as run_tool
+from .toolrun import set_deadline as set_deadline
+from .toolrun import time_left as time_left
 from .toolrun import tool_missing as tool_missing
 from .toolrun import tool_sources as tool_sources
 from .toolrun import tool_version as tool_version

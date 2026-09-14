@@ -29,6 +29,7 @@
 | `--tool-versions` | Probe the version of every scanner that ran and record it in the report (one extra subprocess per tool). |
 | `--cache [PATH]` | Reuse a gate's prior result when the scanned files are unchanged (default `.gandalf-cache.json`). Ignored with `--target`/`--title`/`--body`. The file also carries how long each gate took, which is what the next run schedules by — see [Performance](performance.md). |
 | `--concurrency N` | Max gates in flight (`<=0` = unbounded; default: CPU count). Gates are submitted heaviest-first, so lowering this trades wall-clock for a responsive machine rather than leaving a five-minute scanner to start last. |
+| `--deadline N` | Wall-clock budget for the gate run, in seconds (`<=0` = unbounded, the default). Tool calls that no longer fit are not started, so the gates that ran are reported and the ones that did not are marked *did not run* — a long scan ends with a scorecard instead of being killed by whatever was waiting on it. |
 
 ## Suggested fixes
 
