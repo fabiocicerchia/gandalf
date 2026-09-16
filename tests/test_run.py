@@ -509,7 +509,7 @@ def test_a_container_that_never_started_is_not_a_clean_scan(tmp_path: Path, monk
     stub = tmp_path / "docker"
     stub.write_text("#!/bin/sh\necho 'docker: Error response from daemon' >&2\nexit 125\n")
     stub.chmod(0o755)
-    monkeypatch.setenv("PATH", str(tmp_path), prepend=False)
+    monkeypatch.setenv("PATH", str(tmp_path))  # replace it; a prepend would find the real docker first
 
     rc, out, err = asyncio.run(plugins.run_tool(["docker", "run", "gandalf-tools", "trivy"], "."))
     assert rc == plugins.TIMEOUT_RC

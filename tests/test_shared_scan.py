@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 from gandalf import toolrun
-from gandalf.base import GateContext, GateOutcome
+from gandalf.base import GateContext, GateOutcome, GateResult
 from gandalf.gates import _toolchain
 from gandalf.gates.licenses import LicensesGate
 from gandalf.gates.supply_chain import TrivyGate
@@ -62,8 +62,9 @@ def test_both_gates_read_one_scan(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(_toolchain, "run_tool", _fake_run_tool)
     ctx = GateContext(repo=str(tmp_path), workdir=str(tmp_path), changed_files=[])
 
-    async def _both() -> tuple[object, object]:
-        return await asyncio.gather(TrivyGate().run(ctx), LicensesGate().run(ctx))  # type: ignore[return-value]
+    async def _both() -> tuple[GateResult, GateResult]:
+        trivy, licenses = await asyncio.gather(TrivyGate().run(ctx), LicensesGate().run(ctx))
+        return trivy, licenses
 
     trivy, licenses = asyncio.run(_both())
 

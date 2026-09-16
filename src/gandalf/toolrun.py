@@ -41,18 +41,18 @@ GATE_TIMEOUT: contextvars.ContextVar[int | None] = contextvars.ContextVar("ganda
 # tool call to what is left of the budget ends the run from the inside instead:
 # the gates that did not get their turn degrade to "did not run" exactly the way
 # a timeout already makes them, and the run still writes a report.
-_DEADLINE: float | None = None
+_deadline: float | None = None
 
 
 def set_deadline(seconds: float | None) -> None:
     """Start the run budget. None or <=0 clears it (no budget)."""
-    global _DEADLINE  # noqa: PLW0603 — one process, one run, one budget
-    _DEADLINE = time.monotonic() + seconds if seconds and seconds > 0 else None
+    global _deadline  # noqa: PLW0603 — one process, one run, one budget
+    _deadline = time.monotonic() + seconds if seconds and seconds > 0 else None
 
 
 def time_left() -> float:
     """Seconds left in the run budget — `inf` when there is none."""
-    return float("inf") if _DEADLINE is None else _DEADLINE - time.monotonic()
+    return float("inf") if _deadline is None else _deadline - time.monotonic()
 
 
 # A tool call with less than this left is not worth starting: the container alone

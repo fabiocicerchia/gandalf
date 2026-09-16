@@ -74,9 +74,9 @@ def test_progress_keeps_drawing_under_debug(monkeypatch: pytest.MonkeyPatch) -> 
     parsable for a consumer reading the stream."""
     prev = debug._state.enabled
     monkeypatch.setenv("GANDALF_PROGRESS", "1")
+    prog = Progress(3)  # outside the try: `finally` calls finish() on it either way
     try:
         debug.enable()
-        prog = Progress(3)
         out = _capture(lambda: (prog.stage("Running 5 gates"), prog.bar(1, 5, "ruff"), debug.log("x"))[0])
         assert "Running 5 gates" in out
         assert "[gandalf" in out

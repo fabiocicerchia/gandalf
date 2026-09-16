@@ -77,6 +77,7 @@ mypy-init-return = true
   "S607",
   "PLC0415",  # importing inside a test is how you patch before import
   "S314",     # the XML is a literal in the test above it, not input
+  "ASYNC109", # a double for run_tool copies its signature, it doesn't design one
 ]
 # One-off scripts: their stdout is the interface, and they drive git and node
 # by name the same way a developer would at a prompt.

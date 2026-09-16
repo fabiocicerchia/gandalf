@@ -32,7 +32,7 @@ from dataclasses import asdict, dataclass, field
 from functools import lru_cache
 from importlib import metadata
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from . import plugins
 from .base import GateOutcome, GateResult
@@ -231,7 +231,7 @@ def timings(cache: dict[str, Any]) -> dict[str, float]:
     for name, entry in cache.items():
         if not isinstance(entry, dict):
             continue
-        d = entry.get("duration")
+        d: object = cast("dict[str, Any]", entry).get("duration")
         if isinstance(d, (int, float)) and d >= 0:
             out[name] = float(d)
     return out

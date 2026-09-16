@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 from gandalf import schedule
+from gandalf.base import Gate
 
 
 class _Gate:
@@ -15,7 +18,7 @@ class _Gate:
 
 
 def _names(gates: list[_Gate], recorded: dict[str, float] | None = None) -> list[str]:
-    return [g.name for g in schedule.order(gates, recorded)]
+    return [g.name for g in schedule.order(cast("list[Gate]", gates), recorded)]
 
 
 def test_known_heavy_gates_go_first() -> None:
@@ -41,13 +44,13 @@ def test_a_gate_may_declare_its_own_cost() -> None:
 
 
 def test_an_unknown_gate_gets_the_default() -> None:
-    assert schedule.cost(_Gate("nobody-has-heard-of-this")) == schedule.DEFAULT_COST
+    assert schedule.cost(cast("Gate", _Gate("nobody-has-heard-of-this"))) == schedule.DEFAULT_COST
 
 
 def test_a_nonsense_cost_is_scheduled_not_rejected() -> None:
     """A gate is a plugin; a bad `cost` must degrade to the prior, never raise
     in the middle of building the run."""
-    assert schedule.cost(_Gate("ruff", cost="soon")) == schedule._PRIOR["ruff"]
+    assert schedule.cost(cast("Gate", _Gate("ruff", cost="soon"))) == schedule._PRIOR["ruff"]
 
 
 def test_ties_break_by_name_so_the_order_is_reproducible() -> None:
@@ -58,4 +61,4 @@ def test_ties_break_by_name_so_the_order_is_reproducible() -> None:
 
 def test_ordering_keeps_every_gate() -> None:
     gates = [_Gate(n) for n in ("ruff", "trivy", "mystery")]
-    assert sorted(g.name for g in schedule.order(gates)) == ["mystery", "ruff", "trivy"]
+    assert sorted(g.name for g in schedule.order(cast("list[Gate]", gates))) == ["mystery", "ruff", "trivy"]

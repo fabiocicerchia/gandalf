@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
 from gandalf import cache, plugins
-from gandalf.base import GateOutcome, GateResult
+from gandalf.base import Gate, GateOutcome, GateResult
 
 
 def test_content_hash_changes_with_file_content(tmp_path: Path) -> None:
@@ -151,7 +151,7 @@ class _Named:
 def test_merging_without_a_cache_keeps_a_result_the_gate_list_cannot_claim() -> None:
     """Ordering the report by the gate list is presentation; it must not also
     decide which results exist."""
-    active = [_Named("ruff"), _Named("wrapper")]
+    active = cast("list[Gate]", [_Named("ruff"), _Named("wrapper")])
     fresh = [
         GateResult("wrapper-inner", GateOutcome.PASS, 1.0, "renamed itself"),
         GateResult("ruff", GateOutcome.PASS, 1.0, "clean"),
@@ -172,7 +172,7 @@ def test_merging_survives_a_cache_entry_that_expired_mid_run(tmp_path: Path) -> 
     data["trivy"]["ts"] -= cache.ADVISORY_TTL + 1  # expired since `pending` said "hit"
     plan = cache.Plan(path, data, "h1")
 
-    active = [_Named("ruff"), _Named("trivy")]
+    active = cast("list[Gate]", [_Named("ruff"), _Named("trivy")])
     fresh = [GateResult("ruff", GateOutcome.PASS, 1.0, "clean")]
     merged, cached = plan.merge(fresh, active, [active[0]])
     assert cached == []
