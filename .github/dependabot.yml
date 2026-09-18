@@ -9,6 +9,10 @@ updates:
     # released (or repointed) package can be malicious/unstable.
     cooldown:
       default-days: 7
+    groups:
+      # Everything else rides in one pull request rather than one each.
+      actions:
+        patterns: ["*"]
 
   # gandalf is stdlib-only; this covers dev/docs tooling (docs/requirements.txt)
   # and any pyproject deps if they appear.
