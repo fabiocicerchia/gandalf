@@ -1,0 +1,23 @@
+# Backstage catalog entry, read by paved's scorecard plugin.
+#
+# Every check paved scores is derived from this file alone — no cluster
+# access, no CI credentials. What is absent here is absent from the score.
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: gandalf
+  description: >-
+      You-shall-not-pass security scanner for Git repositories — audits working tree, history, secrets,
+      misconfigurations, and supply-chain risks in one pass.
+  annotations:
+    github.com/project-slug: fabiocicerchia/gandalf
+    backstage.io/source-location: url:https://github.com/fabiocicerchia/gandalf/
+    backstage.io/techdocs-ref: dir:.
+  links:
+    - url: https://github.com/fabiocicerchia/gandalf
+      title: Source
+spec:
+  type: library
+  lifecycle: production
+  owner: group:default/kodebeat
+  system: oss-tools
