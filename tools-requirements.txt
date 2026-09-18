@@ -629,9 +629,9 @@ charset-normalizer==3.5.1 \
     # via
     #   checkov
     #   requests
-checkov==3.3.16 \
-    --hash=sha256:43e5383418a8b52d39747e2daaec4da4a6b7db3e2f64ab6c93f8b89c044c7665 \
-    --hash=sha256:6f7f611f45c765af9b6acd43e603a438153d86007d02dffa7903a1125f9b5089
+checkov==3.3.17 \
+    --hash=sha256:57b804d1d06ee642af0b8992af970f07a11d129444aac36d6e2ae7ba129bfd13 \
+    --hash=sha256:f5caa4821ed8d6335e2bcefce2249a2de4c5ecb1295d3d9c2327d9f16b5c6389
     # via -r tools-requirements.in
 click==8.4.2 \
     --hash=sha256:9a6cea6e60b17ebe0a44c5cc636d94f09bd66142c1cd7d8b4cd731c4917a15f6 \
