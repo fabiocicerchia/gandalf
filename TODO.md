@@ -18,7 +18,4 @@ Nothing open.
 
 ## Nice-to-have
 
-- [ ] **More language suites.** Rust done (`gandalf/gates/rust.py`:
-  `cargo build`/`clippy`/`cargo-audit`/`cargo test`, tagged `langs={"rust"}`).
-  Java/Kotlin, Ruby, PHP, C/C++, .NET still open — same pattern, one gate file
-  per language, see `rust.py`/`golang.py` as the template.
+Nothing open.
