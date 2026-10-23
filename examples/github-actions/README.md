@@ -48,6 +48,7 @@ jobs:
 | `pr-number` | current PR | PR to post the review to. |
 | `base-sha` / `head-sha` | from the PR event | Commits whose diff is scanned. |
 | `tools-image` | `ghcr.io/fabiocicerchia/gandalf-tools:latest` | Scanner image to pull. Empty string = build from source instead. |
+| `verify-tools-image` | `true` | Run the pulled image only if cosign verifies it was signed by gandalf's own publish workflow; otherwise build from source. Set `false` for your own `tools-image`. |
 | `app-id` / `app-private-key` | — | GitHub App credentials to post as your own bot (see below). |
 | `comment-title` / `comment-icon` | `gandalf` / `🧙` | Name + emoji shown in the comment text. |
 | `extra-args` | — | Extra gandalf flags, e.g. `--fail-on warn` to fail the check on findings. |

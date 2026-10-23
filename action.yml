@@ -34,6 +34,12 @@ inputs:
       Scanner image to pull (skips the build). Pass an empty string to always
       build from this Action's tools.Dockerfile instead.
     default: ghcr.io/fabiocicerchia/gandalf-tools:latest
+  verify-tools-image:
+    description: >-
+      Run the pulled image only if its cosign signature comes from this
+      repository's publish-tools-image workflow; otherwise build from source.
+      "true" or "false". Set "false" when tools-image is your own image.
+    default: "true"
   github-token:
     description: >-
       Token used to pull the image and post the review. The default
@@ -67,10 +73,17 @@ runs:
     # Pull the prebuilt scanner image and tag it `gandalf-tools`. Falls back to
     # building from source if the pull fails (e.g. before the image is first
     # published, or on a fork) or if tools-image is empty.
+    - name: Install cosign
+      if: inputs.tools-image != '' && inputs.verify-tools-image == 'true'
+      uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
+
+    # The image tag moves, and the image gets this job's token, so pinning the
+    # action's SHA means nothing unless the pulled digest is verified too.
     - name: Resolve tools image
       shell: bash
       env:
         TOOLS_IMAGE: ${{ inputs.tools-image }}
+        VERIFY: ${{ inputs.verify-tools-image }}
         GH_TOKEN: ${{ inputs.github-token }}
         ACTOR: ${{ github.actor }}
         ACTION_PATH: ${{ github.action_path }}
@@ -79,11 +92,19 @@ runs:
         if [ -n "$TOOLS_IMAGE" ]; then
           echo "$GH_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin 2>/dev/null || true
           if docker pull "$TOOLS_IMAGE"; then
-            docker tag "$TOOLS_IMAGE" gandalf-tools
-            echo "Using pulled image: $TOOLS_IMAGE"
-            exit 0
+            ref=$(docker image inspect --format '{{index .RepoDigests 0}}' "$TOOLS_IMAGE")
+            if [ "$VERIFY" != "true" ] || cosign verify \
+                --certificate-identity-regexp '^https://github\.com/fabiocicerchia/gandalf/\.github/workflows/publish-tools-image\.yml@refs/(heads/main|tags/v[0-9.]+)$' \
+                --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+                "$ref" >/dev/null; then
+              docker tag "$ref" gandalf-tools
+              echo "Using pulled image: $ref"
+              exit 0
+            fi
+            echo "::warning::$ref has no valid gandalf signature - building from source instead."
+          else
+            echo "Pull failed for $TOOLS_IMAGE - building from source instead."
           fi
-          echo "Pull failed for $TOOLS_IMAGE - building from source instead."
         fi
         docker build -f "$ACTION_PATH/tools.Dockerfile" -t gandalf-tools "$ACTION_PATH"
 
