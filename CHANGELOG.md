@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0](https://github.com/fabiocicerchia/gandalf/compare/v0.14.1...v0.15.0) (2026-10-23)
+
+
+### Features
+
+* **action:** verify the tools image signature before running it ([#158](https://github.com/fabiocicerchia/gandalf/issues/158)) ([5e55803](https://github.com/fabiocicerchia/gandalf/commit/5e55803fb3f3565c8e447452ea7981c95e359bad))
+
 ## [0.14.1](https://github.com/fabiocicerchia/gandalf/compare/v0.14.0...v0.14.1) (2026-09-20)
 
 
