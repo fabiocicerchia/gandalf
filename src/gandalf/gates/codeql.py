@@ -19,9 +19,13 @@ python→python, node/ts→javascript (one DB covers JS+TS), go→go. Interprete
 languages need no build; Go is autobuilt (`go build`) — if that build can't run the
 database create fails and that language degrades to WARN, the others still run.
 
-Analysis runs one thread per core (`--threads=0`): CodeQL's default is a single
-thread, which is what made this gate slow. Building a database + downloading query
-packs is still network-bound, so this gate gets its own longer budget:
+Most of the time goes on compiling the query pack, not on the analysis: about 6
+minutes for 2,000 lines of Python, every run, because the Docker container throws
+its compiled queries away. So the container keeps them in a host folder that
+outlives it (GANDALF_CODEQL_CACHE, default ~/.cache/gandalf/codeql): the first run
+fills it, the next ones took 24 seconds instead of 6.5 minutes. A host `codeql`
+binary keeps its own cache in ~/.codeql already. Analysis also runs one thread
+per core (`--threads=0`), a smaller win. A step can still be slow, so this gate gets its own longer budget:
 GANDALF_CODEQL_TIMEOUT (seconds, default 600). If a step exceeds it the language
 is skipped rather than hanging the run.
 """
@@ -46,6 +50,7 @@ from gandalf.scope import classify
 
 _IMAGE = os.environ.get("GANDALF_CODEQL_IMAGE", "mcr.microsoft.com/cstsectools/codeql-container:latest")
 _TIMEOUT = int(os.environ.get("GANDALF_CODEQL_TIMEOUT", "600"))
+_CACHE = Path(os.environ.get("GANDALF_CODEQL_CACHE") or Path.home() / ".cache" / "gandalf" / "codeql")
 
 # gandalf language tag → CodeQL language id. node and ts both map to "javascript"
 # (a single DB covers JS + TS), so the set collapses duplicates for us.
@@ -61,14 +66,16 @@ _LANG_MAP = {
 MAX_ALERTS = 5
 
 
-def _codeql_langs(changed_files: list[str] | None) -> list[str]:
+def _codeql_langs(changed_files: list[str] | None, languages: list[str] | None = None) -> list[str]:
     """The CodeQL language ids to analyze.
 
-    Whole-tree scope classifies to nothing, so fall back to the languages CodeQL
-    can build here (all of them) — the per-language create simply produces an
-    empty DB for a language with no sources.
+    A scoped run classifies its changed files; a whole-tree run has none, so it
+    uses the languages gandalf detected in the tracked tree (ctx.meta). Only when
+    neither is known does it fall back to every language CodeQL can build: each
+    analysis runs its full query pack even on an empty database, which took
+    minutes per language for a folder with no such sources.
     """
-    detected = classify(changed_files) if changed_files else None
+    detected = classify(changed_files) if changed_files else set(languages or ())
     return sorted({_LANG_MAP[t] for t in (detected or set(_LANG_MAP)) if t in _LANG_MAP})
 
 
@@ -82,7 +89,7 @@ class CodeqlGate:
         if not have_host and not shutil.which("docker"):
             return unavailable(self.name, "codeql unavailable (no host binary and no docker) — skipped")
 
-        cq_langs = _codeql_langs(ctx.changed_files)
+        cq_langs = _codeql_langs(ctx.changed_files, ctx.meta.get("languages"))
         if not cq_langs:
             return GateResult(
                 self.name,
@@ -171,10 +178,12 @@ class CodeqlGate:
                 "--output",
                 sarif,
                 "--download",
-                "--threads=0",  # one per core; the default of 1 made a 14-file analyze take 7 minutes, not 5 seconds
+                "--threads=0",  # one per core (CodeQL's default is 1)
                 "--quiet",
             ]
         else:
+            # made here, as the user: a mount source docker has to create is created root-owned
+            _CACHE.mkdir(parents=True, exist_ok=True)  # noqa: ASYNC240
             base = [
                 "docker",
                 "run",
@@ -192,6 +201,9 @@ class CodeqlGate:
                 "-v",
                 # One stat, straight after a subprocess that took seconds — not worth a thread hop
                 f"{Path(work).resolve()}:/work",  # noqa: ASYNC240
+                "-v",
+                # compiled queries and downloaded packs, kept between runs: the container's own are thrown away
+                f"{_CACHE}:/caches",
                 "-w",
                 "/src",
                 _IMAGE,
@@ -207,6 +219,7 @@ class CodeqlGate:
                 "--source-root",
                 "/src",
                 "--overwrite",
+                "--common-caches=/caches",
                 "--quiet",
             ]
             analyze = [
@@ -221,7 +234,8 @@ class CodeqlGate:
                 "--output",
                 f"/work/{lang}.sarif",
                 "--download",
-                "--threads=0",  # one per core; the default of 1 made a 14-file analyze take 7 minutes, not 5 seconds
+                "--threads=0",  # one per core (CodeQL's default is 1)
+                "--common-caches=/caches",
                 "--quiet",
             ]
 
