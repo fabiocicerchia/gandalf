@@ -19,9 +19,11 @@ python→python, node/ts→javascript (one DB covers JS+TS), go→go. Interprete
 languages need no build; Go is autobuilt (`go build`) — if that build can't run the
 database create fails and that language degrades to WARN, the others still run.
 
-Building a database + downloading query packs is slow and network-bound, so this
-gate gets its own longer budget: GANDALF_CODEQL_TIMEOUT (seconds, default 600). If a
-step exceeds it the language is skipped rather than hanging the run.
+Analysis runs one thread per core (`--threads=0`): CodeQL's default is a single
+thread, which is what made this gate slow. Building a database + downloading query
+packs is still network-bound, so this gate gets its own longer budget:
+GANDALF_CODEQL_TIMEOUT (seconds, default 600). If a step exceeds it the language
+is skipped rather than hanging the run.
 """
 
 from __future__ import annotations
@@ -169,6 +171,7 @@ class CodeqlGate:
                 "--output",
                 sarif,
                 "--download",
+                "--threads=0",  # one per core; the default of 1 made a 14-file analyze take 7 minutes, not 5 seconds
                 "--quiet",
             ]
         else:
@@ -218,6 +221,7 @@ class CodeqlGate:
                 "--output",
                 f"/work/{lang}.sarif",
                 "--download",
+                "--threads=0",  # one per core; the default of 1 made a 14-file analyze take 7 minutes, not 5 seconds
                 "--quiet",
             ]
 
