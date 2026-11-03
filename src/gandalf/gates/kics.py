@@ -7,6 +7,12 @@ is already on the host PATH. Override the image with GANDALF_KICS_IMAGE.
 
 It writes a JSON report to a temp dir and reads it back, so the scorecard carries
 the full per-issue finding list (file + line + query), not just severity counts.
+
+Its secret queries flag every `password:` key, including SOPS-encrypted ones: a
+repo that keeps its Kubernetes secrets in `*.sops.yaml` got hundreds of HIGHs for
+values nobody can read. A secret finding whose flagged line holds a SOPS value
+(`ENC[AES256_GCM,...]`) is dropped and the counts recomputed; a plain value left
+in a SOPS file is still reported, and every other query on those files still runs.
 """
 
 from __future__ import annotations
@@ -63,6 +69,41 @@ def _argv(workdir: str, outdir: str, have_host: bool) -> list[str]:
     ]
 
 
+_SECRET_QUERY = "Passwords And Secrets"  # noqa: S105 — the name of a kics query, not a password
+_SOPS_VALUE = "ENC["  # a SOPS-encrypted value: ENC[AES256_GCM,data:...,type:str]
+
+
+def _line(workdir: str, file_name: str, line: Any) -> str:
+    """The text of `line` in a file kics names (`/src/...` from the image, `./...` or relative on the host)."""
+    rel = file_name.removeprefix("/src/").removeprefix("./")
+    try:
+        with (Path(workdir) / rel).open(errors="replace") as fh:
+            for n, text in enumerate(fh, 1):
+                if n == int(line):
+                    return text
+    except (OSError, ValueError, TypeError):
+        pass
+    return ""
+
+
+def _drop_encrypted(data: dict[str, Any], workdir: str) -> dict[str, Any]:
+    """Drop secret findings on SOPS-encrypted values, and recount severities from what is left."""
+    queries = []
+    for q in data.get("queries", []):
+        files = q.get("files", [])
+        if str(q.get("query_name", "")).startswith(_SECRET_QUERY):
+            files = [f for f in files if _SOPS_VALUE not in _line(workdir, f.get("file_name", ""), f.get("line"))]
+        if files:
+            queries.append({**q, "files": files})
+    if sum(len(q["files"]) for q in queries) == sum(len(q.get("files", [])) for q in data.get("queries", [])):
+        return data  # nothing dropped: keep kics' own counters
+    counts: dict[str, int] = {}
+    for q in queries:
+        sev = str(q.get("severity", "")).upper()
+        counts[sev] = counts.get(sev, 0) + len(q["files"])
+    return {**data, "queries": queries, "severity_counters": counts}
+
+
 def _findings(data: dict[str, Any]) -> list[dict[str, Any]]:
     """Every matched file of every failing query, as file/line/message."""
     return [
@@ -117,4 +158,4 @@ class KicsGate:
         finally:
             shutil.rmtree(outdir, ignore_errors=True)
 
-        return _result(self.name, data)
+        return _result(self.name, _drop_encrypted(data, ctx.workdir))
