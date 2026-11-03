@@ -209,3 +209,35 @@ def test_cpp_build_compiles_and_fails_honestly(tmp_path: Path) -> None:
     r = _run("cpp_build", broken)
     assert r.outcome is GateOutcome.FAIL
     assert r.score == 0.0
+
+
+def test_codeql_whole_tree_analyzes_only_detected_languages() -> None:
+    from gandalf.gates.codeql import _codeql_langs
+
+    # a whole-tree run has no changed files: the detected languages decide, not every CodeQL language
+    assert _codeql_langs([], ["python", "shell"]) == ["python"]
+    assert _codeql_langs([], ["go", "ts", "node"]) == ["go", "javascript"]
+    assert _codeql_langs([], ["shell"]) == []
+    # a scoped run: the changed files decide
+    assert _codeql_langs(["a.py"], ["go"]) == ["python"]
+    # nothing known at all: every language, as before
+    assert _codeql_langs([], None) == ["go", "javascript", "python"]
+
+
+def test_codeql_docker_keeps_compiled_queries_between_runs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from gandalf.gates import codeql
+
+    calls: list[list[str]] = []
+
+    async def fake_run_tool(argv: list[str], *_: Any) -> tuple[int, str, str]:
+        calls.append(argv)
+        return 1, "", ""  # stop after the first step: only the argv matters here
+
+    monkeypatch.setattr(codeql, "run_tool", fake_run_tool)
+    monkeypatch.setattr(codeql, "_CACHE", tmp_path / "cache")
+    ctx = GateContext(repo=str(tmp_path), workdir=str(tmp_path))
+    asyncio.run(codeql.CodeqlGate()._analyze(ctx, str(tmp_path), "python", str(tmp_path / "p.sarif"), have_host=False))
+    argv = calls[0]
+    assert f"{tmp_path / 'cache'}:/caches" in argv
+    assert "--common-caches=/caches" in argv
+    assert (tmp_path / "cache").is_dir()  # made before docker could make it root-owned
