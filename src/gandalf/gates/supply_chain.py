@@ -271,6 +271,9 @@ class TestsGate:
         tail = "\n".join(out.strip().splitlines()[-5:])
         if proc.returncode == 0:
             return GateResult(self.name, GateOutcome.PASS, 1.0, f"tests: passed — {tail}")
+        # pytest exits 5 when it collected nothing (e.g. docs/ with a requirements.txt).
+        if proc.returncode == 5:
+            return unavailable(self.name, "tests: no tests collected — skipped")
         m = re.search(r"(\d+) failed", out)
         n_fail = int(m.group(1)) if m else None
         score = 0.0 if n_fail is None else max(0.0, 1.0 - min(n_fail, 10) / 10)

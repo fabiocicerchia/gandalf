@@ -241,3 +241,12 @@ def test_codeql_docker_keeps_compiled_queries_between_runs(monkeypatch: pytest.M
     assert f"{tmp_path / 'cache'}:/caches" in argv
     assert "--common-caches=/caches" in argv
     assert (tmp_path / "cache").is_dir()  # made before docker could make it root-owned
+
+
+def test_python_tests_gate_skips_a_tree_with_no_tests(tmp_path: Path) -> None:
+    """pytest exits 5 when it collects nothing — that is no signal, not a failure."""
+    workdir = _repo(tmp_path, {"pyproject.toml": "", "requirements.txt": ""})
+    res = _run("tests", workdir)
+    assert res.outcome is GateOutcome.WARN
+    assert getattr(res, "_unavailable", False)
+    assert "no tests collected" in res.summary
