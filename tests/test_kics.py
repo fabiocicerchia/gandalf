@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from gandalf.base import GateOutcome
 from gandalf.gates.kics import _drop_encrypted, _result
@@ -17,7 +18,7 @@ sops:
 """
 
 
-def _report(file_name: str) -> dict:
+def _report(file_name: str) -> dict[str, Any]:
     return {
         "severity_counters": {"HIGH": 2, "MEDIUM": 1, "LOW": 0, "INFO": 0},
         "queries": [
