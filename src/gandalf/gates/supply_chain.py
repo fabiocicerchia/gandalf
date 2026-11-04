@@ -240,6 +240,9 @@ class HadolintGate:
         )
 
 
+_PYTEST_NO_TESTS = 5  # pytest's exit code when it collected nothing
+
+
 class TestsGate:
     """Run the project's pytest suite and report pass/fail."""
 
@@ -271,6 +274,9 @@ class TestsGate:
         tail = "\n".join(out.strip().splitlines()[-5:])
         if proc.returncode == 0:
             return GateResult(self.name, GateOutcome.PASS, 1.0, f"tests: passed — {tail}")
+        # e.g. docs/ with a requirements.txt but no tests
+        if proc.returncode == _PYTEST_NO_TESTS:
+            return unavailable(self.name, "tests: no tests collected — skipped")
         m = re.search(r"(\d+) failed", out)
         n_fail = int(m.group(1)) if m else None
         score = 0.0 if n_fail is None else max(0.0, 1.0 - min(n_fail, 10) / 10)

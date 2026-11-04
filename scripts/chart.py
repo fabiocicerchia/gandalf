@@ -13,7 +13,7 @@ it costs almost nothing.
 from __future__ import annotations
 
 from typing import Any
-from xml.sax.saxutils import escape
+from xml.sax.saxutils import escape  # nosec B406
 
 # Validated with the dataviz palette validator (six checks, both modes):
 # slots 1 and 2 of the categorical theme, blue for the code as it ships and

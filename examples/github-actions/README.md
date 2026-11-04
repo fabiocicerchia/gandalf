@@ -14,8 +14,9 @@ Nothing is installed on the runner and no secrets beyond the built-in
 
 1. Copy [`gandalf-pr-review.yml`](gandalf-pr-review.yml) into your repo at
    `.github/workflows/gandalf-pr-review.yml`.
-2. Pin the action: change `fabiocicerchia/gandalf@main` to a release tag or a
-   full commit SHA so your CI is reproducible and you control upgrades.
+2. Pin the action: the file pins `fabiocicerchia/gandalf` to a release's full
+   commit SHA; bump it to the release you want, so your CI stays reproducible
+   and you control upgrades.
 3. Open a pull request. gandalf reviews it and posts comments.
 
 The whole workflow:

@@ -18,7 +18,8 @@ ARG SQUAWK_VERSION=2.59.0
 ARG SCORECARD_VERSION=5.5.0
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends curl ca-certificates git shellcheck ruby \
+ && apt-get install -y --no-install-recommends \
+      curl=8.14.1-* ca-certificates=20250419 git=1:2.47.3-* shellcheck=0.10.0-* ruby=1:3.3* \
  && rm -rf /var/lib/apt/lists/*
 
 # Python-packaged tools (scanners + type/dead-code/yaml/spell/sql/docs/complexity)
@@ -31,7 +32,7 @@ RUN curl -sSfL "https://github.com/sbdchd/squawk/releases/download/v${SQUAWK_VER
       -o /usr/local/bin/squawk && chmod +x /usr/local/bin/squawk
 
 # mdl (markdownlint, Ruby gem)
-RUN gem install --no-document mdl
+RUN gem install --no-document mdl -v 0.13.0
 
 # (kics runs from the official checkmarx/kics image — it ships its own query assets.)
 

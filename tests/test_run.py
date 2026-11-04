@@ -161,7 +161,7 @@ if __name__ == "__main__":
 
 
 def _git(repo: Path, *args: str) -> None:
-    subprocess.run(
+    subprocess.run(  # nosec B603 B607
         ["git", "-c", "user.email=t@example.com", "-c", "user.name=test", *args],
         cwd=repo,
         check=True,

@@ -24,7 +24,7 @@ def _git(args: list[str], cwd: str = ".") -> str:
     Fixed argv and no shell — every caller builds the argument list itself, so
     a branch or path with a space in it cannot become two arguments.
     """
-    return subprocess.run(  # noqa: S603 — fixed git argv, never a shell
+    return subprocess.run(  # noqa: S603 — fixed git argv, never a shell  # nosec B603 B607
         ["git", *args],  # noqa: S607 — git is resolved from PATH on purpose
         cwd=cwd,
         capture_output=True,

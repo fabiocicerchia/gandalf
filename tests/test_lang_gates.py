@@ -37,8 +37,8 @@ def _repo(tmp_path: Path, files: dict[str, str]) -> str:
         p = tmp_path / rel
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(body)
-    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
-    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)  # nosec B603 B607
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)  # nosec B603 B607
     # The tracked-file listing is cached per workdir and every fixture is a new
     # tree in a reused temp root, so the cache has to go with the fixture.
     tracked_files.cache_clear()
@@ -241,3 +241,12 @@ def test_codeql_docker_keeps_compiled_queries_between_runs(monkeypatch: pytest.M
     assert f"{tmp_path / 'cache'}:/caches" in argv
     assert "--common-caches=/caches" in argv
     assert (tmp_path / "cache").is_dir()  # made before docker could make it root-owned
+
+
+def test_python_tests_gate_skips_a_tree_with_no_tests(tmp_path: Path) -> None:
+    """pytest exits 5 when it collects nothing — that is no signal, not a failure."""
+    workdir = _repo(tmp_path, {"pyproject.toml": "", "requirements.txt": ""})
+    res = _run("tests", workdir)
+    assert res.outcome is GateOutcome.WARN
+    assert getattr(res, "_unavailable", False)
+    assert "no tests collected" in res.summary

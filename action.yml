@@ -93,8 +93,10 @@ runs:
           echo "$GH_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin 2>/dev/null || true
           if docker pull "$TOOLS_IMAGE"; then
             ref=$(docker image inspect --format '{{index .RepoDigests 0}}' "$TOOLS_IMAGE")
+            repo='^https://github\.com/fabiocicerchia/gandalf'
+            workflow='/\.github/workflows/publish-tools-image\.yml@refs/(heads/main|tags/v[0-9.]+)$'
             if [ "$VERIFY" != "true" ] || cosign verify \
-                --certificate-identity-regexp '^https://github\.com/fabiocicerchia/gandalf/\.github/workflows/publish-tools-image\.yml@refs/(heads/main|tags/v[0-9.]+)$' \
+                --certificate-identity-regexp "$repo$workflow" \
                 --certificate-oidc-issuer https://token.actions.githubusercontent.com \
                 "$ref" >/dev/null; then
               docker tag "$ref" gandalf-tools

@@ -102,7 +102,7 @@ def tools_image_available() -> bool:
     """
     if not shutil.which("docker"):
         return False
-    r = subprocess.run(  # noqa: S603 — fixed docker argv, never a shell
+    r = subprocess.run(  # noqa: S603 — fixed docker argv, never a shell  # nosec B603 B607
         ["docker", "image", "inspect", TOOLS_IMAGE],  # noqa: S607 — docker is resolved from PATH on purpose
         capture_output=True,
         check=False,
