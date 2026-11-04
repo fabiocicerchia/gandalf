@@ -88,7 +88,7 @@ def _line(workdir: str, file_name: str, line: Any) -> str:
 
 def _drop_encrypted(data: dict[str, Any], workdir: str) -> dict[str, Any]:
     """Drop secret findings on SOPS-encrypted values, and recount severities from what is left."""
-    queries = []
+    queries: list[dict[str, Any]] = []
     for q in data.get("queries", []):
         files = q.get("files", [])
         if str(q.get("query_name", "")).startswith(_SECRET_QUERY):
