@@ -31,8 +31,8 @@ MAX_FINDINGS = 3
 
 def _is_local(url: str) -> bool:
     host = urlparse(url).hostname or ""
-    # Compared against, never bound # nosec B104 — host equality check, not a bind
-    return host in ("localhost", "127.0.0.1", "0.0.0.0", "::1")  # noqa: S104
+    # Compared against, never bound — host equality check, not a bind
+    return host in ("localhost", "127.0.0.1", "0.0.0.0", "::1")  # noqa: S104  # nosec B104
 
 
 # The timeout is plumbed to asyncio.wait_for, which is the mechanism this rule asks for

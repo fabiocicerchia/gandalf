@@ -85,9 +85,9 @@ def _repo(tmp_path: Path, files: list[str], gandalfignore: str | None = None) ->
     if gandalfignore is not None:
         (repo / ".gandalfignore").write_text(gandalfignore)
     git = ["git", "-c", "user.email=t@e.com", "-c", "user.name=t"]
-    subprocess.run([*git, "init", "-q", "."], cwd=repo, check=True)
-    subprocess.run([*git, "add", "-A"], cwd=repo, check=True)
-    subprocess.run(
+    subprocess.run([*git, "init", "-q", "."], cwd=repo, check=True)  # nosec B603
+    subprocess.run([*git, "add", "-A"], cwd=repo, check=True)  # nosec B603
+    subprocess.run(  # nosec B603
         [*git, "-c", "commit.gpgsign=false", "commit", "-qm", "init"],
         cwd=repo,
         check=True,

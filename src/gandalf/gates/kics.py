@@ -69,7 +69,7 @@ def _argv(workdir: str, outdir: str, have_host: bool) -> list[str]:
     ]
 
 
-_SECRET_QUERY = "Passwords And Secrets"  # noqa: S105 — the name of a kics query, not a password
+_SECRET_QUERY = "Passwords And Secrets"  # noqa: S105 — the name of a kics query, not a password  # nosec B105
 _SOPS_VALUE = "ENC["  # a SOPS-encrypted value: ENC[AES256_GCM,data:...,type:str]
 
 

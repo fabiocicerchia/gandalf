@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ET  # nosec B405
 
 from gandalf import junit
 from gandalf.base import GateOutcome, GateResult
@@ -33,7 +33,7 @@ def _doc():
 
 def test_shape_and_parseable() -> None:
     doc = _doc()
-    root = ET.fromstring(doc)  # must be well-formed XML
+    root = ET.fromstring(doc)  # must be well-formed XML  # nosec B314
     assert root.tag == "testsuite"
     assert root.attrib["tests"] == "3"
     assert root.attrib["failures"] == "1"
@@ -41,7 +41,7 @@ def test_shape_and_parseable() -> None:
 
 
 def test_fail_becomes_failure_element() -> None:
-    root = ET.fromstring(_doc())
+    root = ET.fromstring(_doc())  # nosec B314
     ruff = next(tc for tc in root.findall("testcase") if tc.attrib["name"] == "ruff")
     failure = ruff.find("failure")
     assert failure is not None
@@ -50,7 +50,7 @@ def test_fail_becomes_failure_element() -> None:
 
 
 def test_warn_stays_passing_with_system_out() -> None:
-    root = ET.fromstring(_doc())
+    root = ET.fromstring(_doc())  # nosec B314
     bandit = next(tc for tc in root.findall("testcase") if tc.attrib["name"] == "bandit")
     assert bandit.find("failure") is None
     out = bandit.find("system-out")
@@ -59,7 +59,7 @@ def test_warn_stays_passing_with_system_out() -> None:
 
 
 def test_passing_gate_has_no_failure_or_system_out() -> None:
-    root = ET.fromstring(_doc())
+    root = ET.fromstring(_doc())  # nosec B314
     clean = next(tc for tc in root.findall("testcase") if tc.attrib["name"] == "gitleaks")
     assert clean.find("failure") is None
     assert clean.find("system-out") is None

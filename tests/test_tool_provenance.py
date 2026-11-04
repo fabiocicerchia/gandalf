@@ -6,6 +6,7 @@ there — and the findings differ with it. The run has to say which.
 
 from __future__ import annotations
 
+import tempfile
 from collections.abc import Iterator
 
 import pytest
@@ -13,6 +14,9 @@ import pytest
 from gandalf import plugins, toolrun
 from gandalf.outputs import tool_report
 from gandalf.summary import _tools_line
+
+# Never written to — the workdir only has to be a real directory path.
+WORKDIR = tempfile.gettempdir()
 
 
 # The stand-ins for `shutil.which` and the image probe, as named functions
@@ -43,14 +47,14 @@ def _clean() -> Iterator[None]:
 
 def test_host_resolution_is_recorded(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(toolrun.shutil, "which", _on_path)
-    toolrun._dockerize(["ruff", "check"], "/tmp")
+    toolrun._dockerize(["ruff", "check"], WORKDIR)
     assert plugins.tool_sources() == {"ruff": "host"}
 
 
 def test_image_resolution_is_recorded(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(toolrun.shutil, "which", _not_on_path)
     monkeypatch.setattr(toolrun, "_via_image", _in_image)
-    cmd = toolrun._dockerize(["trivy", "fs", "."], "/tmp")
+    cmd = toolrun._dockerize(["trivy", "fs", "."], WORKDIR)
     assert cmd[0] == "docker"
     assert plugins.tool_sources() == {"trivy": "image"}
 
@@ -58,51 +62,51 @@ def test_image_resolution_is_recorded(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_an_unresolvable_tool_is_not_claimed_to_have_run(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(toolrun.shutil, "which", _not_on_path)
     monkeypatch.setattr(toolrun, "_via_image", _not_in_image)
-    toolrun._dockerize(["nope"], "/tmp")
+    toolrun._dockerize(["nope"], WORKDIR)
     assert plugins.tool_sources() == {}
 
 
 def test_first_resolution_wins(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(toolrun.shutil, "which", _on_path)
-    toolrun._dockerize(["ruff"], "/tmp")
+    toolrun._dockerize(["ruff"], WORKDIR)
     monkeypatch.setattr(toolrun.shutil, "which", _not_on_path)
     monkeypatch.setattr(toolrun, "_via_image", _in_image)
-    toolrun._dockerize(["ruff"], "/tmp")
+    toolrun._dockerize(["ruff"], WORKDIR)
     assert plugins.tool_sources()["ruff"] == "host"
 
 
 def test_reset_clears_process_state(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(toolrun.shutil, "which", _on_path)
-    toolrun._dockerize(["ruff"], "/tmp")
+    toolrun._dockerize(["ruff"], WORKDIR)
     plugins.reset_tool_sources()
     assert plugins.tool_sources() == {}
 
 
 def test_report_names_the_image_only_when_one_was_used(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(plugins, "tool_sources", lambda: {"ruff": "host"})
-    assert "image" not in tool_report("/tmp", False)
+    assert "image" not in tool_report(WORKDIR, False)
     monkeypatch.setattr(plugins, "tool_sources", lambda: {"trivy": "image"})
     monkeypatch.setattr(plugins, "tools_image_id", lambda: "sha256:deadbeef")
-    block = tool_report("/tmp", False)
+    block = tool_report(WORKDIR, False)
     assert block["image"] == {"name": plugins.TOOLS_IMAGE, "id": "sha256:deadbeef"}
     assert block["resolved"]["trivy"] == {"source": "image"}
 
 
 def test_versions_are_opt_in(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(plugins, "tool_sources", lambda: {"ruff": "host"})
-    assert "version" not in tool_report("/tmp", False)["resolved"]["ruff"]
+    assert "version" not in tool_report(WORKDIR, False)["resolved"]["ruff"]
 
     async def fake(workdir: str) -> dict[str, str]:
         return {"ruff": "ruff 0.15.8"}
 
     monkeypatch.setattr(plugins, "tool_versions", fake)
-    got = tool_report("/tmp", True)["resolved"]["ruff"]
+    got = tool_report(WORKDIR, True)["resolved"]["ruff"]
     assert got == {"source": "host", "version": "ruff 0.15.8"}
 
 
 def test_no_tools_no_block(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(plugins, "tool_sources", dict)
-    assert tool_report("/tmp", True) == {}
+    assert tool_report(WORKDIR, True) == {}
     assert _tools_line({}) == ""
 
 

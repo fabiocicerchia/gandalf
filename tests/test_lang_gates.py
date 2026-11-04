@@ -37,8 +37,8 @@ def _repo(tmp_path: Path, files: dict[str, str]) -> str:
         p = tmp_path / rel
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(body)
-    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
-    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)  # nosec B603 B607
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)  # nosec B603 B607
     # The tracked-file listing is cached per workdir and every fixture is a new
     # tree in a reused temp root, so the cache has to go with the fixture.
     tracked_files.cache_clear()

@@ -11,7 +11,7 @@ set.
 from __future__ import annotations
 
 from typing import Any
-from xml.sax.saxutils import escape, quoteattr
+from xml.sax.saxutils import escape, quoteattr  # nosec B406
 
 from . import plugins
 from .base import GateOutcome, GateResult

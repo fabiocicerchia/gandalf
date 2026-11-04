@@ -247,9 +247,9 @@ def bench_languages(tmp: Path) -> dict[str, Any]:
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text("x = 1\n")
     git = ["git", "-c", "user.email=b@e.com", "-c", "user.name=b"]
-    subprocess.run([*git, "init", "-q", "."], cwd=repo, check=True)
-    subprocess.run([*git, "add", "-A"], cwd=repo, check=True)
-    subprocess.run(
+    subprocess.run([*git, "init", "-q", "."], cwd=repo, check=True)  # nosec B603
+    subprocess.run([*git, "add", "-A"], cwd=repo, check=True)  # nosec B603
+    subprocess.run(  # nosec B603
         [*git, "-c", "commit.gpgsign=false", "commit", "-qm", "init"],
         cwd=repo,
         check=True,
@@ -258,7 +258,9 @@ def bench_languages(tmp: Path) -> dict[str, Any]:
 
     def old() -> set[str]:
         # scope.languages as it was: its own listing, split on whitespace.
-        out = subprocess.run(["git", "ls-files"], cwd=root, capture_output=True, text=True, check=True).stdout
+        out = subprocess.run(  # nosec B603 B607
+            ["git", "ls-files"], cwd=root, capture_output=True, text=True, check=True
+        ).stdout
         return scope.classify(out.split())
 
     def new() -> set[str]:
@@ -289,7 +291,7 @@ def bench_extension(repo_root: Path) -> list[dict[str, Any]]:
     if not shutil.which("node") or not (ext / "node_modules").is_dir():
         _say("  (extension bench skipped — needs node and `npm install` in", ext, ")")
         return []
-    build = subprocess.run(
+    build = subprocess.run(  # nosec B603 B607
         ["node", "esbuild.mjs", "--bench"],
         cwd=ext,
         capture_output=True,
@@ -299,7 +301,7 @@ def bench_extension(repo_root: Path) -> list[dict[str, Any]]:
     if build.returncode != 0:
         _say("  (extension bench skipped — build failed)\n", build.stderr[-500:])
         return []
-    run = subprocess.run(
+    run = subprocess.run(  # nosec B603 B607
         ["node", "out/bench.js"],
         cwd=ext,
         capture_output=True,
