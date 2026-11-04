@@ -77,6 +77,7 @@ def test_progress_keeps_drawing_under_debug(monkeypatch: pytest.MonkeyPatch) -> 
     prog = Progress(3)  # outside the try: `finally` calls finish() on it either way
     try:
         debug.enable()
+
         def draw() -> None:
             prog.stage("Running 5 gates")
             prog.bar(1, 5, "ruff")
