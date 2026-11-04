@@ -244,9 +244,9 @@ def analyze(workdir: str, label: str, diff: str, verdict: str, scorecard: str) -
         f"## Verdict\n{verdict}\n\n## Gate results\n{scorecard}\n\n" + repo_context(workdir, label, diff)
     )
     try:
-        adv = _split_sections(chat([{"role": "user", "content": prompt}]))
+        adv: dict[str, Any] = _split_sections(chat([{"role": "user", "content": prompt}]))
     except Exception as exc:
-        adv: dict[str, Any] = {
+        adv = {
             "summary": f"LLM unavailable ({LLM_URL}, model {MODEL}): {exc}",
             "changeset": "",
             "remediation": "",

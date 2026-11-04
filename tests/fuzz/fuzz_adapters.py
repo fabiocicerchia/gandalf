@@ -33,8 +33,9 @@ try:
 
     with atheris.instrument_imports():  # type: ignore[attr-defined]  # no stubs for atheris
         from gandalf import llm, report, severity, skills, suggest, suppress
+    _HAVE_ATHERIS = True
 except ImportError:
-    atheris = None
+    _HAVE_ATHERIS = False
     from gandalf import llm, report, severity, skills, suggest, suppress
 
 # Exceptions each adapter is CONTRACTED to raise on bad input — expected, not a
@@ -106,7 +107,7 @@ def main() -> None:
         _selfcheck()
         return
 
-    if atheris is None:
+    if not _HAVE_ATHERIS:
         raise SystemExit("atheris is not installed — run with --selfcheck, or pip install atheris")
     atheris.Setup(sys.argv, _test_one_input)
     atheris.Fuzz()
