@@ -59,7 +59,8 @@ def _int(v: object) -> int:
         return 0
     if isinstance(v, int):
         return v
-    if isinstance(v, str) and v.strip().isdigit():
+    # isdecimal, not isdigit: "²" is a digit int() refuses to parse.
+    if isinstance(v, str) and v.strip().isdecimal():
         return int(v)
     return 0
 

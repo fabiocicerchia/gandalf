@@ -93,6 +93,7 @@ def _selfcheck() -> None:
         "==>" * 5000,  # the correction scrape, with nothing to anchor it
         ":::::",
         "\x00￿\U0001f4a9",
+        "²",  # isdigit() but not int()-parseable: a ruff row coordinate must not crash
         "[" * 20000,  # over-nested JSON: json.loads raises RecursionError, not JSONDecodeError
     ]
     for s in seeds:

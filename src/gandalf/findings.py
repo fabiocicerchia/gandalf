@@ -186,7 +186,7 @@ def first_int(f: object, keys: tuple[str, ...]) -> int:
             continue
         if isinstance(v, int) and v > 0:
             return v
-        if isinstance(v, str) and v.isdigit() and int(v) > 0:
+        if isinstance(v, str) and v.isdecimal() and int(v) > 0:
             return int(v)
     return 0
 
