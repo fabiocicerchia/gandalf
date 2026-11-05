@@ -63,7 +63,7 @@ async def _run_gates(  # noqa: PLR0913
     on_result: Callable[[GateResult], None] | None = None,
 ) -> list[GateResult]:
     """Run gates concurrently, but at most `limit` at once (<=0 = unbounded).
-    Bounding matters because ~35 gates each may spawn a `docker run`, which can
+    Bounding matters because ~70 gates each may spawn a `docker run`, which can
     swamp a laptop/CI runner if all launch simultaneously. `timeouts` is the
     [gandalf.timeouts] table; each gate's tool calls honour its own budget.
     `on_result(res)` fires as each gate finishes, for --stream."""

@@ -30,7 +30,7 @@ import { Snapshot } from "./types";
 
 /** Slowest gates named in the log when a project scan finishes. */
 const TIMINGS_LOGGED = 5;
-/** Let the window settle before forking ~30 gates. */
+/** Let the window settle before forking up to 70 gates. */
 const STARTUP_DELAY_MS = 5000;
 
 export class Session {
@@ -120,7 +120,7 @@ export class Session {
   /**
    * Where the time went. Gandalf records each gate's wall-clock in the payload,
    * so a slow scan can name its own culprits instead of leaving the user to
-   * guess which of ~30 gates to disable.
+   * guess which of ~70 gates to disable.
    */
   private logTimings(payload: Snapshot["payload"], totalMs: number): void {
     const timed = gatesByDuration(payload);

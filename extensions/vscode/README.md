@@ -3,7 +3,7 @@
 Run [Gandalf](https://github.com/fabiocicerchia/gandalf)'s quality gates while
 you write the code, instead of finding out in CI.
 
-Gandalf is not another linter — it is an aggregator. One scan runs ~50 gates
+Gandalf is not another linter — it is an aggregator. One scan runs up to 70 gates
 over your repository (`ruff`, `mypy`, `bandit`, `semgrep`, `gitleaks`, `trivy`,
 `checkov`, `kics`, `codeql`, `osv`, `eslint`, `tsc`, `clippy`, `govulncheck`,
 `shellcheck`, `hadolint`, the test and build runners, and a set of LLM judges)
@@ -291,7 +291,7 @@ Then, in rough order of payoff:
 
 ## Keeping it cheap
 
-A gandalf run forks ~30 gates, several of which are `docker run`. Doing that on
+A gandalf run forks up to 70 gates, several of which are `docker run`. Doing that on
 every keystroke would be unusable, so **the extension never scans while you
 type**. What it does instead, in layers:
 

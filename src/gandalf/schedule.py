@@ -1,7 +1,7 @@
 """Gate run order: the expensive ones first.
 
 Gates run concurrently but bounded — `--concurrency` caps how many are in
-flight, because ~35 gates each spawning a `docker run` will swamp a laptop. Once
+flight, because ~70 gates each spawning a `docker run` will swamp a laptop. Once
 there is a queue, the order gates are submitted in decides when the run ends: a
 five-minute trivy that starts last adds five minutes to a scan that had
 otherwise finished. Discovery order is alphabetical by module filename, which is

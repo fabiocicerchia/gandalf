@@ -33,7 +33,7 @@ GATE_TIMEOUT: contextvars.ContextVar[int | None] = contextvars.ContextVar("ganda
 # Wall-clock budget for the whole run, as a monotonic stamp. None = unbounded,
 # which is the default and what CI wants.
 #
-# A per-gate timeout cannot bound a run: there are ~35 gates, and one gate may
+# A per-gate timeout cannot bound a run: there are ~70 gates, and one gate may
 # make fifty tool calls (hadolint per Dockerfile, a syntax check per file), so
 # "120s each" is not 120s. Something has to bound the total, and the caller that
 # does it today is the editor extension, which kills the process at its own
