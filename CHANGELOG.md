@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.2](https://github.com/fabiocicerchia/gandalf/compare/v0.15.1...v0.15.2) (2026-11-05)
+
+
+### Bug Fixes
+
+* 5 issues found by code-atlas (vulnerabilities) ([#176](https://github.com/fabiocicerchia/gandalf/issues/176)) ([15c7d33](https://github.com/fabiocicerchia/gandalf/commit/15c7d33d55794cad596d0d7e9c513dbc8fa6d8e7))
+* 8 issues found by code-atlas (quality gates) ([#177](https://github.com/fabiocicerchia/gandalf/issues/177)) ([9a8a4b9](https://github.com/fabiocicerchia/gandalf/commit/9a8a4b9e1e1fb64aaa0b6320307211e55f852484))
+* **codeql:** analyze only the languages present, keep compiled queries ([#173](https://github.com/fabiocicerchia/gandalf/issues/173)) ([cb65bb8](https://github.com/fabiocicerchia/gandalf/commit/cb65bb830b5c364257939a5ec2307fc553b44203))
+* **kics:** annotate the filtered queries list for basedpyright strict ([#179](https://github.com/fabiocicerchia/gandalf/issues/179)) ([f500e4c](https://github.com/fabiocicerchia/gandalf/commit/f500e4cbf0b8667b119aeb527d3f7194c1e896ca))
+* **kics:** don't count SOPS-encrypted values as leaked secrets ([#175](https://github.com/fabiocicerchia/gandalf/issues/175)) ([f967ccc](https://github.com/fabiocicerchia/gandalf/commit/f967ccc0201e8fd66be4a9274263bfa06d6b7ad8))
+
 ## [0.15.1](https://github.com/fabiocicerchia/gandalf/compare/v0.15.0...v0.15.1) (2026-11-02)
 
 
