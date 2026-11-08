@@ -56,12 +56,12 @@ Feature: AI review gates driven by skill playbooks
     And the LLM endpoint refuses connections
     When the operator runs gandalf
     Then the "<gate>" gate is reported as not checked
-    And its summary reads "<summary>"
+    And its summary starts with "<summary> (", names the connection error, and ends with ") — skipped"
 
     Examples:
-      | gate                  | summary                                                                 |
-      | codebase_architecture | codebase_architecture: judge unavailable (connection refused) — skipped |
-      | pr_code_summary       | pr_code_summary: skill judge unavailable (connection refused) — skipped |
+      | gate                  | summary                                  |
+      | codebase_architecture | codebase_architecture: judge unavailable |
+      | pr_code_summary       | pr_code_summary: skill judge unavailable |
 
   @id:quality-gates.ai-review.005 @rule:ai-review.nothing-in-scope-not-checked @verified @source:src/gandalf/skillgate.py#SkillGate @test:tests/test_gandalf.py#test_skill_gate_warns_with_nothing_in_scope
   Scenario: With nothing to judge, a skill review is reported as not checked and the model is not called

@@ -60,7 +60,7 @@ Feature: Writing the run's report artifacts
 
     Examples:
       | json_option | stdout                                                            | report_line                                        |
-      | --json      | standard output parses as one JSON document whose verdict is pass | the "JSON report:" line appears on standard error  |
+      | --json      | standard output parses as one JSON document                       | the "JSON report:" line appears on standard error  |
       | no --json   | standard output shows the human scorecard                         | the "JSON report:" line appears on standard output |
 
   @id:reporting.machine-formats.013 @rule:reporting.json-record.scanner-provenance @verified @source:src/gandalf/outputs.py#tool_report @test:tests/test_tool_provenance.py#test_report_names_the_image_only_when_one_was_used @test:tests/test_tool_provenance.py#test_versions_are_opt_in @test:tests/test_tool_provenance.py#test_no_tools_no_block

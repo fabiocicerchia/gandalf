@@ -80,7 +80,7 @@ Feature: Choosing what a run evaluates
 
     Examples:
       | environment                                       | message                                                                                 |
-      | the current folder is not inside a git repository | gandalf needs a git repository: not a git repository (or any parent of the mount point) |
+      | the current folder is not inside a git repository | gandalf needs a git repository: not a git repository (or any of the parent directories): .git |
       | git is not installed on PATH                      | gandalf needs git on PATH, and it is not there                                          |
 
   @id:running-checks.scan-scope.008 @rule:scope.languages.detected-from-files-in-scope @verified @source:src/gandalf/scope.py#classify @test:tests/test_gandalf.py#test_language_detection @test:tests/test_lang_gates.py#test_language_markers_classify_the_new_ecosystems @test:tests/test_ignore.py#test_languages_reads_the_same_tracked_listing_every_gate_does @test:tests/test_perf.py#test_languages_reuses_that_listing_instead_of_asking_git_again @test:tests/test_perf.py#test_a_scoped_run_never_touches_the_tracked_listing_at_all

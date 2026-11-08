@@ -21,9 +21,9 @@ Feature: Installing and running gandalf from a checkout
     And running that gandalf command with any arguments runs gandalf from this checkout with those arguments
 
     Examples:
-      | override               | bindir         |
-      |                        | ~/.local/bin   |
-      |  BINDIR=/opt/tools/bin | /opt/tools/bin |
+      | override               | bindir           |
+      |                        | $HOME/.local/bin |
+      |  BINDIR=/opt/tools/bin | /opt/tools/bin   |
 
   @id:developer-tooling.build-and-install.003 @rule:developer-tooling.extension.install-refused-without-editor-cli @inferred @source:Makefile#ext-install
   Scenario Outline: Installing the editor extension is refused with guidance when the editor's command-line tool is missing

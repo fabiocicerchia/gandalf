@@ -9,7 +9,7 @@ Feature: Validating command-line options
   Scenario: Staged changes and a specific commit cannot be evaluated in the same run
     Given the operator wants to evaluate a run's scope
     When the operator runs gandalf with both --staged and --commit 1a2b3c4
-    Then gandalf refuses with a usage error saying --staged is not allowed with --commit
+    Then gandalf refuses with a usage error saying --commit is not allowed with --staged
     And no gate is run and no report is written
     And the exit code is 2
 

@@ -28,6 +28,6 @@ Feature: Publishing a status badge
 
     Examples:
       | stem      | flag                             | outcome                                                                                                           |
-      | repo-main | with --badge                     | the badge is written to reports/repo-main-badge.json and the console prints "Badge: reports/repo-main-badge.json" |
+      | repo-main | with --badge                     | the badge is written to reports/repo-main-badge.json under the repository root and the console prints "Badge: " followed by that path |
       | repo-main | with --badge public/gandalf.json | the badge is written to public/gandalf.json and the console prints "Badge: public/gandalf.json"                   |
       | repo-main | without --badge                  | no badge file is written and no "Badge:" line is printed                                                          |

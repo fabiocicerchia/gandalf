@@ -13,4 +13,4 @@ Feature: Score history in the editor
     Then e4f5a6b is listed as "85/100  +5"
     And a1b2c3d is listed as "80/100"
     And 9d8e7f6 is listed as "— not scanned"
-    And the title shows a sparkline over 2 scanned commits of the last 40
+    And the title shows a sparkline "over 2 scanned commit(s) of" the number of commits listed, at most the last 40

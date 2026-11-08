@@ -10,8 +10,8 @@ Feature: Scanning a project from Neovim
   Scenario Outline: Optional flags an older gandalf does not advertise are left off
     Given the installed gandalf's --help names <advertised>
     When the developer starts a workspace scan
-    Then "--out-dir", "--no-trend", "--cache", "--stream" and "--exclude" are passed <optional flags>
-    And "--no-llm" and "--no-html" are always passed
+    Then "--out-dir", "--no-trend", "--cache", "--stream" and "--exclude" (for each configured exclude) are passed <optional flags>
+    And "--no-llm" and "--no-html" are passed whatever --help says
 
     Examples:
       | advertised                            | optional flags |

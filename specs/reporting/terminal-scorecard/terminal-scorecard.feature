@@ -16,9 +16,9 @@ Feature: Reading the scorecard in the terminal
 
     Examples:
       | light | score | delta          | delta_text    | scope          |
-      | GREEN | 100   | no prior score |               |  wt            |
+      | GREEN | 100   | no prior score |               | working-tree   |
       | AMBER | 67    | -7             |  (-7 vs prev) | staged         |
-      | RED   | 42    | +5             |  (+5 vs prev) | commit abc1234 |
+      | RED   | 42    | +5             |  (+5 vs prev) | abc1234def     |
 
   @id:reporting.terminal-scorecard.002 @rule:reporting.terminal.no-score-when-nothing-ran @verified @source:src/gandalf/render_text.py#render_terminal @test:tests/test_setup_banner.py#test_verdict_line_does_not_claim_a_zero_score_when_nothing_ran
   Scenario: A run where no gate could run shows NOT RUN instead of a score
@@ -29,8 +29,8 @@ Feature: Reading the scorecard in the terminal
 
   @id:reporting.terminal-scorecard.003 @rule:reporting.terminal.gates-grouped-by-category @inferred @source:src/gandalf/render_text.py#render_terminal
   Scenario: Gates are listed under their category, with the category's worst light and average score
-    Given the gates "gitleaks" (Security, passed, 100%) and "trivy" (Security, warned, 60%) produced results
-    And the gate "semgrep" is blocking and failed
+    Given the gates "gitleaks" (Security, passed, 100%) and "bandit" (Security, warned, 60%) produced results
+    And the gate "ruff" (Code quality) is blocking and failed
     When the operator runs a check
     Then each category that has gates gets a heading, in the fixed category order, coloured by its worst gate light and followed by its average score, e.g. "Security · 80%"
     And a category whose gates all could not run shows "not run" instead of a percentage
@@ -60,8 +60,8 @@ Feature: Reading the scorecard in the terminal
     When the operator runs a check with --explain-score
     Then a SCORE section shows "75/100"
     And "ruff" is shown contributing 50.0 and "mypy" contributing 25.0
-    And the section ends "2 gate(s) counted · mean 0.750 → 75/100"
-    And it notes "1 not counted (could not run): trivy"
+    And the gate table closes with "2 gate(s) counted · mean 0.750 → 75/100"
+    And the section then notes "1 not counted (could not run): trivy"
     And a gate whose score was changed by severity weighting also shows the score the gate itself gave, e.g. "(gate scored 0.90, severity-weighted)"
     And when no gate ran, it says there is nothing to average
 

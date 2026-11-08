@@ -11,7 +11,7 @@ Feature: Seeing findings in Neovim
     And src/a.py is open
     When the scan completes
     Then src/a.py shows a diagnostic on line 2, column 3 with source "gandalf" and code "E501"
-    And its message reads "line too long" followed by "gate: ruff · category: Code quality"
+    And its message reads "line too long" followed by "gate: ruff · category: Code quality · rule: E501"
     And findings with no file or line get no diagnostic
     And diagnostics from the previous scan are gone
 
@@ -52,7 +52,7 @@ Feature: Seeing findings in Neovim
     Given the last scan reported a low finding, a critical finding, an unrated finding from a failing gate and a medium finding
     When the developer runs :GandalfList
     Then the quickfix list orders them critical, the failing gate's unrated finding, medium, low
-    And findings of equal rank are ordered by gate, then file, then line
+    And findings of equal rank put a stated level before an unrated one, then order by gate, then file, then line
 
   @id:editor-integrations.editor-diagnostics.006 @rule:nvim.findings.quickfix-list @verified @source:extensions/nvim/lua/gandalf/commands.lua#M.list @test:extensions/nvim/tests/ui_spec.lua#marks critical and high as errors and everything else as warnings @test:extensions/nvim/tests/ui_spec.lua#flattens a multi-line message, which the list shows one row per entry
   Scenario: Every finding can be opened in the quickfix list
@@ -66,7 +66,7 @@ Feature: Seeing findings in Neovim
   Scenario: Findings can be narrowed to one severity level
     Given the last scan reported 2 high findings and 5 low findings
     When the developer runs :GandalfFilter and picks "High"
-    Then the picker offers only "High 2" and "Low 5", worst first
+    Then the picker offers only High with count 2 and Low with count 5, worst first
     And the quickfix list titled "Gandalf: High" opens with the 2 high findings
 
   @id:editor-integrations.editor-diagnostics.008 @rule:nvim.findings.streamed-then-replaced @verified @source:extensions/nvim/lua/gandalf/state.lua#M.findings @test:extensions/nvim/tests/init_spec.lua#shows a streamed gate before the report lands @test:extensions/nvim/tests/init_spec.lua#replaces the streamed gate with what the report finally said @questionable

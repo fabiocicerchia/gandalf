@@ -48,7 +48,7 @@ Feature: Catching leaked secrets and security flaws
     Then the "kics" gate reports the plain-text password on line 5 as a finding
     And it does not report the encrypted password
     And its summary reads "kics: 1 HIGH, 1 MEDIUM, 0 LOW"
-    And when every password in the file is encrypted the "kics" gate is amber with summary "kics: 0 HIGH, 1 MEDIUM, 0 LOW"
+    And the "kics" gate is red, because the plain-text password is still a HIGH finding
 
   @id:quality-gates.security-scanning.005 @rule:security.sast.codeql-analyses-detected-languages @verified @source:src/gandalf/gates/codeql.py#_codeql_langs @test:tests/test_lang_gates.py#test_codeql_whole_tree_analyzes_only_detected_languages
   Scenario Outline: CodeQL analyses only the languages present in scope

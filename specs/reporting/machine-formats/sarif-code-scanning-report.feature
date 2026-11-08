@@ -3,7 +3,7 @@ Feature: Publishing findings to code scanning as SARIF
   Lets a CI operator upload gandalf's findings to GitHub code scanning (or any SARIF dashboard) so they appear as ranked, deduplicated alerts on the code instead of lines in a job log.
 
   Background:
-    Given Given the operator runs gandalf with the --sarif option
+    Given the operator runs gandalf with the --sarif option
 
   @id:reporting.machine-formats.015 @rule:reporting.sarif.findings-become-located-alerts @verified @source:src/gandalf/sarif.py#_collect @test:tests/test_sarif.py#test_levels_and_locations @test:tests/test_sarif.py#test_paths_made_repo_relative @test:tests/test_sarif.py#test_rules_deduped_and_sorted @test:tests/test_sarif.py#test_bandit_findings_are_identified_by_test_id
   Scenario Outline: Each finding becomes an alert at its repository-relative file and line
@@ -60,8 +60,8 @@ Feature: Publishing findings to code scanning as SARIF
       | case                                                                 | count |
       | a gate that failed with a compile error and named no file            | 1     |
       | a gate reports a repository-level finding with no file               | 1     |
-      | a gate that warned "codespell: unavailable" and reported no findings | 0     |
-      | a gate that passed with no findings                                  | 0     |
+      | a gate that warned "codespell: unavailable" and reported no findings | no    |
+      | a gate that passed with no findings                                  | no    |
 
   @id:reporting.machine-formats.019 @rule:reporting.sarif.stable-alert-fingerprints @verified @source:src/gandalf/suppress.py#fingerprint @test:tests/test_sarif.py#test_partial_fingerprints_present_and_stable
   Scenario Outline: The same finding keeps the same alert identity across runs
@@ -86,7 +86,7 @@ Feature: Publishing findings to code scanning as SARIF
     Given gandalf version "<version>" is running
     When the run completes
     Then the report declares SARIF version 2.1.0
-    And its single run names the tool "gandalf" with version "<version>"
+    And its single run names the tool "gandalf" but records no tool version
     And the run's automation id is "gandalf"
 
     Examples:

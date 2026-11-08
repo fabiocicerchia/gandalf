@@ -3,12 +3,12 @@ Feature: Reusing gate results between runs
   Lets an operator re-run gandalf with --cache and skip gates whose scanned files have not changed, without ever being served an answer that is stale for a reason the files cannot show.
 
   Background:
-    Given Given a repository with tracked source files
-    And And the operator runs gandalf with "--cache", which keeps results in ".gandalf-cache.json" at the repository root unless another path is given
+    Given a repository with tracked source files
+    And the operator runs gandalf with "--cache", which keeps results in ".gandalf-cache.json" at the repository root unless another path is given
 
   @id:running-checks.result-cache.001 @rule:checks.result-cache.reuse-when-files-unchanged @verified @source:src/gandalf/cache.py#Plan @test:tests/test_cache.py#test_get_put_roundtrip @test:tests/test_cache.py#test_load_save_roundtrip
   Scenario: A gate is not re-run when the files it scans are unchanged
-    Given a previous cached run in which the "ruff" gate reported "ruff: 1 issue" with a WARN outcome
+    Given a previous cached run in which the "ruff" gate reported "ruff: 1 issue" with a WARN outcome and a score of 0.8
     And no scanned file has changed since that run
     When the operator runs gandalf again with "--cache"
     Then the "ruff" gate is not executed again

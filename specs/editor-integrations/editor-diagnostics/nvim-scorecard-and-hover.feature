@@ -8,11 +8,11 @@ Feature: Reading the scorecard and dependency details in Neovim
   @id:editor-integrations.editor-diagnostics.009 @rule:nvim.scorecard.verdict-and-gates @verified @source:extensions/nvim/lua/gandalf/ui.lua#M.report_lines @test:extensions/nvim/tests/ui_spec.lua#leads with the verdict word, the score and the scope @test:extensions/nvim/tests/ui_spec.lua#groups the gates under the categories the report gave them @test:extensions/nvim/tests/ui_spec.lua#counts the findings and spreads the summary over its own lines
   Scenario: The scorecard leads with the verdict, the score and the scope
     Given the last scan scored 71/100 with an amber verdict on the working tree
-    And ruff warned with "ruff: 2 issue(s)" under "Code quality" and trivy passed under "Security"
+    And ruff warned with one finding and the summary "ruff: 2 issue(s)" under "Code quality" and trivy passed under "Security"
     And the report has a two-line summary
     When the developer runs :GandalfReport
     Then a window titled "Gandalf scorecard" opens
-    And its first line reads "AMBER · 71/100    scope: working tree"
+    And its first line reads "AMBER · 71/100    scope: working-tree"
     And ruff is listed under "Code quality" and trivy under "Security"
     And it states "1 finding(s)" followed by the summary lines
 
@@ -39,7 +39,7 @@ Feature: Reading the scorecard and dependency details in Neovim
       | :GandalfReport | the scorecard         |
       | :GandalfList   | the quickfix list     |
       | :GandalfFilter | the level picker      |
-      | :GandalfHover  | the dependency window |
+      | :GandalfHover on a dependency line | the dependency window |
 
   @id:editor-integrations.editor-diagnostics.012 @rule:nvim.hover.dependency-on-manifest-line @verified @source:extensions/nvim/lua/gandalf/core/packages.lua#M.package_at_cursor @test:extensions/nvim/tests/core_spec.lua#reads the manifest formats people actually have open @test:extensions/nvim/tests/core_spec.lua#names nothing on a line that is not a dependency
   Scenario Outline: The dependency named on a manifest line is recognised

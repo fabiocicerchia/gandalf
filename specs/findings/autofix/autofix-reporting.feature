@@ -34,7 +34,7 @@ Feature: Applying tool fixes and reporting what they rewrote
 
   @id:findings.autofix.004 @rule:findings.autofix.failing-fixer-isolated @verified @source:src/gandalf/fixers.py#run_fixers @test:tests/test_run.py#test_run_fixers_isolates_errors
   Scenario: A fixer that crashes is reported as errored and does not stop the other fixers
-    Given the shellcheck gate's fixer fails with "git apply failed"
+    Given the shellcheck gate's fixer crashes with the unexpected error "git apply failed"
     And the ruff gate's fixer rewrites src/a.py
     When the operator runs the check
     Then the shellcheck fix is reported with message "fix errored: git apply failed" and changed false

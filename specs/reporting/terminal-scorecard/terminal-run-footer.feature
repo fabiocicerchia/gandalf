@@ -30,7 +30,7 @@ Feature: Reading the run footer in the terminal
       | languages                  | skipped            | disabled       | line                                                                                               |
       | Python and Go files        | no                 | no             | Languages: go, python                                                                              |
       | no recognised source files | no                 | no             | Languages: none detected                                                                           |
-      | Python files               | the eslint and tsc | the llm-review | Languages: python  ·  skipped 2 irrelevant gate(s): eslint, tsc  ·  disabled 1 gate(s): llm-review |
+      | Python files               | the eslint and tsc | the well_architected | Languages: python  ·  skipped 2 irrelevant gate(s): eslint, tsc  ·  disabled 1 gate(s): well_architected |
 
   @id:reporting.terminal-scorecard.011 @rule:reporting.footer.fixes-applied @inferred @source:src/gandalf/summary.py#print_summary @questionable
   Scenario Outline: After autofixing, the footer lists each fixer that changed files
@@ -68,7 +68,7 @@ Feature: Reading the run footer in the terminal
   Scenario: The footer names the configuration file the run used
     Given the repository has a gandalf configuration file at .gandalf.toml
     When the operator runs a check
-    Then the footer shows "Config: .gandalf.toml"
+    Then the footer shows "Config: " followed by the full path of that .gandalf.toml
 
   @id:reporting.terminal-scorecard.015 @rule:reporting.footer.score-explanation-on-request @inferred @source:src/gandalf/summary.py#print_summary
   Scenario: Asking for a score explanation prints it right after the scorecard

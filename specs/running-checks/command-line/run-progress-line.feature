@@ -25,7 +25,7 @@ Feature: Watching a run's progress
     And the run <fix> fixes
     When the operator runs gandalf
     Then the progress line steps through <stages>
-    And each step reads "[<n>/<total>] <stage label>"
+    And each step reads "[n/<total>]" followed by its stage label, n counting up from 1
 
     Examples:
       | llm              | fix             | stages                                                                          | total |

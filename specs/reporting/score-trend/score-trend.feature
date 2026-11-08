@@ -13,7 +13,7 @@ Feature: Tracking the score over time
     When the developer runs gandalf and the run scores <current>
     Then the scorecard verdict line reads "<current>/100 <delta>"
     And the HTML report verdict shows the same "<delta>"
-    And the JSON report's score_delta is <number>
+    And the shown change is the current score minus the previous commit's score, <number>
 
     Examples:
       | previous | current | delta         | number |
@@ -34,7 +34,7 @@ Feature: Tracking the score over time
     And the working copy is at commit "aaa111"
     When the developer runs gandalf and the run scores 90
     Then the scorecard verdict line reads "90/100" with no "vs prev" note
-    And the JSON report's score_delta is null
+    And the HTML report verdict shows no "vs prev" note either
 
     Examples:
       | history                      |

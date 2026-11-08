@@ -17,8 +17,8 @@ Feature: Reporting gates that could not check the code
     Examples:
       | gate     | condition                                                            | summary                                                             |
       | trivy    | neither a host trivy binary nor the gandalf-tools image is available | trivy unavailable (no host binary or gandalf-tools image) — skipped |
-      | licenses | trivy, which the licenses gate runs, is not available                | trivy unavailable (no host binary or gandalf-tools image) — skipped |
-      | golang   | the Go tool times out                                                | golang: did not run (timeout or tool unavailable) — skipped         |
+      | licenses | trivy, which the licenses gate runs, is not available                | licenses: trivy unavailable (no host binary or gandalf-tools image) — skipped |
+      | go_build | go build times out                                                   | go_build: did not run (timeout or tool unavailable) — skipped       |
 
   @id:gate-extensibility.unavailable-outcomes.002 @rule:scoring.unavailable.excluded-from-verdict-and-score @verified @source:src/gandalf/report.py#aggregate @test:tests/test_unavailable.py#test_unavailable_gates_are_left_out_of_the_score @test:tests/test_unavailable.py#test_unavailable_gates_do_not_colour_the_verdict
   Scenario Outline: Gates that could not run do not change the overall verdict or score
@@ -31,7 +31,7 @@ Feature: Reporting gates that could not check the code
     Examples:
       | missing    | verdict | score |
       | trivy      | green   | 100   |
-      | a, b and c | green   | 100   |
+      | trivy, semgrep and gitleaks | green   | 100   |
 
   @id:gate-extensibility.unavailable-outcomes.003 @rule:scoring.unavailable.real-failure-still-red @verified @source:src/gandalf/report.py#aggregate @test:tests/test_unavailable.py#test_a_gate_that_actually_failed_still_reddens
   Scenario: A real failure still turns the run red when other gates could not run

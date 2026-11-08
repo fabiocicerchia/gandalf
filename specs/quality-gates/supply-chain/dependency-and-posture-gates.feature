@@ -52,7 +52,7 @@ Feature: Judging dependencies, licences and repository posture
     Given OSSF Scorecard in local mode rates the repository <aggregate>/10
     When the operator runs gandalf
     Then the "scorecard" gate is <colour>
-    And each check scoring below 10 is listed with its reason
+    And, whenever an aggregate was computed, each check scoring below 10 is listed with its reason
 
     Examples:
       | aggregate                     | colour                                                                             |

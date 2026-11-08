@@ -16,7 +16,7 @@ Feature: Starting the heaviest gates first
 
   @id:running-checks.scheduling.005 @rule:scheduling.estimate.measured-wins @verified @source:src/gandalf/schedule.py#cost @test:tests/test_schedule.py#test_a_measurement_beats_the_prior @test:tests/test_schedule.py#test_a_gate_may_declare_its_own_cost
   Scenario Outline: A gate's measured duration from the last cached run outranks any declared or built-in estimate
-    Given result caching is enabled with --cache
+    Given result caching is enabled with --cache and the scanned files have changed since the last cached run
     And gate <gate_a> declares a cost of <declared_a> seconds and last took <measured_a> seconds
     And gate <gate_b> declares no cost and last took <measured_b> seconds
     When the operator runs a check

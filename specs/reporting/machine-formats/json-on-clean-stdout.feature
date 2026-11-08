@@ -14,5 +14,5 @@ Feature: Piping the JSON report from the command line
 
     Examples:
       | mode                | stdout                                                                     | human_stream    |
-      | --json              | only the JSON report, which parses as a whole document with verdict "pass" | standard error  |
+      | --json              | only the JSON report, which parses as a whole document                     | standard error  |
       | default (no --json) | the scorecard and the "JSON report:" line                                  | standard output |

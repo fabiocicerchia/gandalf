@@ -31,7 +31,7 @@ Feature: Scanning from the editor
     And the developer's own extra arguments come last on the command line
 
   @id:editor-integrations.editor-scans.009 @rule:editor.scans.deadline-inside-timeout @verified @source:extensions/vscode/src/argv.ts#runArgs @test:extensions/vscode/src/test/args.test.ts#gives gandalf a deadline inside its own timeout, so a long scan still reports @questionable
-  Scenario Outline: gandalf is told to stop before the editor gives up on it, so a long scan still produces a scorecard
+  Scenario Outline: gandalf is given a deadline 20 seconds inside the scan timeout, but never less than 20 seconds
     Given the scan timeout setting is <timeout> seconds
     And the installed gandalf accepts a deadline
     When the developer scans the workspace

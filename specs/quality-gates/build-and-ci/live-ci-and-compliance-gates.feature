@@ -55,7 +55,7 @@ Feature: Live-target, CI workflow and compliance checks
     Examples:
       | situation                                     | result                  | summary                                                       |
       | GANDALF_ACT is set to 0                       | green                   | act gate disabled (GANDALF_ACT=0)                             |
-      | the repository has no .github/workflows/*.yml | green                   | no workflows to run                                           |
+      | the repository has no .yml or .yaml file in .github/workflows | green   | no workflows to run                                           |
       | act is not installed                          | reported as not checked | 'act' not found; CI not verified locally                      |
       | Docker is not available                       | reported as not checked | Docker not available; act cannot run; CI not verified locally |
       | 2 workflows pass under act                    | green                   | act: 2 workflow(s) passed locally                             |
@@ -82,4 +82,4 @@ Feature: Live-target, CI workflow and compliance checks
     And the LLM endpoint refuses connections
     When the operator runs gandalf
     Then the "compliance" gate is red with score 0
-    And its summary reads "compliance: judge unavailable (connection refused)"
+    And its summary starts with "compliance: judge unavailable (" and names the connection error

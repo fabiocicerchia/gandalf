@@ -30,7 +30,7 @@ Feature: Following a scan's progress and cost in Neovim
 
   @id:editor-integrations.editor-status.003 @rule:nvim.status.scan-log @verified @source:extensions/nvim/lua/gandalf/commands.lua#M.show_log @test:extensions/nvim/tests/init_spec.lua#logs the command it ran and the verdict it got
   Scenario: The log shows each command run and how it ended
-    Given a workspace scan finished with a green verdict, 88/100 and 1 finding
+    Given a workspace scan started with :GandalfScanAll finished with a green verdict, 88/100 and 1 finding
     When the developer runs :GandalfLog
     Then a window titled "Gandalf log" opens
     And it has a timestamped line "scan (command): <the full gandalf command line>"

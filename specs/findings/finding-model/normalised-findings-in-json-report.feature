@@ -63,7 +63,7 @@ Feature: Reading findings in one shape across every tool
 
   @id:findings.finding-model.005 @rule:findings.normalised.location-from-message-only-if-file-exists @verified @source:src/gandalf/locate.py#place_from_prose @test:tests/test_findings.py#test_location_scraped_from_prose_and_trimmed @test:tests/test_findings.py#test_prose_that_merely_looks_like_a_path_is_not_trusted
   Scenario Outline: A location written in the message is used only when it names a file that exists in the repository
-    Given the repository <file exists> a file "src/d.py"
+    Given the repository <file exists> the file the finding text names
     And a gate reported a finding with no location fields whose text is "<finding text>"
     When the operator runs gandalf
     Then the finding's "_gandalf" path is "<path>" and line is <line>
