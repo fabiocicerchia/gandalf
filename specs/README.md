@@ -4,12 +4,14 @@ What this code does, one atomic Gherkin scenario per behaviour, read from the co
 Tags: `@verified` a test asserts it · `@inferred` read from the code only · `@gap` an entry point no test covers · `@human` written or amended by a person, never rewritten.
 
 ## Developer tooling
+
 Building, installing, benchmarking, documenting and deploying gandalf itself.
 
 - **Performance benchmarks**: [Charting benchmark results](developer-tooling/benchmarks/benchmark-chart.feature) (4)
 - **Build and install**: [Installing and running gandalf from a checkout](developer-tooling/build-and-install/make-install-and-run.feature) (5)
 
 ## Editor integrations
+
 Bringing gandalf into VS Code and Neovim through the CLI and its JSON report.
 
 - **Automatic scanning**: [Automatic scanning](editor-integrations/auto-scan/editor-auto-scan.feature) (2), [Scanning automatically from Neovim](editor-integrations/auto-scan/nvim-automatic-scanning.feature) (3)
@@ -20,6 +22,7 @@ Bringing gandalf into VS Code and Neovim through the CLI and its JSON report.
 - **Run status and progress**: [Run status in the editor](editor-integrations/editor-status/editor-run-status.feature) (1), [Following a scan's progress and cost in Neovim](editor-integrations/editor-status/nvim-run-status.feature) (4)
 
 ## Findings and scoring
+
 How individual problems are modelled, weighted, suppressed and fixed.
 
 - **Autofix and suggestions**: [Applying tool fixes and reporting what they rewrote](findings/autofix/autofix-reporting.feature) (6), [Fixing findings in place and suggesting fixes](findings/autofix/gate-autofixes.feature) (5), [Suggesting one-click fixes on pull request comments](findings/autofix/one-click-fix-suggestions.feature) (7)
@@ -28,6 +31,7 @@ How individual problems are modelled, weighted, suppressed and fixed.
 - **Suppressions and baselines**: [Accepting known findings](findings/suppression/accepting-known-findings.feature) (4), [Recognising accepted findings in a baseline](findings/suppression/baseline-finding-identity.feature) (4)
 
 ## Gate extensibility
+
 The public API third parties use to write their own gates and run external tools.
 
 - **Plugin API**: [Adding custom gates](gate-extensibility/plugin-api/custom-gates.feature) (5)
@@ -35,6 +39,7 @@ The public API third parties use to write their own gates and run external tools
 - **Not-checked outcomes**: [Reporting gates that could not check the code](gate-extensibility/unavailable-outcomes/not-checked-gate-outcomes.feature) (3)
 
 ## Quality gates
+
 The built-in checks gandalf runs and how each turns tool output into a Red/Amber/Green outcome.
 
 - **AI review gates**: [AI review gates driven by skill playbooks](quality-gates/ai-review/ai-review-gates.feature) (5), [Judging a change against an embedded review playbook](quality-gates/ai-review/skill-judged-gates.feature) (7), [Judging a change against a skill playbook](quality-gates/ai-review/skill-playbook-gates.feature) (1)
@@ -45,6 +50,7 @@ The built-in checks gandalf runs and how each turns tool output into a Red/Amber
 - **Dependencies and licences**: [Judging dependencies, licences and repository posture](quality-gates/supply-chain/dependency-and-posture-gates.feature) (5)
 
 ## Reports and outputs
+
 Every artifact and view a run produces for people, CI systems and pull requests.
 
 - **AI summary**: [Writing the AI summary of a run](reporting/ai-summary/ai-summary.feature) (6)
@@ -57,6 +63,7 @@ Every artifact and view a run produces for people, CI systems and pull requests.
 - **Terminal scorecard**: [Reading the run footer in the terminal](reporting/terminal-scorecard/terminal-run-footer.feature) (6), [Reading the scorecard in the terminal](reporting/terminal-scorecard/terminal-scorecard.feature) (8)
 
 ## Running a check
+
 Deciding what gets evaluated and orchestrating the gates over it from the command line.
 
 - **Command-line options**: [Validating command-line options](running-checks/command-line/command-line-option-validation.feature) (3), [Failing the build on the verdict](running-checks/command-line/exit-code-policy.feature) (1), [Watching a run's progress](running-checks/command-line/run-progress-line.feature) (2), [Running a check from the command line](running-checks/command-line/running-a-check.feature) (5)

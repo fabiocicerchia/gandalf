@@ -63,7 +63,7 @@ Feature: Checking each language's build, lint and tests
     When the operator runs gandalf
     Then the "rubocop", "ruby_test" and "bundler_audit" gates are green with a "not in this tree" summary
 
-  @id:quality-gates.language-toolchains.005 @rule:toolchains.syntax.unparseable-file-fails @verified @source:src/gandalf/gates/_toolchain.py#per_file @test:tests/test_lang_gates.py#test_ruby_syntax_reads_real_ruby
+  @id:quality-gates.language-toolchains.005 @rule:toolchains.syntax.unparsable-file-fails @verified @source:src/gandalf/gates/_toolchain.py#per_file @test:tests/test_lang_gates.py#test_ruby_syntax_reads_real_ruby
   Scenario Outline: A source file that does not parse turns the syntax gate red and names the file
     Given the change includes <file>, which does not parse
     When the operator runs gandalf

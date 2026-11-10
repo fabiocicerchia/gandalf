@@ -4198,7 +4198,7 @@
    "file": "specs/quality-gates/language-toolchains/language-toolchain-gates.feature",
    "fingerprint": "099df56a35bc",
    "human": false,
-   "rule": "toolchains.syntax.unparseable-file-fails",
+   "rule": "toolchains.syntax.unparsable-file-fails",
    "source": "src/gandalf/gates/_toolchain.py#per_file",
    "status": "verified",
    "test": "tests/test_lang_gates.py#test_ruby_syntax_reads_real_ruby",
