@@ -67,11 +67,3 @@ Feature: Severity-weighted gate scoring
     And the CRITICAL finding is accepted by a suppression rule
     When the operator runs gandalf
     Then the trivy gate's score in the report is 0.96
-
-  @id:findings.scoring.013 @rule:findings.scoring.not-run-stays-not-run @verified @source:src/gandalf/severity.py#reweight @test:tests/test_unavailable.py#test_marker_survives_severity_reweighting
-  Scenario: A gate that could not run is still reported as not run when weighting is on
-    Given severity weighting is on
-    And the trivy gate could not run because the tool is missing
-    When the operator runs gandalf
-    Then the trivy gate is reported as not run
-    And the trivy gate is not counted in the overall score

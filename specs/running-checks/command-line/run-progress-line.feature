@@ -33,12 +33,3 @@ Feature: Watching a run's progress
       | includes         | does not apply  | Resolving scope, Running N gates, LLM analysis, Writing reports                 | 4     |
       | includes         | applies (--fix) | Resolving scope, Applying fixes, Running N gates, LLM analysis, Writing reports | 5     |
       | skips (--no-llm) | applies (--fix) | Resolving scope, Applying fixes, Running N gates, Writing reports               | 4     |
-
-  @id:running-checks.command-line.014 @rule:cli.progress.coexists-with-debug-log @verified @source:src/gandalf/progress.py#Progress @test:tests/test_debug.py#test_progress_keeps_drawing_under_debug @test:tests/test_debug.py#test_hooks_bracket_a_log_line
-  Scenario: Under debug logging, each debug line prints whole and the progress line comes back beneath it
-    Given the progress line is shown
-    And debug logging is on
-    When a debug line is written while gates run
-    Then the progress line is cleared
-    And the debug line is written on its own line
-    And the progress line is drawn again beneath it, starting with a carriage return

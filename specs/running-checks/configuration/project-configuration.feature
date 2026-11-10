@@ -5,14 +5,6 @@ Feature: Configuring a run from the repository
   Background:
     Given a repository with gates "ruff", "mypy" and "gitleaks" available
 
-  @id:running-checks.configuration.001 @rule:config.gates.refuse-when-nothing-selected @inferred @source:src/gandalf/__main__.py#_select_gates
-  Scenario: A run whose config disables every gate is refused
-    Given the repository's .gandalf.toml sets only to ["ruff"] and skip to ["ruff"]
-    When the operator runs gandalf on the repository
-    Then gandalf prints "all gates disabled by config selection"
-    And no gate is run
-    And gandalf exits with status 2
-
   @id:running-checks.configuration.002 @rule:config.location.precedence @verified @source:src/gandalf/config.py#load @test:tests/test_config.py#test_explicit_and_env_paths @test:tests/test_config.py#test_load_and_sections
   Scenario Outline: The config file is taken from --config, then GANDALF_CONFIG, then the repository root
     Given the repository root has a .gandalf.toml that skips "mypy"

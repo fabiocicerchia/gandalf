@@ -32,19 +32,6 @@ Feature: Locating findings that tools only describe in text
     And the finding's line in the report is 0
     And the finding's message is "Would reformat: src/e.py"
 
-  @id:findings.finding-model.011 @rule:findings.locations.repo-relative-paths @verified @source:src/gandalf/locate.py#relpath @test:tests/test_findings.py#test_relpath_rebases_container_paths @test:tests/test_pr_comments.py#test_container_paths_are_rebased_repo_relative @questionable
-  Scenario Outline: Reported finding paths are relative to the repository
-    Given a scanner ran in the tools container with the repository mounted at "/src"
-    And it reports a finding in "<reported>"
-    When the operator runs gandalf
-    Then the finding's path in the report is "<shown>"
-
-    Examples:
-      | reported  | shown  |
-      | /src/a.py | a.py   |
-      | ./a.py    | a.py   |
-      | a\b.py    | a/b.py |
-
   @id:findings.finding-model.012 @rule:findings.locations.reported-path-wins @inferred @source:src/gandalf/locate.py#place_from_prose
   Scenario: A file the tool reported is kept even when the message names another
     Given the file "src/a.py" exists in the repository

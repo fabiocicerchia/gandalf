@@ -6,14 +6,6 @@ Feature: Reading the HTML scorecard
     Given gandalf has finished evaluating a repository
     And the operator asked for the HTML report
 
-  @id:reporting.html-report.005 @rule:reporting.html-report.self-contained-file @verified @source:src/gandalf/render_html.py#render_html @test:tests/test_report.py#test_render_html_smoke
-  Scenario: The HTML report opens on its own without fetching anything
-    Given the run produced gate results
-    When the operator opens the HTML report from a CI artifact, an email attachment or a file:// URL
-    Then the page is one complete HTML document from <!DOCTYPE html> to </html>
-    And its stylesheet and script are embedded in the page
-    And no stylesheet, script or font is loaded from elsewhere
-
   @id:reporting.html-report.006 @rule:reporting.html-report.untrusted-text-escaped @inferred @source:src/gandalf/render_html.py#_md_inline
   Scenario: Text from findings, diffs and the AI write-up cannot inject markup into the report
     Given a gate finding message contains "<script>alert(1)</script>"

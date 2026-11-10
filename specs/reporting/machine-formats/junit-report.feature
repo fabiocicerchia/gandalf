@@ -46,15 +46,3 @@ Feature: Publishing gate results as a JUnit test report
       | duration     | time          |
       | 1.23456      | 1.235         |
       | not recorded | no time shown |
-
-  @id:reporting.machine-formats.007 @rule:reporting.junit.written-only-on-request @inferred @source:src/gandalf/outputs.py#write_outputs
-  Scenario Outline: The JUnit report is written only when asked, to the chosen or default path
-    Given the run writes its reports to the "reports" folder
-    When the operator runs gandalf <flag>
-    Then <outcome>
-
-    Examples:
-      | flag                              | outcome                                                                                               |
-      | without --junit                   | no JUnit file is written                                                                              |
-      | with --junit                      | a JUnit file named <run-name>.junit.xml is written in "reports" and "JUnit report: <path>" is printed |
-      | with --junit ci/gandalf.junit.xml | the JUnit file is written to ci/gandalf.junit.xml and "JUnit report: ci/gandalf.junit.xml" is printed |

@@ -23,16 +23,16 @@ Bringing gandalf into VS Code and Neovim through the CLI and its JSON report.
 How individual problems are modelled, weighted, suppressed and fixed.
 
 - **Autofix and suggestions**: [Applying tool fixes and reporting what they rewrote](findings/autofix/autofix-reporting.feature) (6), [Fixing findings in place and suggesting fixes](findings/autofix/gate-autofixes.feature) (5), [Suggesting one-click fixes on pull request comments](findings/autofix/one-click-fix-suggestions.feature) (7)
-- **Findings and locations**: [Locating findings that tools only describe in text](findings/finding-model/finding-locations-from-prose.feature) (5), [Reading findings in one shape across every tool](findings/finding-model/normalised-findings-in-json-report.feature) (7)
-- **Scoring and verdict**: [Scoring a run into one traffic light](findings/scoring/run-verdict-and-score.feature) (6), [Severity-weighted gate scoring](findings/scoring/severity-weighted-scoring.feature) (7)
-- **Suppressions and baselines**: [Accepting known findings](findings/suppression/accepting-known-findings.feature) (5), [Recognising accepted findings in a baseline](findings/suppression/baseline-finding-identity.feature) (4)
+- **Findings and locations**: [Locating findings that tools only describe in text](findings/finding-model/finding-locations-from-prose.feature) (4), [Reading findings in one shape across every tool](findings/finding-model/normalised-findings-in-json-report.feature) (5)
+- **Scoring and verdict**: [Scoring a run into one traffic light](findings/scoring/run-verdict-and-score.feature) (6), [Severity-weighted gate scoring](findings/scoring/severity-weighted-scoring.feature) (6)
+- **Suppressions and baselines**: [Accepting known findings](findings/suppression/accepting-known-findings.feature) (4), [Recognising accepted findings in a baseline](findings/suppression/baseline-finding-identity.feature) (4)
 
 ## Gate extensibility
 The public API third parties use to write their own gates and run external tools.
 
 - **Plugin API**: [Adding custom gates](gate-extensibility/plugin-api/custom-gates.feature) (5)
-- **External tool execution**: [Running scanner tools on the host or in the tools image](gate-extensibility/tool-execution/running-scanner-tools.feature) (7)
-- **Not-checked outcomes**: [Reporting gates that could not check the code](gate-extensibility/unavailable-outcomes/not-checked-gate-outcomes.feature) (5)
+- **External tool execution**: [Running scanner tools on the host or in the tools image](gate-extensibility/tool-execution/running-scanner-tools.feature) (6)
+- **Not-checked outcomes**: [Reporting gates that could not check the code](gate-extensibility/unavailable-outcomes/not-checked-gate-outcomes.feature) (3)
 
 ## Quality gates
 The built-in checks gandalf runs and how each turns tool output into a Red/Amber/Green outcome.
@@ -48,19 +48,19 @@ The built-in checks gandalf runs and how each turns tool output into a Red/Amber
 Every artifact and view a run produces for people, CI systems and pull requests.
 
 - **AI summary**: [Writing the AI summary of a run](reporting/ai-summary/ai-summary.feature) (6)
-- **Status badges**: [Publishing a status badge](reporting/badges/status-badge.feature) (2)
-- **HTML report**: [Reading the HTML scorecard](reporting/html-report/html-report-reading.feature) (4), [Reading the HTML scorecard](reporting/html-report/html-report.feature) (8)
+- **Status badges**: [Publishing a status badge](reporting/badges/status-badge.feature) (1)
+- **HTML report**: [Reading the HTML scorecard](reporting/html-report/html-report-reading.feature) (4), [Reading the HTML scorecard](reporting/html-report/html-report.feature) (7)
 - **Live result streaming**: [Streaming gate results while a check runs](reporting/live-streaming/live-gate-results.feature) (4)
-- **Machine-readable formats**: [Piping the JSON report from the command line](reporting/machine-formats/json-on-clean-stdout.feature) (1), [Publishing gate results as a JUnit test report](reporting/machine-formats/junit-report.feature) (6), [Writing the run's report artifacts](reporting/machine-formats/run-report-artifacts.feature) (7), [Publishing findings to code scanning as SARIF](reporting/machine-formats/sarif-code-scanning-report.feature) (7)
+- **Machine-readable formats**: [Piping the JSON report from the command line](reporting/machine-formats/json-on-clean-stdout.feature) (1), [Publishing gate results as a JUnit test report](reporting/machine-formats/junit-report.feature) (5), [Writing the run's report artifacts](reporting/machine-formats/run-report-artifacts.feature) (6), [Publishing findings to code scanning as SARIF](reporting/machine-formats/sarif-code-scanning-report.feature) (7)
 - **Pull request comments**: [Reviewing a pull request with gandalf findings](reporting/pull-request-comments/pr-review-content.feature) (6), [Publishing the review to a GitHub pull request](reporting/pull-request-comments/pr-review-publishing.feature) (4)
 - **Score history**: [Tracking the score over time](reporting/score-trend/score-trend.feature) (6)
-- **Terminal scorecard**: [Reading the run footer in the terminal](reporting/terminal-scorecard/terminal-run-footer.feature) (7), [Reading the scorecard in the terminal](reporting/terminal-scorecard/terminal-scorecard.feature) (8)
+- **Terminal scorecard**: [Reading the run footer in the terminal](reporting/terminal-scorecard/terminal-run-footer.feature) (6), [Reading the scorecard in the terminal](reporting/terminal-scorecard/terminal-scorecard.feature) (8)
 
 ## Running a check
 Deciding what gets evaluated and orchestrating the gates over it from the command line.
 
-- **Command-line options**: [Validating command-line options](running-checks/command-line/command-line-option-validation.feature) (3), [Failing the build on the verdict](running-checks/command-line/exit-code-policy.feature) (1), [Watching a run's progress](running-checks/command-line/run-progress-line.feature) (3), [Running a check from the command line](running-checks/command-line/running-a-check.feature) (8)
-- **Project configuration**: [Configuring a run from the repository](running-checks/configuration/project-configuration.feature) (4)
+- **Command-line options**: [Validating command-line options](running-checks/command-line/command-line-option-validation.feature) (3), [Failing the build on the verdict](running-checks/command-line/exit-code-policy.feature) (1), [Watching a run's progress](running-checks/command-line/run-progress-line.feature) (2), [Running a check from the command line](running-checks/command-line/running-a-check.feature) (5)
+- **Project configuration**: [Configuring a run from the repository](running-checks/configuration/project-configuration.feature) (3)
 - **Debug logging**: [Tracing a run with debug logging](running-checks/debug-logging/debug-logging.feature) (5)
 - **File selection and ignores**: [Excluding files from what every gate scans](running-checks/file-selection/excluding-files-from-gates.feature) (7)
 - **Result caching**: [Reusing gate results between runs](running-checks/result-cache/reusing-gate-results.feature) (5)

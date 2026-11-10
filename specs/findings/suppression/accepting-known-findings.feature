@@ -28,18 +28,6 @@ Feature: Accepting known findings
     And later runs report that finding's gate as passing with no findings
     And a finding introduced afterwards still fails the check
 
-  @id:findings.suppression.007 @rule:findings.suppression.baseline-fingerprint-stable @verified @source:src/gandalf/suppress.py#fingerprint @test:tests/test_suppress.py#test_fingerprint_line_insensitive @test:tests/test_findings.py#test_fingerprint_is_stable_for_known_findings @test:tests/test_findings.py#test_fingerprint_vocabulary_is_frozen @test:tests/test_findings.py#test_fingerprint_still_line_insensitive
-  Scenario Outline: An accepted finding stays accepted when its line moves or gandalf is upgraded
-    Given the baseline accepts ruff E501 "line too long" in a.py at line 1
-    When the operator runs gandalf after <change>
-    Then the finding is <state>
-
-    Examples:
-      | change                                                          | state          |
-      | code is added above it, moving it to line 99                    | still accepted |
-      | gandalf is upgraded to a release that reads more finding fields | still accepted |
-      | its message changes                                             | reported again |
-
   @id:findings.suppression.008 @rule:findings.suppression.bad-baseline-mutes-nothing @inferred @source:src/gandalf/suppress.py#load_baseline
   Scenario Outline: A missing or unreadable baseline accepts nothing
     Given the ruff gate reports 3 findings

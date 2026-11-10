@@ -73,17 +73,3 @@ Feature: Running scanner tools on the host or in the tools image
     Then the scanner is not started
     And that gate is marked did not run
     And gates that finished keep their results in the report
-
-  @id:gate-extensibility.tool-execution.007 @rule:reporting.tools.provenance-recorded @verified @source:src/gandalf/toolrun.py#tool_sources @test:tests/test_tool_provenance.py#test_report_names_the_image_only_when_one_was_used @test:tests/test_tool_provenance.py#test_versions_are_opt_in @test:tests/test_tool_provenance.py#test_no_tools_no_block
-  Scenario Outline: The report says where each scanner ran from and, on request, which version
-    Given ruff ran from the host PATH
-    And trivy ran from the gandalf-tools image
-    When the operator runs a scan <with_versions>
-    Then the report lists ruff with source host and trivy with source image
-    And the report names the gandalf-tools image and its content id
-    And <version_outcome>
-
-    Examples:
-      | with_versions           | version_outcome                                                      |
-      | without --tool-versions | no tool version is listed                                            |
-      | with --tool-versions    | each tool lists the first line of its --version output, or "unknown" |

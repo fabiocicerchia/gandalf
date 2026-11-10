@@ -19,15 +19,3 @@ Feature: Publishing a status badge
       | pass    | 92    | brightgreen |
       | warn    | 70    | yellow      |
       | fail    | 20    | red         |
-
-  @id:reporting.badges.002 @rule:reporting.badges.written-only-on-request @inferred @source:src/gandalf/outputs.py#write_outputs
-  Scenario Outline: A badge file is written only when asked for, to the default or a chosen path
-    Given a run with output stem <stem>
-    When the operator runs gandalf <flag>
-    Then <outcome>
-
-    Examples:
-      | stem      | flag                             | outcome                                                                                                           |
-      | repo-main | with --badge                     | the badge is written to reports/repo-main-badge.json under the repository root and the console prints "Badge: " followed by that path |
-      | repo-main | with --badge public/gandalf.json | the badge is written to public/gandalf.json and the console prints "Badge: public/gandalf.json"                   |
-      | repo-main | without --badge                  | no badge file is written and no "Badge:" line is printed                                                          |

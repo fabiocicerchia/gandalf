@@ -51,18 +51,6 @@ Feature: Writing the run's report artifacts
     And each finding keeps its tool's own fields and adds a _gandalf block with path, line, rule, message and severity
     And it lists skipped gates, disabled gates and the fixes applied
 
-  @id:reporting.machine-formats.012 @rule:reporting.json-record.stdout-mode @verified @source:src/gandalf/outputs.py#write_outputs @test:tests/test_run.py#test_json_leaves_only_the_payload_on_stdout @test:tests/test_run.py#test_without_json_the_scorecard_stays_on_stdout
-  Scenario Outline: With --json, standard output carries only the JSON record
-    Given the operator passes <json_option>
-    When the operator runs gandalf
-    Then <stdout>
-    And <report_line>
-
-    Examples:
-      | json_option | stdout                                                            | report_line                                        |
-      | --json      | standard output parses as one JSON document                       | the "JSON report:" line appears on standard error  |
-      | no --json   | standard output shows the human scorecard                         | the "JSON report:" line appears on standard output |
-
   @id:reporting.machine-formats.013 @rule:reporting.json-record.scanner-provenance @verified @source:src/gandalf/outputs.py#tool_report @test:tests/test_tool_provenance.py#test_report_names_the_image_only_when_one_was_used @test:tests/test_tool_provenance.py#test_versions_are_opt_in @test:tests/test_tool_provenance.py#test_no_tools_no_block
   Scenario Outline: The record says where each scanner came from, and its version only when asked
     Given <tools_used>

@@ -61,27 +61,6 @@ Feature: Reading findings in one shape across every tool
       | [B603] subprocess call            | (empty)  | [B603] subprocess call            |
       | x has no attribute [attr-defined] | (empty)  | x has no attribute [attr-defined] |
 
-  @id:findings.finding-model.005 @rule:findings.normalised.location-from-message-only-if-file-exists @verified @source:src/gandalf/locate.py#place_from_prose @test:tests/test_findings.py#test_location_scraped_from_prose_and_trimmed @test:tests/test_findings.py#test_prose_that_merely_looks_like_a_path_is_not_trusted
-  Scenario Outline: A location written in the message is used only when it names a file that exists in the repository
-    Given the repository <file exists> the file the finding text names
-    And a gate reported a finding with no location fields whose text is "<finding text>"
-    When the operator runs gandalf
-    Then the finding's "_gandalf" path is "<path>" and line is <line>
-    And its "_gandalf" message is "<message>"
-
-    Examples:
-      | file exists      | finding text                                                         | path     | line | message                                                |
-      | contains         | src/d.py:552: error: "Gate" has no attribute "langs"  [attr-defined] | src/d.py | 552  | error: "Gate" has no attribute "langs"  [attr-defined] |
-      | does not contain | see docs/missing.md:12 for details                                   | (empty)  | 0    | see docs/missing.md:12 for details                     |
-
-  @id:findings.finding-model.006 @rule:findings.normalised.sentence-in-location-field-is-the-message @verified @source:src/gandalf/findings.py#normalise @test:tests/test_findings.py#test_sentence_in_a_location_key_becomes_the_message
-  Scenario: A finding that is only a sentence in a file field is shown as that sentence, anchored to the file it names
-    Given the repository contains a file "src/e.py"
-    And the format gate reported a finding whose only field is file "Would reformat: src/e.py"
-    When the operator runs gandalf
-    Then the finding's "_gandalf" message is "Would reformat: src/e.py"
-    And its "_gandalf" path is "src/e.py"
-
   @id:findings.finding-model.007 @rule:findings.normalised.paths-repo-relative @verified @source:src/gandalf/locate.py#relpath @test:tests/test_findings.py#test_relpath_rebases_container_paths @test:tests/test_findings.py#test_fingerprint_vocabulary_is_frozen @questionable
   Scenario Outline: Finding paths are reported relative to the repository root
     Given a gate reported a finding at "<reported path>" while the repository was mounted at "<root>"

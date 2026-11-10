@@ -2366,7 +2366,26 @@
   "scripts/bench": [],
   "scripts/chart": []
  },
- "retired": [],
+ "retired": [
+  "findings.finding-model.005",
+  "findings.finding-model.006",
+  "findings.finding-model.011",
+  "findings.scoring.013",
+  "findings.suppression.007",
+  "gate-extensibility.tool-execution.007",
+  "gate-extensibility.unavailable-outcomes.002",
+  "gate-extensibility.unavailable-outcomes.004",
+  "reporting.badges.002",
+  "reporting.html-report.005",
+  "reporting.machine-formats.007",
+  "reporting.machine-formats.012",
+  "reporting.terminal-scorecard.015",
+  "running-checks.command-line.004",
+  "running-checks.command-line.010",
+  "running-checks.command-line.011",
+  "running-checks.command-line.014",
+  "running-checks.configuration.001"
+ ],
  "scenarios": {
   "developer-tooling.benchmarks.001": {
    "file": "specs/developer-tooling/benchmarks/benchmark-chart.feature",
@@ -3378,31 +3397,6 @@
     "tests/test_findings.py#test_bracket_that_is_not_a_severity_is_left_alone"
    ]
   },
-  "findings.finding-model.005": {
-   "file": "specs/findings/finding-model/normalised-findings-in-json-report.feature",
-   "fingerprint": "580021f3b0fe",
-   "human": false,
-   "rule": "findings.normalised.location-from-message-only-if-file-exists",
-   "source": "src/gandalf/locate.py#place_from_prose",
-   "status": "verified",
-   "test": "tests/test_findings.py#test_location_scraped_from_prose_and_trimmed",
-   "tests": [
-    "tests/test_findings.py#test_location_scraped_from_prose_and_trimmed",
-    "tests/test_findings.py#test_prose_that_merely_looks_like_a_path_is_not_trusted"
-   ]
-  },
-  "findings.finding-model.006": {
-   "file": "specs/findings/finding-model/normalised-findings-in-json-report.feature",
-   "fingerprint": "8688bb614db4",
-   "human": false,
-   "rule": "findings.normalised.sentence-in-location-field-is-the-message",
-   "source": "src/gandalf/findings.py#normalise",
-   "status": "verified",
-   "test": "tests/test_findings.py#test_sentence_in_a_location_key_becomes_the_message",
-   "tests": [
-    "tests/test_findings.py#test_sentence_in_a_location_key_becomes_the_message"
-   ]
-  },
   "findings.finding-model.007": {
    "file": "specs/findings/finding-model/normalised-findings-in-json-report.feature",
    "fingerprint": "bbd80e1b95dc",
@@ -3452,19 +3446,6 @@
    "test": "tests/test_findings.py#test_sentence_in_a_location_key_becomes_the_message",
    "tests": [
     "tests/test_findings.py#test_sentence_in_a_location_key_becomes_the_message"
-   ]
-  },
-  "findings.finding-model.011": {
-   "file": "specs/findings/finding-model/finding-locations-from-prose.feature",
-   "fingerprint": "bbd80e1b95dc",
-   "human": false,
-   "rule": "findings.locations.repo-relative-paths",
-   "source": "src/gandalf/locate.py#relpath",
-   "status": "verified",
-   "test": "tests/test_findings.py#test_relpath_rebases_container_paths",
-   "tests": [
-    "tests/test_findings.py#test_relpath_rebases_container_paths",
-    "tests/test_pr_comments.py#test_container_paths_are_rebased_repo_relative"
    ]
   },
   "findings.finding-model.012": {
@@ -3624,18 +3605,6 @@
    "test": "",
    "tests": []
   },
-  "findings.scoring.013": {
-   "file": "specs/findings/scoring/severity-weighted-scoring.feature",
-   "fingerprint": "40277f3ec1dd",
-   "human": false,
-   "rule": "findings.scoring.not-run-stays-not-run",
-   "source": "src/gandalf/severity.py#reweight",
-   "status": "verified",
-   "test": "tests/test_unavailable.py#test_marker_survives_severity_reweighting",
-   "tests": [
-    "tests/test_unavailable.py#test_marker_survives_severity_reweighting"
-   ]
-  },
   "findings.suppression.001": {
    "file": "specs/findings/suppression/baseline-finding-identity.feature",
    "fingerprint": "49ccc5ee6fbc",
@@ -3709,21 +3678,6 @@
    "tests": [
     "tests/test_run.py#test_stream_applies_baseline_suppression",
     "tests/test_suppress.py#test_baseline_roundtrip"
-   ]
-  },
-  "findings.suppression.007": {
-   "file": "specs/findings/suppression/accepting-known-findings.feature",
-   "fingerprint": "981ce9dbfcd6",
-   "human": false,
-   "rule": "findings.suppression.baseline-fingerprint-stable",
-   "source": "src/gandalf/suppress.py#fingerprint",
-   "status": "verified",
-   "test": "tests/test_suppress.py#test_fingerprint_line_insensitive",
-   "tests": [
-    "tests/test_suppress.py#test_fingerprint_line_insensitive",
-    "tests/test_findings.py#test_fingerprint_is_stable_for_known_findings",
-    "tests/test_findings.py#test_fingerprint_vocabulary_is_frozen",
-    "tests/test_findings.py#test_fingerprint_still_line_insensitive"
    ]
   },
   "findings.suppression.008": {
@@ -3875,20 +3829,6 @@
     "tests/test_run.py#test_without_a_deadline_a_tool_runs_normally"
    ]
   },
-  "gate-extensibility.tool-execution.007": {
-   "file": "specs/gate-extensibility/tool-execution/running-scanner-tools.feature",
-   "fingerprint": "6b33824599a1",
-   "human": false,
-   "rule": "reporting.tools.provenance-recorded",
-   "source": "src/gandalf/toolrun.py#tool_sources",
-   "status": "verified",
-   "test": "tests/test_tool_provenance.py#test_report_names_the_image_only_when_one_was_used",
-   "tests": [
-    "tests/test_tool_provenance.py#test_report_names_the_image_only_when_one_was_used",
-    "tests/test_tool_provenance.py#test_versions_are_opt_in",
-    "tests/test_tool_provenance.py#test_no_tools_no_block"
-   ]
-  },
   "gate-extensibility.unavailable-outcomes.001": {
    "file": "specs/gate-extensibility/unavailable-outcomes/not-checked-gate-outcomes.feature",
    "fingerprint": "74deb231b21a",
@@ -3902,19 +3842,6 @@
     "tests/test_lang_gates.py#test_missing_toolchain_warns_and_names_the_binary"
    ]
   },
-  "gate-extensibility.unavailable-outcomes.002": {
-   "file": "specs/gate-extensibility/unavailable-outcomes/not-checked-gate-outcomes.feature",
-   "fingerprint": "12b6b1896182",
-   "human": false,
-   "rule": "scoring.unavailable.excluded-from-verdict-and-score",
-   "source": "src/gandalf/report.py#aggregate",
-   "status": "verified",
-   "test": "tests/test_unavailable.py#test_unavailable_gates_are_left_out_of_the_score",
-   "tests": [
-    "tests/test_unavailable.py#test_unavailable_gates_are_left_out_of_the_score",
-    "tests/test_unavailable.py#test_unavailable_gates_do_not_colour_the_verdict"
-   ]
-  },
   "gate-extensibility.unavailable-outcomes.003": {
    "file": "specs/gate-extensibility/unavailable-outcomes/not-checked-gate-outcomes.feature",
    "fingerprint": "12b6b1896182",
@@ -3925,19 +3852,6 @@
    "test": "tests/test_unavailable.py#test_a_gate_that_actually_failed_still_reddens",
    "tests": [
     "tests/test_unavailable.py#test_a_gate_that_actually_failed_still_reddens"
-   ]
-  },
-  "gate-extensibility.unavailable-outcomes.004": {
-   "file": "specs/gate-extensibility/unavailable-outcomes/not-checked-gate-outcomes.feature",
-   "fingerprint": "12b6b1896182",
-   "human": false,
-   "rule": "scoring.unavailable.nothing-ran-is-scoreless",
-   "source": "src/gandalf/report.py#aggregate",
-   "status": "verified",
-   "test": "tests/test_unavailable.py#test_nothing_ran_at_all_is_amber_and_scoreless",
-   "tests": [
-    "tests/test_unavailable.py#test_nothing_ran_at_all_is_amber_and_scoreless",
-    "tests/test_unavailable.py#test_category_with_nothing_run_reports_no_percentage"
    ]
   },
   "gate-extensibility.unavailable-outcomes.005": {
@@ -4524,16 +4438,6 @@
     "tests/test_badge.py#test_badge_color_follows_rag"
    ]
   },
-  "reporting.badges.002": {
-   "file": "specs/reporting/badges/status-badge.feature",
-   "fingerprint": "41599205ed09",
-   "human": false,
-   "rule": "reporting.badges.written-only-on-request",
-   "source": "src/gandalf/outputs.py#write_outputs",
-   "status": "inferred",
-   "test": "",
-   "tests": []
-  },
   "reporting.html-report.001": {
    "file": "specs/reporting/html-report/html-report-reading.feature",
    "fingerprint": "3504f0220f90",
@@ -4574,18 +4478,6 @@
    "test": "tests/test_report.py#test_render_html_has_rag_filter_buttons",
    "tests": [
     "tests/test_report.py#test_render_html_has_rag_filter_buttons"
-   ]
-  },
-  "reporting.html-report.005": {
-   "file": "specs/reporting/html-report/html-report.feature",
-   "fingerprint": "3504f0220f90",
-   "human": false,
-   "rule": "reporting.html-report.self-contained-file",
-   "source": "src/gandalf/render_html.py#render_html",
-   "status": "verified",
-   "test": "tests/test_report.py#test_render_html_smoke",
-   "tests": [
-    "tests/test_report.py#test_render_html_smoke"
    ]
   },
   "reporting.html-report.006": {
@@ -4787,16 +4679,6 @@
    "test": "",
    "tests": []
   },
-  "reporting.machine-formats.007": {
-   "file": "specs/reporting/machine-formats/junit-report.feature",
-   "fingerprint": "41599205ed09",
-   "human": false,
-   "rule": "reporting.junit.written-only-on-request",
-   "source": "src/gandalf/outputs.py#write_outputs",
-   "status": "inferred",
-   "test": "",
-   "tests": []
-  },
   "reporting.machine-formats.008": {
    "file": "specs/reporting/machine-formats/run-report-artifacts.feature",
    "fingerprint": "c8df3e0cfa86",
@@ -4841,19 +4723,6 @@
    "tests": [
     "tests/test_run.py#test_payload_gates_carry_their_category",
     "tests/test_run.py#test_json_leaves_only_the_payload_on_stdout"
-   ]
-  },
-  "reporting.machine-formats.012": {
-   "file": "specs/reporting/machine-formats/run-report-artifacts.feature",
-   "fingerprint": "41599205ed09",
-   "human": false,
-   "rule": "reporting.json-record.stdout-mode",
-   "source": "src/gandalf/outputs.py#write_outputs",
-   "status": "verified",
-   "test": "tests/test_run.py#test_json_leaves_only_the_payload_on_stdout",
-   "tests": [
-    "tests/test_run.py#test_json_leaves_only_the_payload_on_stdout",
-    "tests/test_run.py#test_without_json_the_scorecard_stays_on_stdout"
    ]
   },
   "reporting.machine-formats.013": {
@@ -5342,16 +5211,6 @@
    "test": "",
    "tests": []
   },
-  "reporting.terminal-scorecard.015": {
-   "file": "specs/reporting/terminal-scorecard/terminal-run-footer.feature",
-   "fingerprint": "77290b69c4bf",
-   "human": false,
-   "rule": "reporting.footer.score-explanation-on-request",
-   "source": "src/gandalf/summary.py#print_summary",
-   "status": "inferred",
-   "test": "",
-   "tests": []
-  },
   "running-checks.command-line.001": {
    "file": "specs/running-checks/command-line/command-line-option-validation.feature",
    "fingerprint": "1fa08a751da4",
@@ -5381,19 +5240,6 @@
    "status": "inferred",
    "test": "",
    "tests": []
-  },
-  "running-checks.command-line.004": {
-   "file": "specs/running-checks/command-line/running-a-check.feature",
-   "fingerprint": "8317a9880f3f",
-   "human": false,
-   "rule": "cli.run.exit-status-follows-verdict",
-   "source": "src/gandalf/__main__.py#main",
-   "status": "verified",
-   "test": "tests/test_run.py#test_exclude_narrows_the_scan_end_to_end",
-   "tests": [
-    "tests/test_run.py#test_exclude_narrows_the_scan_end_to_end",
-    "tests/test_run.py#test_stream_applies_baseline_suppression"
-   ]
   },
   "running-checks.command-line.005": {
    "file": "specs/running-checks/command-line/running-a-check.feature",
@@ -5450,31 +5296,6 @@
    "test": "",
    "tests": []
   },
-  "running-checks.command-line.010": {
-   "file": "specs/running-checks/command-line/running-a-check.feature",
-   "fingerprint": "8317a9880f3f",
-   "human": false,
-   "rule": "cli.run.json-owns-stdout",
-   "source": "src/gandalf/__main__.py#main",
-   "status": "verified",
-   "test": "tests/test_run.py#test_json_leaves_only_the_payload_on_stdout",
-   "tests": [
-    "tests/test_run.py#test_json_leaves_only_the_payload_on_stdout",
-    "tests/test_run.py#test_without_json_the_scorecard_stays_on_stdout"
-   ]
-  },
-  "running-checks.command-line.011": {
-   "file": "specs/running-checks/command-line/running-a-check.feature",
-   "fingerprint": "16b3925dfbc8",
-   "human": false,
-   "rule": "cli.run.write-baseline-accepts-current-findings",
-   "source": "src/gandalf/__main__.py#_write_baseline",
-   "status": "verified",
-   "test": "tests/test_run.py#test_stream_applies_baseline_suppression",
-   "tests": [
-    "tests/test_run.py#test_stream_applies_baseline_suppression"
-   ]
-  },
   "running-checks.command-line.012": {
    "file": "specs/running-checks/command-line/run-progress-line.feature",
    "fingerprint": "2b373990549c",
@@ -5497,19 +5318,6 @@
    "test": "",
    "tests": []
   },
-  "running-checks.command-line.014": {
-   "file": "specs/running-checks/command-line/run-progress-line.feature",
-   "fingerprint": "2b373990549c",
-   "human": false,
-   "rule": "cli.progress.coexists-with-debug-log",
-   "source": "src/gandalf/progress.py#Progress",
-   "status": "verified",
-   "test": "tests/test_debug.py#test_progress_keeps_drawing_under_debug",
-   "tests": [
-    "tests/test_debug.py#test_progress_keeps_drawing_under_debug",
-    "tests/test_debug.py#test_hooks_bracket_a_log_line"
-   ]
-  },
   "running-checks.command-line.015": {
    "file": "specs/running-checks/command-line/exit-code-policy.feature",
    "fingerprint": "02a36e8217ec",
@@ -5521,16 +5329,6 @@
    "tests": [
     "tests/test_report.py#test_decide"
    ]
-  },
-  "running-checks.configuration.001": {
-   "file": "specs/running-checks/configuration/project-configuration.feature",
-   "fingerprint": "30119d28ba86",
-   "human": false,
-   "rule": "config.gates.refuse-when-nothing-selected",
-   "source": "src/gandalf/__main__.py#_select_gates",
-   "status": "inferred",
-   "test": "",
-   "tests": []
   },
   "running-checks.configuration.002": {
    "file": "specs/running-checks/configuration/project-configuration.feature",

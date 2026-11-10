@@ -5,19 +5,6 @@ Feature: Running a check from the command line
   Background:
     Given a git repository with gandalf configuration
 
-  @id:running-checks.command-line.004 @rule:cli.run.exit-status-follows-verdict @verified @source:src/gandalf/__main__.py#main @test:tests/test_run.py#test_exclude_narrows_the_scan_end_to_end @test:tests/test_run.py#test_stream_applies_baseline_suppression
-  Scenario Outline: The run exits non-zero when the verdict fails the policy
-    Given the default verdict policy
-    And a repository whose files <state>
-    When the operator runs gandalf
-    Then the scorecard is printed
-    And the process exits with status <status>
-
-    Examples:
-      | state                                       | status |
-      | all compile cleanly                         | 0      |
-      | include a Python file that does not compile | 1      |
-
   @id:running-checks.command-line.005 @rule:cli.run.refuses-when-nothing-to-run @inferred @source:src/gandalf/__main__.py#_select_gates
   Scenario Outline: A run with no gates left to run is refused with status 2
     Given <situation>
@@ -62,18 +49,3 @@ Feature: Running a check from the command line
     When the operator runs gandalf
     Then the Go linter and the secret scanner run
     And mypy does not run and is listed among the skipped gates
-
-  @id:running-checks.command-line.010 @rule:cli.run.json-owns-stdout @verified @source:src/gandalf/__main__.py#main @test:tests/test_run.py#test_json_leaves_only_the_payload_on_stdout @test:tests/test_run.py#test_without_json_the_scorecard_stays_on_stdout
-  Scenario: With --json only the JSON report is written to standard output
-    Given a repository that passes every gate
-    When the operator runs gandalf with --json
-    Then standard output parses as one JSON document whose verdict is "pass"
-    And the scorecard and the "JSON report:" line go to standard error
-
-  @id:running-checks.command-line.011 @rule:cli.run.write-baseline-accepts-current-findings @verified @source:src/gandalf/__main__.py#_write_baseline @test:tests/test_run.py#test_stream_applies_baseline_suppression
-  Scenario: Writing a baseline accepts today's findings so only new ones fail later runs
-    Given a repository with a Python file that does not compile, which fails the build gate
-    When the operator runs gandalf with --write-baseline
-    Then "Wrote baseline: <path> (1 finding(s))" is printed
-    And the run exits with status 0
-    And a later run without --write-baseline reports the build gate as pass with no findings

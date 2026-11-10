@@ -69,10 +69,3 @@ Feature: Reading the run footer in the terminal
     Given the repository has a gandalf configuration file at .gandalf.toml
     When the operator runs a check
     Then the footer shows "Config: " followed by the full path of that .gandalf.toml
-
-  @id:reporting.terminal-scorecard.015 @rule:reporting.footer.score-explanation-on-request @inferred @source:src/gandalf/summary.py#print_summary
-  Scenario: Asking for a score explanation prints it right after the scorecard
-    Given the operator asked for the score to be explained
-    When the operator runs a check
-    Then a breakdown of how the score was reached is shown directly under the scorecard
-    And without the request no breakdown is shown

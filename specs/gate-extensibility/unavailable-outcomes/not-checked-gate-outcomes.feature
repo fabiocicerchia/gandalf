@@ -20,19 +20,6 @@ Feature: Reporting gates that could not check the code
       | licenses | trivy, which the licenses gate runs, is not available                | licenses: trivy unavailable (no host binary or gandalf-tools image) — skipped |
       | go_build | go build times out                                                   | go_build: did not run (timeout or tool unavailable) — skipped       |
 
-  @id:gate-extensibility.unavailable-outcomes.002 @rule:scoring.unavailable.excluded-from-verdict-and-score @verified @source:src/gandalf/report.py#aggregate @test:tests/test_unavailable.py#test_unavailable_gates_are_left_out_of_the_score @test:tests/test_unavailable.py#test_unavailable_gates_do_not_colour_the_verdict
-  Scenario Outline: Gates that could not run do not change the overall verdict or score
-    Given the ruff gate passed with a score of 1.0
-    And the gates <missing> could not run
-    When the operator runs a check
-    Then the overall verdict is <verdict>
-    And the composite score is <score>
-
-    Examples:
-      | missing    | verdict | score |
-      | trivy      | green   | 100   |
-      | trivy, semgrep and gitleaks | green   | 100   |
-
   @id:gate-extensibility.unavailable-outcomes.003 @rule:scoring.unavailable.real-failure-still-red @verified @source:src/gandalf/report.py#aggregate @test:tests/test_unavailable.py#test_a_gate_that_actually_failed_still_reddens
   Scenario: A real failure still turns the run red when other gates could not run
     Given the ruff gate failed with a score of 0
@@ -40,14 +27,6 @@ Feature: Reporting gates that could not check the code
     When the operator runs a check
     Then the overall verdict is red
     And the composite score is 0
-
-  @id:gate-extensibility.unavailable-outcomes.004 @rule:scoring.unavailable.nothing-ran-is-scoreless @verified @source:src/gandalf/report.py#aggregate @test:tests/test_unavailable.py#test_nothing_ran_at_all_is_amber_and_scoreless @test:tests/test_unavailable.py#test_category_with_nothing_run_reports_no_percentage
-  Scenario: When no gate could run, the run is amber with no score earned
-    Given every selected gate could not run
-    When the operator runs a check
-    Then the overall verdict is amber
-    And the composite score is 0
-    And every category that had nothing run shows no percentage
 
   @id:gate-extensibility.unavailable-outcomes.005 @rule:gates.unavailable.status-survives-reweighting-and-suppression @verified @source:src/gandalf/outcomes.py#carry_over @test:tests/test_unavailable.py#test_marker_survives_severity_reweighting @test:tests/test_unavailable.py#test_reweighting_keeps_the_duration @test:tests/test_unavailable.py#test_partial_suppression_keeps_the_duration @test:tests/test_unavailable.py#test_full_suppression_keeps_the_metadata_too
   Scenario Outline: A gate's not-run status and run timing survive severity weighting and suppressions
