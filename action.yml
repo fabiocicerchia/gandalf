@@ -75,7 +75,7 @@ runs:
     # published, or on a fork) or if tools-image is empty.
     - name: Install cosign
       if: inputs.tools-image != '' && inputs.verify-tools-image == 'true'
-      uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
+      uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532  # v4.1.3
 
     # The image tag moves, and the image gets this job's token, so pinning the
     # action's SHA means nothing unless the pulled digest is verified too.
@@ -195,7 +195,7 @@ runs:
     # annotations. Skipped on forks (read-only token) and when the toggle is off.
     - name: Ingest into code scanning
       if: inputs.code-scanning == 'true'
-      uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v3
+      uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v3
       with:
         sarif_file: reports/gandalf.sarif
         category: gandalf
