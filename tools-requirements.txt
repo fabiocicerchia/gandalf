@@ -1179,9 +1179,9 @@ license-expression==30.4.4 \
     #   checkov
     #   cyclonedx-python-lib
     #   spdx-tools
-lizard==1.25.0 \
-    --hash=sha256:e37e0da72be4fd4a254f511470af2b2f6800128879844b2844695641baa83112 \
-    --hash=sha256:e82fc8ad93a4c9025f7dad9428bdcfaa8caedfb4358a8ea5860de35a3794626f
+lizard==1.26.0 \
+    --hash=sha256:0e522a6d9ee0ecf205ceca867e3ace2cf3189a0226320d52e4dacb40e8ede180 \
+    --hash=sha256:c4eae51e93de48df7d5316d7dc79d7f5936521f1efc996a798c03ea861c78bd0
     # via -r tools-requirements.in
 markdown==3.10.3 \
     --hash=sha256:3589362618f743188b4d955b874402bc814f4f83f544dc207719f4baa7d9c45f \
